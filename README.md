@@ -177,7 +177,9 @@ initializers do not acquire separate source spans. Contributions are never
 flattened across NixosModule::add calls, preserving NixOS priorities and
 multi-origin conflicts. Handwritten IntoConfig remains available for custom
 adapters, and Config::set remains the explicit generic escape hatch.
-The [nine examples](examples/README.md) contain no handwritten IntoConfig impls;
+The [nine examples](examples/README.md) use `#[rusnix::config]` for local trees,
+fine-grained derives for reusable values, and explicit implementations for
+semantic conversions. They contain no handwritten IntoConfig impls;
 only nix-interop deliberately calls Config::set; layered-validation failure assemblies live in tests.
 
 `Expr<i64>` and `Expr<bool>` are distinct Rust types. Passing a boolean

@@ -1,11 +1,8 @@
 //! Demonstrates distinct Rust types with identical primitive representations.
 //! A UserId cannot be passed to an API expecting Port, even when both contain 1000.
-use rusnix_ir::{IntoConfig, IntoRusnixValue};
+use rusnix_ir::{self as rusnix, IntoConfig, IntoRusnixValue};
 
-// These types are chosen by this configuration, not built into Rusnix.
-#[derive(IntoRusnixValue)]
-struct Hostname(String);
-
+// These reusable Rust types keep their meaning across functions and config trees.
 #[derive(IntoRusnixValue)]
 pub struct Port(pub u16);
 
@@ -19,39 +16,46 @@ pub fn listen(port: Port) -> Port {
     port
 }
 
-#[derive(IntoRusnixValue)]
-struct Identity {
-    user_id: UserId,
-    #[rusnix(rename = "owner")]
-    name: UserName,
-}
+#[rusnix::config]
+mod config {
+    use super::{Port, UserId, UserName, listen};
 
-#[derive(IntoRusnixValue)]
-struct Listener {
-    port: Port,
-    host: Hostname,
-    // Put Identity's fields beside port and host in the generated Nix record.
-    #[rusnix(flatten)]
-    owner: Identity,
-}
+    struct Hostname(String);
 
-#[derive(IntoConfig)]
-pub struct Root {
-    demo: Listener,
-}
+    struct Identity {
+        user_id: UserId,
+        #[rusnix(rename = "owner")]
+        name: UserName,
+    }
 
-pub fn model() -> Root {
-    Root {
-        demo: Listener {
-            port: listen(Port(1000)),
-            host: Hostname("admin".into()),
-            owner: Identity {
-                user_id: UserId(1000),
-                name: UserName("admin".into()),
+    struct Listener {
+        port: Port,
+        host: Hostname,
+        // Put Identity's fields beside port and host in the generated Nix record.
+        #[rusnix(flatten)]
+        owner: Identity,
+    }
+
+    #[rusnix(root)]
+    pub struct Root {
+        demo: Listener,
+    }
+
+    pub fn model() -> Root {
+        Root {
+            demo: Listener {
+                port: listen(Port(1000)),
+                host: Hostname("admin".into()),
+                owner: Identity {
+                    user_id: UserId(1000),
+                    name: UserName("admin".into()),
+                },
             },
-        },
+        }
     }
 }
+
+pub use config::model;
 
 fn main() {
     let generated = rusnix_nix::compile(&model().into_config()).unwrap();

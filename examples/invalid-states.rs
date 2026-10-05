@@ -1,6 +1,6 @@
 //! Demonstrates a Rust enum whose Plain case cannot carry TLS credentials.
 //! The Tls case requires both credentials before Rusnix can lower it.
-use rusnix_ir::{IntoConfig, IntoRusnixValue, RusnixValue};
+use rusnix_ir::{self as rusnix, IntoConfig, IntoRusnixValue, RusnixValue};
 
 pub enum Transport {
     Plain,
@@ -10,36 +10,43 @@ pub enum Transport {
     },
 }
 
+// Reusable credential types can also be lowered outside this local tree.
 #[derive(IntoRusnixValue)]
 pub struct Certificate(pub String);
 
 #[derive(IntoRusnixValue)]
 pub struct PrivateKey(pub String);
 
-#[derive(IntoConfig)]
-pub struct Root {
-    pub demo: ServiceConfig,
-}
+#[rusnix::config]
+mod config {
+    use super::{Certificate, PrivateKey, Transport};
 
-#[derive(IntoRusnixValue)]
-pub struct ServiceConfig {
-    pub transport: Transport,
-}
+    #[rusnix(root)]
+    pub struct Root {
+        pub demo: ServiceConfig,
+    }
 
-pub fn model() -> Root {
-    Root {
-        demo: ServiceConfig {
-            transport: Transport::Tls {
-                certificate: Certificate("/run/keys/service.pem".into()),
-                private_key: PrivateKey("/run/keys/service.key".into()),
+    pub struct ServiceConfig {
+        pub transport: Transport,
+    }
+
+    pub fn model() -> Root {
+        Root {
+            demo: ServiceConfig {
+                transport: Transport::Tls {
+                    certificate: Certificate("/run/keys/service.pem".into()),
+                    private_key: PrivateKey("/run/keys/service.key".into()),
+                },
             },
-        },
+        }
     }
 }
 
+pub use config::{Root, ServiceConfig, model};
+
 impl IntoRusnixValue for Transport {
     fn into_value(self) -> RusnixValue {
-        // Each enum case maps to a different Nix record shape.
+        // This explicit mapping uses function-local records for the two Nix shapes.
         #[derive(IntoRusnixValue)]
         struct Plain {
             tls: bool,

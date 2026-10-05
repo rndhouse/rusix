@@ -1,7 +1,7 @@
 //! Demonstrates typed Rust models alongside existing Nix packages, modules and functions.
 //! Opaque handles preserve Nix objects without package-specific Rust bindings.
 use rusnix_ir::{
-    Config, IntoConfig, IntoRusnixValue, RusnixValue,
+    self as rusnix, Config, IntoConfig, IntoRusnixValue, RusnixValue,
     interop::{InputRef, ModuleRef, NixFunction, NixValue, Nixpkgs, OverlayRef, PackageRef},
     nixos::NixosModule,
 };
@@ -17,6 +17,7 @@ pub enum Transport {
 
 impl IntoRusnixValue for Transport {
     fn into_value(self) -> RusnixValue {
+        // Function-local records express the two shapes chosen by this mapping.
         #[derive(IntoRusnixValue)]
         struct Plain {
             tls: bool,
@@ -43,34 +44,41 @@ impl IntoRusnixValue for Transport {
     }
 }
 
-#[derive(IntoConfig)]
-pub struct OwnedContribution {
-    pub demo: Transport,
-}
+#[rusnix::config]
+mod config {
+    use super::{NixValue, PackageRef, Transport};
 
-// Rust describes the package list; Nix resolves the actual packages.
-#[derive(IntoConfig)]
-pub struct PackageContribution {
-    environment: Environment,
-}
+    #[rusnix(root)]
+    pub struct OwnedContribution {
+        pub demo: Transport,
+    }
 
-#[derive(IntoRusnixValue)]
-struct Environment {
-    system_packages: Vec<PackageRef>,
-}
+    // Rust describes the package list; Nix resolves the actual packages.
+    #[rusnix(root)]
+    pub struct PackageContribution {
+        environment: Environment,
+    }
 
-pub fn packages(packages: Vec<PackageRef>) -> PackageContribution {
-    PackageContribution {
-        environment: Environment {
-            system_packages: packages,
-        },
+    struct Environment {
+        system_packages: Vec<PackageRef>,
+    }
+
+    pub fn packages(packages: Vec<PackageRef>) -> PackageContribution {
+        PackageContribution {
+            environment: Environment {
+                system_packages: packages,
+            },
+        }
+    }
+
+    #[rusnix(root)]
+    pub struct FunctionResult {
+        pub result: NixValue,
     }
 }
 
-#[derive(IntoConfig)]
-struct FunctionResult {
-    result: NixValue,
-}
+use config::FunctionResult;
+pub use config::{OwnedContribution, packages};
 
 pub fn module(local: InputRef) -> NixosModule {
     let pkgs = Nixpkgs::new();

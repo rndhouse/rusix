@@ -3,7 +3,7 @@
 ```text
 User-defined Rust domain model
         ↓
-#[rusnix::config] or fine-grained derives / structural lowering
+#[rusnix::config] / structural lowering
         ↓
 semantic IR → Nix AST → Nix backend
         ↓
@@ -61,6 +61,10 @@ Certificate and PrivateKey distinct Rust types.
 
 ## Authoring and composition
 
+Use `#[rusnix::config]` for local configuration trees. Use fine-grained derives
+for reusable or external types. Use explicit conversion implementations when the
+mapping itself carries domain meaning.
+
 For local configuration, one inline module boundary supplies structural lowering:
 
 ```rust
@@ -115,9 +119,9 @@ an independent module contribution: NixOS decides merge conflicts, list merging
 and priorities. Flattening records inside ONE contribution is different and
 still rejects conflicting leaf paths during IR validation.
 
-IntoConfig derive also implements IntoRusnixValue, so nested structs may derive
-IntoConfig as in the original root/nested example. Prefer IntoRusnixValue for
-reusable Endpoint, Port and Transport values: it gives them no global placement.
+IntoConfig derive also implements IntoRusnixValue. Reusable values such as
+Endpoint and Port use IntoRusnixValue without acquiring global placement;
+Transport uses an explicit conversion for its structural alternatives.
 Single-field newtypes are transparent. Rust field names use `snake_case`; Rusnix
 lowers them to Nix-style `lowerCamelCase` by default. Structs can select
 `#[rusnix(rename_all = "PascalCase")]` for external schemas such as systemd.
@@ -158,12 +162,20 @@ integration tests prove an ordinary Nix override changes dependent output withou
 rerunning conversion or lowering. Expected Rust
 types constrain expression operations; NixOS remains authoritative for schemas.
 
+All nine showcase files use the module boundary for their local tree. The
+remaining explicit IntoRusnixValue derives are intentional: reusable domain
+values outside that module (credentials, endpoint fields and account identities),
+and function-local Plain/Tls records inside semantic enum conversions. The latter
+keep each mapping self-contained; the module macro does not inspect function
+bodies. No showcase type explicitly derives IntoConfig.
+
 ## Enum option
 
 The example's Rust `Mode` enum has Server and Client variants.
 `accepts_connections(Mode)` accepts that type and handles both variants. The
 ConnectionPolicy stores Mode without turning it into a string until lowering.
-Root's `demo` field supplies placement; default naming maps `accepts_connections`
+The local config module lowers Root and ConnectionPolicy automatically. Root's
+`demo` field supplies placement; default naming maps `accepts_connections`
 to `acceptsConnections` without an annotation.
 
 Nix comparison: `types.enum [ "server" "client" ]` checks values during module
@@ -218,7 +230,8 @@ TLS-without-key. Rust prevents constructing those combinations through this sum
 type; Nix rejects equivalent independent-field combinations during evaluation.
 Neither version proves that the referenced files exist or contain valid keys.
 Transport's explicit exhaustive value mapping selects a derived Plain or Tls
-record. Root's `demo` field and ServiceConfig's `transport` field supply placement;
+record. The local config module automatically lowers Root and ServiceConfig;
+Root's `demo` field and ServiceConfig's `transport` field supply placement;
 no handwritten configuration bindings are involved.
 
 ## Function contracts
@@ -228,7 +241,7 @@ fn configure_service(endpoint: Endpoint, transport: Transport) -> ServiceConfig
 ```
 
 The caller supplies semantic values and receives a reusable service model.
-`Root { demo: service }` determines placement through derives. Passing `true` instead of Transport is a [tested E0308](../tests/ui/function-contract.rs).
+`Root { demo: service }` determines placement through the local config module. Passing `true` instead of Transport is a [tested E0308](../tests/ui/function-contract.rs).
 The [Nix function comparison](../tests/comparisons/function-contracts.nix) accepts
 `{ host, port, enableTLS ? true }` and has output module types. Nix can add runtime
 argument checks; Rust checks this caller contract statically throughout the
@@ -282,8 +295,9 @@ continues checking its primitive option types.
 | Rusnix IR | Two derived records flatten to the same option path in one contribution | Requires inspecting the assembled IR |
 | NixOS | `services.openssh.exampleUnsupported` does not exist | Upstream option declarations are authoritative |
 
-The runnable file authors a valid upstream SSH contribution using user-owned
-SshContribution<T>, Services<T>, options and Port types, then prints generated Nix.
+The runnable file authors a valid upstream SSH contribution using a local config
+module for SshContribution<T>, Services<T> and options, plus a reusable Port value,
+then prints generated Nix.
 [typed_examples.rs](../crates/rusnix-nix/tests/typed_examples.rs) assembles two port
 records that collide inside one flattened contribution and verifies the IR error.
 It separately uses Config::set to introduce an unsupported option and verifies
@@ -306,7 +320,8 @@ The executable shows three authoring choices: its own Transport model, opaque
 package/module/function/overlay/input handles, and a runtime-computed NixOS option
 path through the labelled Config::set escape hatch. PackageContribution maps
 `Vec<PackageRef>` structurally to `environment.systemPackages`; no package-specific
-bindings are needed. The program prints generated Nix, without resolving packages
+bindings are needed. One config module lowers the independent rooted
+contributions automatically. The program prints generated Nix, without resolving packages
 or performing NixOS evaluation.
 
 `InputRef::local("example", "input.nix")` names a user-supplied local object; the
@@ -419,7 +434,7 @@ perform evaluation, always through the isolated-store helper.
 
 | Example | AUTHORING kept in source | VERIFICATION in tests |
 | --- | --- | --- |
-| enum-option | Mode, typed consumers, derived placement | typed_examples.rs, ui.rs |
+| enum-option | Mode, typed consumers, automatic local placement | typed_examples.rs, ui.rs |
 | typed-submodule | Semantic fields and reusable Endpoint | typed_examples.rs, ui.rs |
 | invalid-states | Transport alternatives and structural projection | typed_examples.rs, ui.rs |
 | function-contracts | Typed caller contract | typed_examples.rs, ui.rs |
@@ -427,7 +442,7 @@ perform evaluation, always through the isolated-store helper.
 | typed-values | Nominal types and flattened structure | typed_examples.rs, ui.rs |
 | layered-validation | Valid upstream contribution | typed_examples.rs; invalid assemblies and schema errors |
 | nix-interop | Opaque handles, composition, explicit escape | interop.rs; real lookups, boundaries and assertions |
-| symbolic-option | Typed dependency and derived unit structure | symbolic_options.rs; artifact reuse, override, priority and provenance |
+| symbolic-option | Typed dependency and automatic local unit structure | symbolic_options.rs; artifact reuse, override, priority and provenance |
 
 DOCUMENTATION stays here: comparisons, expected outcomes, test links and limitations.
 Tests retain reviewable generated Nix/results under `target/typed-examples/` and

@@ -1,7 +1,8 @@
 //! Demonstrates a typed function contract for configuration.
 //! A caller must supply an Endpoint and a Transport, rather than arbitrary strings or flags.
-use rusnix_ir::{IntoConfig, IntoRusnixValue, RusnixValue};
+use rusnix_ir::{self as rusnix, IntoConfig, IntoRusnixValue, RusnixValue};
 
+// These reusable parameter types lower wherever a local tree places them.
 #[derive(IntoRusnixValue)]
 pub struct Hostname(pub String);
 
@@ -22,12 +23,6 @@ pub enum Transport {
     },
 }
 
-#[derive(IntoRusnixValue)]
-pub struct ServiceConfig {
-    endpoint: Endpoint,
-    transport: Transport,
-}
-
 pub fn configure_service(endpoint: Endpoint, transport: Transport) -> ServiceConfig {
     ServiceConfig {
         endpoint,
@@ -35,26 +30,38 @@ pub fn configure_service(endpoint: Endpoint, transport: Transport) -> ServiceCon
     }
 }
 
-#[derive(IntoConfig)]
-pub struct Root {
-    demo: ServiceConfig,
-}
+#[rusnix::config]
+mod config {
+    use super::{Endpoint, Hostname, Port, Transport, configure_service};
 
-pub fn model() -> Root {
-    Root {
-        demo: configure_service(
-            Endpoint {
-                host: Hostname("service.internal".into()),
-                port: Port(8080),
-            },
-            Transport::Plain,
-        ),
+    pub struct ServiceConfig {
+        pub endpoint: Endpoint,
+        pub transport: Transport,
+    }
+
+    #[rusnix(root)]
+    pub struct Root {
+        demo: ServiceConfig,
+    }
+
+    pub fn model() -> Root {
+        Root {
+            demo: configure_service(
+                Endpoint {
+                    host: Hostname("service.internal".into()),
+                    port: Port(8080),
+                },
+                Transport::Plain,
+            ),
+        }
     }
 }
 
+pub use config::{ServiceConfig, model};
+
 impl IntoRusnixValue for Transport {
     fn into_value(self) -> RusnixValue {
-        // The caller uses an enum; Nix receives the selected record shape.
+        // Function-local records express the Nix shape chosen by this explicit mapping.
         #[derive(IntoRusnixValue)]
         struct Plain {
             tls: bool,
