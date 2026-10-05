@@ -7,7 +7,7 @@ use syn::{Data, DeriveInput, Fields, LitStr, parse_macro_input, parse_quote, spa
 
 mod config;
 
-mod options;
+mod views;
 
 mod text;
 
@@ -59,7 +59,26 @@ pub fn options(args: TokenStream, input: TokenStream) -> TokenStream {
         .into();
     }
 
-    options::expand(parse_macro_input!(input as syn::ItemMod))
+    views::expand(parse_macro_input!(input as syn::ItemMod))
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
+/// Declare a finite symbolic view over a supplied deferred Nix argument record.
+/// Uses the same naming, leaf mapping and subtree markers as `options`, but binds
+/// through `from_value` rather than referring to NixOS config. See `rusnix_ir::args`.
+#[proc_macro_attribute]
+pub fn args(args: TokenStream, input: TokenStream) -> TokenStream {
+    if !args.is_empty() {
+        return syn::Error::new_spanned(
+            proc_macro2::TokenStream::from(args),
+            "args takes no arguments; mark one root with #[rusnix(root)]",
+        )
+        .into_compile_error()
+        .into();
+    }
+
+    views::expand_args(parse_macro_input!(input as syn::ItemMod))
         .unwrap_or_else(syn::Error::into_compile_error)
         .into()
 }

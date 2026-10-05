@@ -1,4 +1,4 @@
-//! Finite reference views generate the existing OptionRef constructors.
+//! Shared finite symbolic views over final options or a supplied Nix record.
 use super::Naming;
 use proc_macro2::TokenStream;
 use quote::{quote, quote_spanned};
@@ -30,7 +30,7 @@ fn classify(ty: &Type, locals: &BTreeSet<String>) -> syn::Result<Leaf> {
             if !matches!(last.arguments, PathArguments::None) {
                 return Err(syn::Error::new_spanned(
                     ty,
-                    "option views cannot have type arguments",
+                    "symbolic views cannot have type arguments",
                 ));
             }
             return Ok(Leaf::Branch(last.ident.clone()));
@@ -81,7 +81,7 @@ fn classify(ty: &Type, locals: &BTreeSet<String>) -> syn::Result<Leaf> {
 
     Err(syn::Error::new_spanned(
         ty,
-        "unsupported option-view type; use bool, String, i64, NixValue, Option<T>, Vec<T>, BTreeMap<K, V>, HashMap<K, V>, or a local named view; external aliases require explicit OptionRef",
+        "unsupported symbolic-view type; use bool, String, i64, NixValue, Option<T>, Vec<T>, BTreeMap<K, V>, HashMap<K, V>, or a local named view; external aliases require explicit OptionRef or NixValue selections",
     ))
 }
 
@@ -89,14 +89,14 @@ fn parse_view(mut item: syn::ItemStruct) -> syn::Result<View> {
     if !item.generics.params.is_empty() || item.generics.where_clause.is_some() {
         return Err(syn::Error::new_spanned(
             &item.generics,
-            "option views do not support generics",
+            "symbolic views do not support generics",
         ));
     }
 
     if !matches!(item.fields, Fields::Named(_)) {
         return Err(syn::Error::new_spanned(
             &item,
-            "option views require named structs",
+            "symbolic views require named structs",
         ));
     }
 
@@ -110,13 +110,13 @@ fn parse_view(mut item: syn::ItemStruct) -> syn::Result<View> {
             if attr.path().is_ident("cfg") || attr.path().is_ident("cfg_attr") {
                 return Err(syn::Error::new_spanned(
                     attr,
-                    "conditional option views are not supported; declare a separate view",
+                    "conditional symbolic views are not supported; declare a separate view",
                 ));
             }
             if !attr.path().is_ident("doc") {
                 return Err(syn::Error::new_spanned(
                     attr,
-                    "option views are reference declarations; only documentation and rusnix mapping attributes are supported",
+                    "symbolic views are reference declarations; only documentation and rusnix mapping attributes are supported",
                 ));
             }
 
@@ -132,7 +132,7 @@ fn parse_view(mut item: syn::ItemStruct) -> syn::Result<View> {
                     &mut value
                 };
                 if *flag {
-                    return Err(meta.error("duplicate option-view marker"));
+                    return Err(meta.error("duplicate symbolic-view marker"));
                 }
                 *flag = true;
                 Ok(())
@@ -143,7 +143,7 @@ fn parse_view(mut item: syn::ItemStruct) -> syn::Result<View> {
                 naming = Some(Naming::parse(&meta.value()?.parse::<LitStr>()?)?);
                 Ok(())
             } else {
-                Err(meta.error("option-view mappings are root, value, and rename_all"))
+                Err(meta.error("symbolic-view mappings are root, value, and rename_all"))
             }
         })?;
     }
@@ -172,14 +172,14 @@ fn key(field: &syn::Field, naming: Naming) -> syn::Result<LitStr> {
         if attr.path().is_ident("cfg") || attr.path().is_ident("cfg_attr") {
             return Err(syn::Error::new_spanned(
                 attr,
-                "conditional option-view fields are not supported",
+                "conditional symbolic-view fields are not supported",
             ));
         }
 
         if attr.path().is_ident("rusnix") {
             attr.parse_nested_meta(|meta| {
                 if !meta.path.is_ident("rename") {
-                    return Err(meta.error("option-view fields support rename only"));
+                    return Err(meta.error("symbolic-view fields support rename only"));
                 }
                 if rename.is_some() {
                     return Err(meta.error("duplicate rename"));
@@ -209,7 +209,7 @@ fn check_cycles(
         if active.contains(child) {
             return Err(syn::Error::new(
                 *span,
-                "recursive option views are not supported; declare a finite set of paths",
+                "recursive symbolic views are not supported; declare a finite set of paths",
             ));
         }
 
@@ -222,11 +222,32 @@ fn check_cycles(
     Ok(())
 }
 
-pub(super) fn expand(mut module: ItemMod) -> syn::Result<TokenStream> {
+#[derive(Clone, Copy)]
+enum Source {
+    Options,
+    Arguments,
+}
+
+pub(super) fn expand(module: ItemMod) -> syn::Result<TokenStream> {
+    expand_from(module, Source::Options)
+}
+
+pub(super) fn expand_args(module: ItemMod) -> syn::Result<TokenStream> {
+    expand_from(module, Source::Arguments)
+}
+
+fn expand_from(mut module: ItemMod, source: Source) -> syn::Result<TokenStream> {
+    let macro_name = match source {
+        Source::Options => "options",
+        Source::Arguments => "args",
+    };
+
     let Some((_, items)) = module.content.take() else {
         return Err(syn::Error::new_spanned(
             module,
-            "options requires an inline module; external types use explicit OptionRef",
+            format!(
+                "{macro_name} requires an inline module; external types use explicit OptionRef or NixValue selections"
+            ),
         ));
     };
 
@@ -242,7 +263,7 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<TokenStream> {
             {
                 return Err(syn::Error::new_spanned(
                     &item.ident,
-                    "ambiguous option-view type name",
+                    "ambiguous symbolic-view type name",
                 ));
             }
         }
@@ -258,7 +279,9 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<TokenStream> {
             _ => {
                 return Err(syn::Error::new_spanned(
                     item,
-                    "options modules contain named view structs and imports only; keep domain code outside the reference declarations",
+                    format!(
+                        "{macro_name} modules contain named view structs and imports only; keep domain code outside the reference declarations"
+                    ),
                 ));
             }
         }
@@ -268,7 +291,7 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<TokenStream> {
     if roots.len() != 1 {
         return Err(syn::Error::new_spanned(
             &module.ident,
-            "options requires exactly one #[rusnix(root)] struct",
+            format!("{macro_name} requires exactly one #[rusnix(root)] struct"),
         ));
     }
 
@@ -281,12 +304,14 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<TokenStream> {
 
         for field in &view.item.fields {
             let name = field.ident.as_ref().unwrap();
-            if matches!(name.to_string().as_str(), "__rusnix_path" | "__rusnix_at")
-                || (view.value && name == "as_value")
+            if matches!(
+                name.to_string().as_str(),
+                "__rusnix_path" | "__rusnix_at" | "__rusnix_source"
+            ) || (view.value && name == "as_value")
             {
                 return Err(syn::Error::new_spanned(
                     name,
-                    "field collides with a generated option-view member",
+                    "field collides with a generated symbolic-view member",
                 ));
             }
 
@@ -294,7 +319,7 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<TokenStream> {
             if !keys.insert(path_key.value()) {
                 return Err(syn::Error::new_spanned(
                     field,
-                    "ambiguous option path: fields map to the same attribute",
+                    "ambiguous symbolic path: fields map to the same attribute",
                 ));
             }
 
@@ -302,7 +327,7 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<TokenStream> {
                 if child == root {
                     return Err(syn::Error::new_spanned(
                         &field.ty,
-                        "a root cannot be nested in an option view",
+                        "a root cannot be nested in a symbolic view",
                     ));
                 }
                 children.push((child.to_string(), field.ty.span()));
@@ -323,9 +348,32 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<TokenStream> {
     for view in views {
         let name = &view.item.ident;
         let attrs = &view.item.attrs;
-        let type_docs = (!attrs.iter().any(|attr| attr.path().is_ident("doc"))).then(|| {
-            quote!(#[doc = "Navigation over declared final NixOS option dependencies; values remain symbolic."])
+        let description = match source {
+            Source::Options => {
+                "Navigation over declared final NixOS option dependencies; values remain symbolic."
+            }
+            Source::Arguments => {
+                "Navigation over a supplied deferred Nix argument record; Rust never reads the values."
+            }
+        };
+        let type_docs = (!attrs.iter().any(|attr| attr.path().is_ident("doc")))
+            .then(|| quote!(#[doc = #description]));
+        let source_field = matches!(source, Source::Arguments).then(|| {
+            quote!(
+                __rusnix_source: ::rusnix_ir::interop::NixValue,
+            )
         });
+        let source_parameter = matches!(source, Source::Arguments).then(|| {
+            quote!(
+                source: ::rusnix_ir::interop::NixValue,
+            )
+        });
+        let source_initialize = matches!(source, Source::Arguments).then(|| {
+            quote!(
+                __rusnix_source: source,
+            )
+        });
+        let child_source = matches!(source, Source::Arguments).then(|| quote!(source.clone(),));
         let mut branches = Vec::new();
         let mut initialize = Vec::new();
         let mut methods = Vec::new();
@@ -344,11 +392,16 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<TokenStream> {
             if docs.is_empty() {
                 let description = match classify(ty, &locals)? {
                     Leaf::Branch(_) => {
-                        "Navigate to this declared option subtree without reading or evaluating it."
+                        "Navigate to this declared subtree without reading or evaluating it."
                     }
-                    Leaf::Scalar => {
-                        "Create a typed symbolic dependency; NixOS resolves and validates the final value after merging."
-                    }
+                    Leaf::Scalar => match source {
+                        Source::Options => {
+                            "Create a typed symbolic dependency; NixOS resolves and validates the final value after merging."
+                        }
+                        Source::Arguments => {
+                            "Select a deferred scalar with an expected Rust type; Nix validates the actual value."
+                        }
+                    },
                     _ => {
                         "Create an opaque symbolic dependency; this does not materialize a Rust collection or value."
                     }
@@ -363,7 +416,7 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<TokenStream> {
                     initialize.push(quote!(#field_name: {
                         let mut child_path = path.clone();
                         child_path.push(#literal.into());
-                        #child::__rusnix_at(child_path)
+                        #child::__rusnix_at(#child_source child_path)
                     },));
                 }
                 leaf => {
@@ -371,13 +424,26 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<TokenStream> {
                         Leaf::Scalar => (quote!(::rusnix_ir::Expr<#ty>), quote!(into_expr)),
                         _ => (quote!(::rusnix_ir::interop::NixValue), quote!(into_value)),
                     };
+                    let selection = match source {
+                        Source::Options => quote!(
+                            ::rusnix_ir::nixos::OptionRef::<#ty>::from_segments(path).#conversion()
+                        ),
+                        Source::Arguments => {
+                            let convert =
+                                matches!(leaf, Leaf::Scalar).then(|| quote!(.into_expr::<#ty>()));
+                            quote!({
+                                let _: ::std::marker::PhantomData<#ty> = ::std::marker::PhantomData;
+                                self.__rusnix_source.clone().select_segments(path) #convert
+                            })
+                        }
+                    };
                     methods.push(quote_spanned!(field.span()=>
                         #(#docs)*
                         #[track_caller]
                         pub fn #field_name(&self) -> #result {
                             let mut path = self.__rusnix_path.clone();
                             path.push(#literal.into());
-                            ::rusnix_ir::nixos::OptionRef::<#ty>::from_segments(path).#conversion()
+                            #selection
                         }
                     ));
                 }
@@ -385,14 +451,25 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<TokenStream> {
         }
 
         let as_value = view.value.then(|| {
-            quote!(
-                /// Reference the whole declared subtree as a deferred opaque Nix value.
-                #[track_caller]
-                pub fn as_value(&self) -> ::rusnix_ir::interop::NixValue {
+            let selection = match source {
+                Source::Options => quote!(
                     ::rusnix_ir::nixos::OptionRef::<::rusnix_ir::interop::NixValue>::from_segments(
                         self.__rusnix_path.clone(),
                     )
                     .into_value()
+                ),
+                Source::Arguments => quote!(
+                    self.__rusnix_source
+                        .clone()
+                        .select_segments(self.__rusnix_path.clone())
+                ),
+            };
+
+            quote!(
+                /// Reference the whole declared subtree as a deferred opaque Nix value.
+                #[track_caller]
+                pub fn as_value(&self) -> ::rusnix_ir::interop::NixValue {
+                    #selection
                 }
             )
         });
@@ -400,14 +477,16 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<TokenStream> {
         generated.push(quote!(
             #(#attrs)*
             #type_docs
+            #[derive(Clone)]
             pub struct #name {
+                #source_field
                 __rusnix_path: ::std::vec::Vec<::std::string::String>,
                 #(#branches)*
             }
 
             impl #name {
-                fn __rusnix_at(path: ::std::vec::Vec<::std::string::String>) -> Self {
-                    Self { #(#initialize)* __rusnix_path: path }
+                fn __rusnix_at(#source_parameter path: ::std::vec::Vec<::std::string::String>) -> Self {
+                    Self { #(#initialize)* #source_initialize __rusnix_path: path }
                 }
 
                 #(#methods)*
@@ -421,6 +500,22 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<TokenStream> {
     let visibility = &module.vis;
     let module_name = &module.ident;
 
+    let constructor = match source {
+        Source::Options => quote!(
+            /// Begin navigation; leaf accessor calls capture their own Rust caller origins.
+            pub fn root() -> #root {
+                #root::__rusnix_at(::std::vec::Vec::new())
+            }
+        ),
+        Source::Arguments => quote!(
+            /// Bind this finite view to a deferred record without evaluating it.
+            /// Tracked leaf accessors capture their own Rust caller origins.
+            pub fn from_value(value: ::rusnix_ir::interop::NixValue) -> #root {
+                #root::__rusnix_at(value, ::std::vec::Vec::new())
+            }
+        ),
+    };
+
     Ok(quote!(
         #(#attrs)*
         #visibility mod #module_name {
@@ -428,17 +523,62 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<TokenStream> {
 
             #(#generated)*
 
-            /// Begin navigation; leaf accessor calls capture their own Rust caller origins.
-            pub fn root() -> #root {
-                #root::__rusnix_at(::std::vec::Vec::new())
-            }
+            #constructor
         }
     ))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::expand;
+    use super::{expand, expand_args};
+
+    #[test]
+    fn argument_views_reuse_structural_validation_and_document_generated_members() {
+        for source in [
+            "mod args;",
+            "mod args { struct MissingRoot { field: bool } }",
+            "mod args { #[rusnix(root)] struct Root<T> { field: T } }",
+            "mod args { #[rusnix(root)] struct Root { field: u16 } }",
+            "mod args { #[rusnix(root)] struct Root { a: A } struct A { a: A } }",
+        ] {
+            assert!(expand_args(syn::parse_str(source).unwrap()).is_err());
+        }
+
+        let output = expand_args(syn::parse_quote! {
+            mod args {
+                #[rusnix(root)]
+                struct Root {
+                    settings: Settings,
+                }
+
+                #[rusnix(value)]
+                struct Settings {
+                    port: i64,
+                }
+            }
+        })
+        .unwrap();
+        let module: syn::ItemMod = syn::parse2(output).unwrap();
+
+        for item in module.content.unwrap().1 {
+            let attrs = match item {
+                syn::Item::Struct(item) => item.attrs,
+                syn::Item::Fn(item) => item.attrs,
+                syn::Item::Impl(item) => {
+                    for member in item.items {
+                        if let syn::ImplItem::Fn(method) = member
+                            && matches!(method.vis, syn::Visibility::Public(_))
+                        {
+                            assert!(method.attrs.iter().any(|attr| attr.path().is_ident("doc")));
+                        }
+                    }
+                    continue;
+                }
+                _ => continue,
+            };
+            assert!(attrs.iter().any(|attr| attr.path().is_ident("doc")));
+        }
+    }
 
     #[test]
     fn public_views_are_documented_and_preserve_authored_docs() {

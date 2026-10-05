@@ -415,10 +415,31 @@ impl NixValue {
     /// schema or materialize the referenced record in Rust.
     #[track_caller]
     pub fn select(self, path: &str) -> Self {
+        self.select_segments(path.split('.'))
+    }
+
+    /// Select literal attribute segments; dots and special characters remain within a key.
+    /// The lookup stays deferred and failures retain this operation's caller origin.
+    #[track_caller]
+    pub fn select_segments(self, parts: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        let path = AttrPath::segments(parts);
         Self(Node {
-            origin: Origin::caller(format!("opaque Nix selection {path}")),
-            kind: ValueKind::Select(Box::new(self.0), AttrPath::dotted(path)),
+            origin: Origin::caller(format!("opaque Nix selection {}", path.parts().join("."))),
+            kind: ValueKind::Select(Box::new(self.0), path),
         })
+    }
+
+    /// Declare an expected scalar type without evaluating or checking the Nix value.
+    /// Supports `bool`, `String` and `i64`; Nix remains authoritative for actual types.
+    /// This preserves the expression and its origin, allowing typed symbolic operations.
+    pub fn into_expr<T>(self) -> crate::Expr<T>
+    where
+        crate::Expr<T>: ConfigValue,
+    {
+        crate::Expr {
+            node: self.0,
+            ty: std::marker::PhantomData,
+        }
     }
 }
 

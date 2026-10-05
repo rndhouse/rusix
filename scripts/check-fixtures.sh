@@ -12,7 +12,7 @@ cargo test --locked -p rusnix-nix --test authoring
 cargo test --locked -p rusnix-nix --test symbolic_options
 cargo test --locked -p rusnix-nix --test derive
 cargo test --locked -p rusnix-nix --test config_module
-cargo test --locked -p rusnix-nix --test options
+cargo test --locked -p rusnix-nix --test options --test args
 cargo test --locked -p rusnix-nix --test postgresql
 cargo test --locked -p rusnix-nix --test schema --test postgresql_schema
 cargo test --locked -p rusnix-nix --test symbolic_text

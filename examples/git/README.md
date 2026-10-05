@@ -8,7 +8,8 @@ the [PostgreSQL NixOS module](../postgresql-nixos-module/README.md).
 
 - `model.rs`: ordinary Rust feature choices. `Perl` groups SVN/send-email with the
   Perl support they require; platform-dependent defaults remain deferred to Nix.
-- `inputs.rs`: the finite native Nix argument interface and opaque dependency access.
+- `inputs.rs`: a local `#[rusnix::args]` structural view of the deferred native Nix
+  argument record. Scalar accessors are typed; packages and functions stay opaque.
 - `lowering.rs`: feature/platform policy, the fixed derivation record, readable
   shell templates, metadata and passthru values.
 - `main.rs`: composes the model and factory, then prints generated Nix. It evaluates
@@ -17,6 +18,12 @@ the [PostgreSQL NixOS module](../postgresql-nixos-module/README.md).
 ```bash
 cargo run --locked -p rusnix-nix --example git
 ```
+
+`args::from_value(arguments)` binds the view to the record supplied by the native
+Nix function. Access such as `inputs.stdenv.host_platform.is_darwin()` constructs
+a deferred selection; Rust never reads the platform flags. Declared subtrees
+marked `#[rusnix(value)]` expose `as_value()` when the whole opaque record is
+needed. Naming follows the same rules as `#[rusnix::options]`.
 
 The generated artifact exposes `factory` and `git`. Ordinary Nix can pass `factory`
 to `pkgs.callPackage` with the same explicit framework/Perl-library arguments used

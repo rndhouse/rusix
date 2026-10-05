@@ -1007,6 +1007,24 @@ runtime traversal or whole-config handle. The [view tests](crates/rusnix-nix/tes
 exercise opaque/typed leaves, exact keys, provenance, lazy evaluation and ordinary
 Nix overrides of the same artifact; UI fixtures check the compile-time boundary.
 
+For package-function adapters, `#[rusnix::args]` provides the same finite structural
+navigation over a supplied deferred argument record. Bind it with
+`args::from_value(arguments)` inside `NixValue::function_attrs`; accessors such as
+`args.stdenv.host_platform.is_darwin()` construct symbolic selections. Scalar and
+opaque leaf mappings, naming rules and explicit subtree access match
+`#[rusnix::options]`. Rust declares expected shapes; it never reads argument values
+or validates the external function's schema. Roots have no dynamic traversal or
+whole-root accessor; retain the raw NixValue for advanced access. External aliases
+and reusable views use explicit lower-level selection rather than source inspection.
+
+The [Git argument declaration](examples/git/inputs.rs) exercises this API without
+changing defaults, `functionArgs`, `callPackage`, `.override` or `.overrideAttrs`.
+The [argument-view tests](crates/rusnix-nix/tests/args.rs) verify literal path keys,
+caller provenance, laziness and ordinary Nix callers reusing the same artifact.
+`NixValue::select_segments` preserves literal dots within keys, and
+`NixValue::into_expr::<T>()` attaches a supported expected scalar type while
+retaining the existing deferred expression and origin.
+
 The [symbolic dependency tests](crates/rusnix-nix/tests/symbolic_options.rs) add
 an ordinary Nix option-declaration fixture and an independent default-priority
 port contribution of 5432. Each contribution retains its own `_file` identity.

@@ -79,6 +79,10 @@ and collection/opaque methods return NixValue. `#[rusnix(value)]` explicitly
 permits whole-subtree access. It does not create schemas, global bindings or
 read final values into Rust.
 
+`#[rusnix::args]` supplies the analogous finite view over an existing deferred Nix
+function argument record. Git's `inputs.rs` binds it with `args::from_value`;
+navigation and leaf accessors remain symbolic and Nix owns actual argument types.
+
 For local configuration, one inline module boundary supplies structural lowering:
 
 ```rust

@@ -97,6 +97,40 @@ pub use rusnix_derive::config;
 /// ```
 pub use rusnix_derive::options;
 
+/// Typed symbolic navigation over an existing deferred Nix function argument record.
+/// Requires an inline module with one `#[rusnix(root)]` named struct. Bind with
+/// the generated `from_value`; navigation never reads or evaluates values in Rust.
+/// `bool`, `String` and `i64` leaves return [`Expr`] with the declared expected type.
+/// `NixValue`, `Option`, `Vec`, `BTreeMap` and `HashMap` leaves stay opaque, including
+/// deferred collections. Nix remains authoritative for existence and actual types.
+/// Naming and explicit subtree `#[rusnix(value)]` / `as_value` follow [`options`].
+/// Roots have no `as_value` or dynamic traversal; retain the supplied raw
+/// [`interop::NixValue`] for advanced selections. External aliases/view types are
+/// not inspected; use explicit lower-level selections outside the declaration.
+/// Leaf calls capture caller provenance. Views can be cloned without evaluation.
+///
+/// ```
+/// #![deny(missing_docs)]
+/// //! A package implementation's explicit dependencies.
+/// use rusnix_ir::{self as rusnix, interop::NixValue};
+///
+/// #[rusnix::args]
+/// /// Finite package arguments used by this implementation.
+/// pub mod arguments {
+///     #[rusnix(root)]
+///     struct Inputs { feature: bool, platform: Platform }
+///
+///     #[rusnix(value)]
+///     struct Platform { system: String }
+/// }
+/// let factory = NixValue::function_attrs(["feature", "platform"], |value| {
+///     let args = arguments::from_value(value);
+///     let body = NixValue::if_else(args.feature(), args.platform.system(), "disabled");
+///     (Vec::<(&str, NixValue)>::new(), body)
+/// });
+/// ```
+pub use rusnix_derive::args;
+
 #[doc(hidden)]
 pub use rusnix_derive::symbolic_text as __symbolic_text;
 
