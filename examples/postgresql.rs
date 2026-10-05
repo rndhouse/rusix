@@ -82,7 +82,7 @@ mod lowering {
     use rusnix_ir::{
         self as rusnix, Config, Expr, IntoConfig,
         interop::{NixValue, Nixpkgs},
-        nix_record as record, nix_text as text,
+        nix_record as record, nix_text,
         nixos::{self, DefinitionPriority, NixosModule, OptionRef},
     };
     use std::collections::BTreeMap;
@@ -299,14 +299,13 @@ mod lowering {
         let lines = Nixpkgs::new().function("mapAttrsToList").apply([
             NixValue::function(|name| {
                 NixValue::function(|value| {
-                    let quoted = text!(
-                        "'",
-                        Nixpkgs::new().function("replaceStrings").apply([
+                    let quoted = nix_text!(
+                        "'{value}'",
+                        value = Nixpkgs::new().function("replaceStrings").apply([
                             NixValue::list(["'".into()]),
                             NixValue::list(["''".into()]),
                             value.clone()
                         ]),
-                        "'"
                     );
                     let rendered = NixValue::if_else(
                         value.clone().equals(true),
@@ -321,7 +320,7 @@ mod lowering {
                             ),
                         ),
                     );
-                    text!(name, " = ", rendered)
+                    nix_text!("{name} = {rendered}", name = name, rendered = rendered)
                 })
             }),
             printable,
@@ -340,40 +339,39 @@ mod lowering {
         let data = path_text(pg.data_dir());
         let recovery = optional_file_script(
             pg.recovery_config(),
-            text!(
-                "ln -sfn \"",
-                Nixpkgs::from_module()
+            nix_text!(
+                r#"ln -sfn "{file}" \
+  "{data}/recovery.conf"
+"#,
+                file = Nixpkgs::from_module()
                     .package_function("writeText")
-                    .apply(["recovery.conf".into(), pg.recovery_config()])
-                    .to_text(),
-                "\" \\\n  \"",
-                data.clone(),
-                "/recovery.conf\"\n",
+                    .apply(["recovery.conf".into(), pg.recovery_config()]),
+                data = data.clone(),
             ),
         );
-        text!(
-            "if ! test -e ",
-            data.clone(),
-            "/PG_VERSION; then\n",
-            "  # Cleanup the data directory.\n  rm -f ",
-            data.clone(),
-            "/*.conf\n\n",
-            "  # Initialise the database.\n  initdb -U ",
-            pg.super_user(),
-            " ",
-            Nixpkgs::new()
+        // Raw templates keep their whitespace; the holes remain deferred Nix values.
+        nix_text!(
+            r#"if ! test -e {data}/PG_VERSION; then
+  # Cleanup the data directory.
+  rm -f {data}/*.conf
+
+  # Initialise the database.
+  initdb -U {super_user} {initdb_args}
+
+  # See postStart!
+  touch "{data}/.first_startup"
+fi
+
+ln -sfn "{config_file}/postgresql.conf" "{data}/postgresql.conf"
+{recovery}
+"#,
+            data = data,
+            super_user = pg.super_user(),
+            initdb_args = Nixpkgs::new()
                 .function("escapeShellArgs")
                 .apply([pg.initdb_args()]),
-            "\n\n  # See postStart!\n  touch \"",
-            data.clone(),
-            "/.first_startup\"\nfi\n\n",
-            "ln -sfn \"",
-            configuration_file().to_text(),
-            "/postgresql.conf\" \"",
-            data,
-            "/postgresql.conf\"\n",
-            recovery,
-            "\n",
+            config_file = configuration_file(),
+            recovery = recovery,
         )
     }
 
@@ -382,20 +380,18 @@ mod lowering {
         let data = path_text(pg.data_dir());
         let initial = optional_file_script(
             pg.initial_script(),
-            text!(
-                "$PSQL -f \"",
-                pg.initial_script().to_text(),
-                "\" -d postgres\n"
+            nix_text!(
+                r#"$PSQL -f "{script}" -d postgres
+"#,
+                script = pg.initial_script(),
             ),
         );
         let databases = Nixpkgs::new().function("concatMapStrings").apply([
             NixValue::function(|database| {
-                text!(
-                    "$PSQL -tAc \"SELECT 1 FROM pg_database WHERE datname = '",
-                    database.clone(),
-                    "'\" | grep -q 1 || $PSQL -tAc 'CREATE DATABASE \"",
-                    database,
-                    "\"'\n",
+                nix_text!(
+                    r#"$PSQL -tAc "SELECT 1 FROM pg_database WHERE datname = '{database}'" | grep -q 1 || $PSQL -tAc 'CREATE DATABASE "{database}"'
+"#,
+                    database = database,
                 )
             }),
             pg.ensure_databases(),
@@ -416,58 +412,57 @@ mod lowering {
                     .apply([
                         NixValue::function(|name| {
                             NixValue::function(|enabled| {
-                                NixValue::if_else(enabled, name.clone(), text!("no", name))
+                                NixValue::if_else(enabled, name.clone(), nix_text!("no{name}", name = name))
                             })
                         }),
                         clauses,
                     ])]);
                 let ownership = NixValue::if_else(
                     user.select("ensureDBOwnership"),
-                    text!(
-                        "$PSQL -tAc 'ALTER DATABASE \"",
-                        name.clone(),
-                        "\" OWNER TO \"",
-                        name.clone(),
-                        "\";' "
+                    nix_text!(
+                        r#"$PSQL -tAc 'ALTER DATABASE "{name}" OWNER TO "{name}";' "#,
+                        name = name.clone(),
                     ),
                     "",
                 );
-                text!(
-                    "$PSQL -tAc \"SELECT 1 FROM pg_roles WHERE rolname='",
-                    name.clone(),
-                    "'\" | grep -q 1 || $PSQL -tAc 'CREATE USER \"",
-                    name.clone(),
-                    "\"'\n",
-                    "$PSQL -tAc 'ALTER ROLE \"",
-                    name,
-                    "\" ",
-                    NixValue::join_text(" ", clauses),
-                    "' \n\n",
-                    ownership,
-                    "\n"
+                nix_text!(
+                    r#"$PSQL -tAc "SELECT 1 FROM pg_roles WHERE rolname='{name}'" | grep -q 1 || $PSQL -tAc 'CREATE USER "{name}"'
+$PSQL -tAc 'ALTER ROLE "{name}" {clauses}'{trailing_space}
+
+{ownership}
+"#,
+                    name = name,
+                    clauses = NixValue::join_text(" ", clauses),
+                    // Preserve the upstream command's trailing space explicitly.
+                    trailing_space = " ",
+                    ownership = ownership,
                 )
             }),
             pg.ensure_users(),
         ]);
-        text!(
-            "PSQL=\"psql --port=",
-            pg.settings.port().to_text(),
-            "\"\n\n",
-            "while ! $PSQL -d postgres -c \"\" 2> /dev/null; do\n    if ! kill -0 \"$MAINPID\"; then exit 1; fi\n    sleep 0.1\ndone\n\n",
-            "if test -e \"",
-            data.clone(),
-            "/.first_startup\"; then\n  ",
-            initial,
-            "\n  rm -f \"",
-            data,
-            "/.first_startup\"\nfi\n",
-            NixValue::if_else(
+        nix_text!(
+            r#"PSQL="psql --port={port}"
+
+while ! $PSQL -d postgres -c "" 2> /dev/null; do
+    if ! kill -0 "$MAINPID"; then exit 1; fi
+    sleep 0.1
+done
+
+if test -e "{data}/.first_startup"; then
+  {initial}
+  rm -f "{data}/.first_startup"
+fi
+{databases}{users}
+"#,
+            port = pg.settings.port(),
+            data = data,
+            initial = initial,
+            databases = NixValue::if_else(
                 pg.ensure_databases().equals(NixValue::list([])),
                 "",
-                text!(databases, "\n")
+                nix_text!("{databases}\n", databases = databases),
             ),
-            users,
-            "\n",
+            users = users,
         )
     }
 
@@ -478,7 +473,15 @@ mod lowering {
                 let name = user.clone().select("name");
                 record! {
                     "assertion": NixValue::if_else(user.select("ensureDBOwnership"), Nixpkgs::new().function("elem").apply([name.clone(), pg.ensure_databases()]), true),
-                    "message": text!("For each database user defined with `services.postgresql.ensureUsers` and\n`ensureDBOwnership = true;`, a database with the same name must be defined\nin `services.postgresql.ensureDatabases`.\n\nOffender: ", name, " has not been found among databases.\n"),
+                    "message": nix_text!(
+                        r#"For each database user defined with `services.postgresql.ensureUsers` and
+`ensureDBOwnership = true;`, a database with the same name must be defined
+in `services.postgresql.ensureDatabases`.
+
+Offender: {name} has not been found among databases.
+"#,
+                        name = name,
+                    ),
                 }
             }),
             pg.ensure_users(),
@@ -492,13 +495,16 @@ mod lowering {
             .function("versionAtLeast")
             .apply([package.clone().select("version"), "11.0".into()]);
         let data = NixValue::from(pg.data_dir());
-        let standard_data = text!("/var/lib/postgresql/", pg.package().select("psqlSchema"));
+        let standard_data = nix_text!(
+            "/var/lib/postgresql/{schema}",
+            schema = pg.package().select("psqlSchema")
+        );
         let properties = record! {
-            "ExecReload": text!(Nixpkgs::from_module().get("coreutils").as_value().to_text(), "/bin/kill -HUP $MAINPID"),
+            "ExecReload": nix_text!("{coreutils}/bin/kill -HUP $MAINPID", coreutils = Nixpkgs::from_module().get("coreutils")),
             "User": "postgres", "Group": "postgres", "RuntimeDirectory": "postgresql",
             "Type": NixValue::if_else(Nixpkgs::new().function("versionAtLeast").apply([pg.package().select("version"), "9.6".into()]), "notify", "simple"),
             "KillSignal": "SIGINT", "KillMode": "mixed", "TimeoutSec": 120_i64,
-            "ExecStart": text!(package.to_text(), "/bin/postgres"),
+            "ExecStart": nix_text!("{package}/bin/postgres", package = package),
             "CapabilityBoundingSet": NixValue::list(["".into()]), "DevicePolicy": "closed",
             "PrivateTmp": true, "ProtectHome": true, "ProtectSystem": "strict",
             "MemoryDenyWriteExecute": NixValue::from(pg.settings.jit()).equals("off").priority(DefinitionPriority::Default),
@@ -517,7 +523,7 @@ mod lowering {
             record! { "ReadWritePaths": NixValue::list([data.clone()]) }
                 .when(NixValue::if_else(data.clone().equals("/var/lib/postgresql"), false, true)),
             record! {
-                "StateDirectory": text!("postgresql postgresql/", pg.package().select("psqlSchema")),
+                "StateDirectory": nix_text!("postgresql postgresql/{schema}", schema = pg.package().select("psqlSchema")),
                 "StateDirectoryMode": NixValue::if_else(group_access, "0750", "0700"),
             }.when(data.equals(standard_data)),
         ])
@@ -555,11 +561,12 @@ mod lowering {
             .apply([
                 "postgresql-configfile-check".into(),
                 record! {},
-                text!(
-                    pg.package().to_text(),
-                    "/bin/postgres -D",
-                    configuration_file().to_text(),
-                    " -C config_file >/dev/null\ntouch $out\n"
+                nix_text!(
+                    r#"{package}/bin/postgres -D{config_file} -C config_file >/dev/null
+touch $out
+"#,
+                    package = pg.package(),
+                    config_file = configuration_file(),
                 ),
             ]);
         let pkgs = Nixpkgs::from_module();
@@ -613,7 +620,7 @@ mod lowering {
                     postgresql: guarded(record! {
                         "settings": settings(),
                         "package": default_package().priority(DefinitionPriority::Default),
-                        "dataDir": text!("/var/lib/postgresql/", pg.package().select("psqlSchema")).priority(DefinitionPriority::Default),
+                        "dataDir": nix_text!("/var/lib/postgresql/{schema}", schema = pg.package().select("psqlSchema")).priority(DefinitionPriority::Default),
                         "authentication": authentication,
                     }),
                 },

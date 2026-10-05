@@ -365,5 +365,81 @@
       "Expr<bool>",
       "Expr<i64>"
     ]
+  },
+  {
+    "file": "text-unknown.rs",
+    "code": null,
+    "count": 1,
+    "source": "{missing}",
+    "reason_tokens": [
+      "unknown nix_text placeholder",
+      "missing"
+    ]
+  },
+  {
+    "file": "text-unclosed.rs",
+    "code": null,
+    "count": 1,
+    "source": "before {value",
+    "reason_tokens": [
+      "unclosed nix_text placeholder"
+    ]
+  },
+  {
+    "file": "text-closing.rs",
+    "code": null,
+    "count": 1,
+    "source": "unexpected }",
+    "reason_tokens": [
+      "unmatched closing brace",
+      "}}"
+    ]
+  },
+  {
+    "file": "text-duplicate.rs",
+    "code": null,
+    "count": 1,
+    "source": "value = \"second\"",
+    "reason_tokens": [
+      "duplicate nix_text argument"
+    ]
+  },
+  {
+    "file": "text-format.rs",
+    "code": null,
+    "count": 1,
+    "source": "{value:?}",
+    "reason_tokens": [
+      "only named placeholders",
+      "formatting syntax is unsupported"
+    ]
+  },
+  {
+    "file": "text-positional.rs",
+    "code": null,
+    "count": 1,
+    "source": "\"{}\"",
+    "reason_tokens": [
+      "only named placeholders",
+      "formatting syntax is unsupported"
+    ]
+  },
+  {
+    "file": "text-unused.rs",
+    "code": null,
+    "count": 1,
+    "source": "unused = \"value\"",
+    "reason_tokens": [
+      "unused nix_text argument"
+    ]
+  },
+  {
+    "file": "text-nested.rs",
+    "code": null,
+    "count": 1,
+    "source": "{outer{inner}}",
+    "reason_tokens": [
+      "nested brace in nix_text placeholder"
+    ]
   }
 ]

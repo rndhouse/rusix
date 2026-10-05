@@ -563,7 +563,7 @@ Tests retain reviewable generated Nix/results under `target/typed-examples/` and
 Seven important Nix comparisons live in `tests/comparisons/` as executable test
 data. Backend tests import the actual single-file Rust examples and compare
 their evaluated outputs with these modules, including native enum/assertion
-rejections. Thirty UI fixtures back the documented invalid Rust cases through the
+rejections. Forty-six UI fixtures back the documented invalid Rust cases through the
 code/span/type-label checker. They import actual example-local types and functions
 or deliberately evolve a test-local enum; the moved fixture-only SSH helper's
 contract is also checked. Two fixtures verify two independent errors each.
@@ -572,13 +572,16 @@ assertion condition with E0308. A derived PackageRef field rejects ModuleRef
 with E0308. Derive errors reject container prefixes, automatic data-carrying enum conversion
 and conflicting attributes. Enum fixtures also reject name collisions, unsupported
 variant mappings and unsupported naming conventions. Additional cases reject invalid/duplicate rename_all,
-rename_all on transparent newtypes, and misplaced field rename_all. The thirty
-fixtures check thirty-two errors using codes where available, useful primary spans
+rename_all on transparent newtypes, and misplaced field rename_all. The forty-six
+fixtures check forty-eight errors using codes where available, useful primary spans
 and relevant messages/type labels.
+Eight of these fixtures reject unknown/unused text arguments, duplicate names,
+malformed braces, positional placeholders and unsupported formatting.
 The module API also rejects missing/duplicate roots, enum/tuple roots, macro
 arguments and category mistakes. Core has three compile-fail doctests for generic
-Expr, opaque handle categories and unmapped data-carrying enums, plus a runnable
-module-authoring doctest. No complete compiler-wording snapshots are required.
+Expr, opaque handle categories and unmapped data-carrying enums, plus runnable
+module-authoring, option-view and symbolic-text doctests. No complete
+compiler-wording snapshots are required.
 
 The guarantees apply to the typed API. Explicit primitive extraction, opaque
 `as_value()`, generic Config and raw IR can bypass them. Later independent NixOS
@@ -594,3 +597,16 @@ this does not add general Option/map derive semantics. Foreign Nix may still
 force scalar heads while processing freeform option namespaces; list elements
 remain deferred. Derive
 adds no Nix forcing, and the existing selective-evaluation tests remain intact.
+
+PostgreSQL's private lowering uses `nix_text!` to keep shell and SQL readable:
+
+```rust
+let port = pg.settings.port();
+let command = rusnix_ir::nix_text!("postgres --port={port}", port = port);
+```
+
+Named holes stay symbolic; NixOS resolves the final option after merging. Raw
+multiline templates preserve whitespace exactly, with `{{` / `}}` for literal
+braces. [symbolic_text.rs](../crates/rusnix-nix/tests/symbolic_text.rs) verifies
+string dependency contexts, caller provenance, lazy evaluation and artifact reuse;
+the full PostgreSQL suite verifies unchanged scripts, SQL and derivation inputs.

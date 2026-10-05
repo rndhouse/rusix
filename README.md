@@ -758,7 +758,7 @@ boundary conversion, not a general serialization framework or Option derive.
 let pkgs = Nixpkgs::new();
 let args = rusnix_ir::nix_record! {
     "name": "example.conf",
-    "text": rusnix_ir::nix_text!("workers = ", NixValue::from(4).to_text(), "\n"),
+    "text": rusnix_ir::nix_text!("workers = {workers}\n", workers = 4),
     "executable": false,
     "passthru": rusnix_ir::nix_record! {
         "package": pkgs.get("hello"),
@@ -779,12 +779,28 @@ selected through `as_value().select(...)` and called. Function schemas and error
 belong to Nix. No builder or package-specific Rust code is involved.
 
 `nix_record!` accepts literal keys, key variables or parenthesized dynamic key
-expressions; these are escaped attribute names, never Nix source. `nix_text!`
-concatenates mixed literal/symbolic string values. It does not implicitly coerce
-packages or integers; use `.to_text()` explicitly. `NixValue::concat_text(parts)`
-is the iterator form, and `NixValue::join_text(separator, opaque_list)` also
-accepts lists produced by deferred Nix callbacks. These operations preserve Nix
-string dependency contexts and use the existing IR and AST.
+expressions; these are escaped attribute names, never Nix source.
+
+`nix_text!("postgres --port={port}", port = port)` interpolates named values into
+a deferred Nix string. Arguments may be Rust literals, Expr/OptionRef expressions,
+opaque Nix values or package/derivation handles. Each argument is constructed once
+and coerced with Nix `builtins.toString`; repeated holes reuse its graph. This is
+symbolic interpolation, not Rust `format!`. Nix string dependency contexts and
+child origins survive through the existing IR and text concatenation operations.
+
+Templates are string literals, including multiline raw strings. Whitespace is
+preserved verbatim: no implicit dedent. Escape literal braces with `{{` and `}}`
+(for example, `${{PATH}}` produces literal shell `${PATH}`). Only explicit named
+arguments are supported; unknown holes, malformed braces, duplicate/unused
+arguments and formatting syntax produce compile-time errors. Width, precision,
+debug formatting, positional arguments and expressions inside holes are unsupported.
+
+The original `nix_text!(part, other_part, ...)` fragment form remains available;
+its parts must already be strings, with explicit `.to_text()` for other values.
+A single string literal is now a template and follows the brace-escaping rules.
+`NixValue::concat_text(parts)` is the iterator form, and
+`NixValue::join_text(separator, opaque_list)` also accepts lists produced by
+deferred Nix callbacks. None of these operations evaluates deferred values in Rust.
 
 NixOS definition helpers live in `rusnix_ir::nixos`: `nixos::merge(values)` emits
 `mkMerge`; `value.when(condition)` emits `mkIf`; `value.priority(priority)` uses

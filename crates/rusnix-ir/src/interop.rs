@@ -346,9 +346,23 @@ impl NixFunction {
     }
 }
 
-/// Mixed symbolic/opaque text parts. This constructs IR, never Nix source.
+/// Deferred named interpolation, using Nix toString rather than Rust formatting.
+/// Templates preserve whitespace verbatim and accept `{name}`, `{{` and `}}`.
+/// Each named argument is constructed once; repeated holes reuse its graph.
+///
+/// ```
+/// use rusnix_ir::{nix_text, nixos::OptionRef};
+/// let port = OptionRef::<i64>::new("services.example.port").into_expr();
+/// let command = nix_text!("postgres --port={port}", port = port);
+/// ```
+///
+/// The original comma-separated fragment form remains available for dynamic
+/// assembly. Its parts must already be strings; use to_text for coercion.
 #[macro_export]
 macro_rules! nix_text {
+    ($template:literal $(, $name:ident = $value:expr)* $(,)?) => {
+        $crate::__symbolic_text!($crate::interop::NixValue; $template $(, $name = $value)*)
+    };
     ($($part:expr),* $(,)?) => {
         $crate::interop::NixValue::concat_text([$($crate::interop::NixValue::from($part)),*])
     };

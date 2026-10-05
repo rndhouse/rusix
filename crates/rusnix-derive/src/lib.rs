@@ -7,6 +7,16 @@ mod config;
 
 mod options;
 
+mod text;
+
+/// Internal expansion used by the hygienic public nix_text wrapper.
+#[proc_macro]
+pub fn symbolic_text(input: TokenStream) -> TokenStream {
+    text::expand(parse_macro_input!(input as text::Input))
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
 /// Automatically lower local structs and unit enums in an inline config module.
 #[proc_macro_attribute]
 pub fn config(args: TokenStream, input: TokenStream) -> TokenStream {

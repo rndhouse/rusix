@@ -74,6 +74,9 @@ pub use rusnix_derive::config;
 /// ```
 pub use rusnix_derive::options;
 
+#[doc(hidden)]
+pub use rusnix_derive::symbolic_text as __symbolic_text;
+
 pub use rusnix_derive::{IntoConfig, IntoRusnixValue};
 pub use value::{IntoRusnixValue, RusnixValue};
 

@@ -709,7 +709,7 @@ fn curried_apply_preserves_argument_order_and_the_authoring_call_origin() {
         pkgs.package_function("writeText")
             .apply([
                 "curried.conf".into(),
-                rusnix_ir::nix_text!("workers=", NixValue::from(4).to_text()),
+                rusnix_ir::nix_text!("workers={count}", count = 4),
             ])
             .select("text"),
     );
