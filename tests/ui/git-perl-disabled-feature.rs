@@ -1,4 +1,4 @@
-#[path = "../../examples/git/model.rs"]
+#[path = "../../examples/git-nixpkg/model.rs"]
 mod model;
 
 fn main() {

@@ -40,7 +40,7 @@ configuration, while keeping Nix's ecosystem and final checks underneath.
 | [Layered validation](layered-validation.rs) | Clear division of validation responsibility |
 | [Nix interop](nix-interop.rs) | Existing ecosystem works without generated bindings |
 | [Symbolic option](symbolic-option.rs) | Explicit typed dependencies follow ordinary Nix overrides |
-| [Git package](git/README.md) | Real package definition with exact derivation compatibility and typed feature choices |
+| [Git package](git-nixpkg/README.md) | Real package definition with exact derivation compatibility and typed feature choices |
 | [PostgreSQL NixOS module](postgresql-nixos-module/README.md) | Real module implementation with typed provisioning and NixOS compatibility |
 
 The nine small showcases each use **one Rust file** for user models, structural

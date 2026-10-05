@@ -1027,7 +1027,7 @@ or validates the external function's schema. Roots have no dynamic traversal or
 whole-root accessor; retain the raw NixValue for advanced access. External aliases
 and reusable views use explicit lower-level selection rather than source inspection.
 
-The [Git argument declaration](examples/git/inputs.rs) exercises this API without
+The [Git argument declaration](examples/git-nixpkg/inputs.rs) exercises this API without
 changing defaults, `functionArgs`, `callPackage`, `.override` or `.overrideAttrs`.
 The [argument-view tests](crates/rusnix-nix/tests/args.rs) verify literal path keys,
 caller provenance, laziness and ordinary Nix callers reusing the same artifact.
@@ -1163,7 +1163,7 @@ custom semantic projection while retaining generated-module parsing and existing
 Rusnix diagnostics. The adapter recognizes both staged nixpkgs library trees and
 preserves precise NixOS option paths inside opaque records.
 
-The [Git package example](examples/git/README.md) rewrites the pinned Git 2.47.0
+The [Git package example](examples/git-nixpkg/README.md) rewrites the pinned Git 2.47.0
 package expression using the real nixpkgs `callPackage`/`mkDerivation` backend.
 Its tests compare exact derivation recipes, feature/platform choices and ordinary
 Nix overrides without fetching sources or building Git.

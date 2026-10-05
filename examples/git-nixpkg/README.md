@@ -16,7 +16,7 @@ the [PostgreSQL NixOS module](../postgresql-nixos-module/README.md).
   no Nix and builds nothing.
 
 ```bash
-cargo run --locked -p rusnix-nix --example git
+cargo run --locked -p rusnix-nix --example git-nixpkg
 ```
 
 `args::from_value(arguments)` binds the view to the record supplied by the native

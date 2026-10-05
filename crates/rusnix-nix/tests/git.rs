@@ -1,11 +1,11 @@
 //! Compares complete recipes and deferred package behavior without fetching or building.
-#[path = "../../../examples/git/inputs.rs"]
+#[path = "../../../examples/git-nixpkg/inputs.rs"]
 mod inputs;
 
-#[path = "../../../examples/git/lowering.rs"]
+#[path = "../../../examples/git-nixpkg/lowering.rs"]
 mod lowering;
 
-#[path = "../../../examples/git/model.rs"]
+#[path = "../../../examples/git-nixpkg/model.rs"]
 mod model;
 
 use rusnix_ir::{
@@ -449,7 +449,7 @@ fn invalid_public_feature_combinations_reject_and_retain_rust_provenance() {
             candidate.origins.iter().any(|o| o
                 .origin
                 .as_ref()
-                .is_some_and(|o| o.file.ends_with("examples/git/lowering.rs"))),
+                .is_some_and(|o| o.file.ends_with("examples/git-nixpkg/lowering.rs"))),
             "{name}: {candidate:?}"
         );
         let root = Path::new(env!("CARGO_MANIFEST_DIR"))
