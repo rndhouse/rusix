@@ -249,6 +249,32 @@ impl NixValue {
         })
     }
 
+    /// Apply curried arguments in order. Nix owns their schemas and evaluation.
+    #[track_caller]
+    pub fn apply(mut self, arguments: impl IntoIterator<Item = Self>) -> Self {
+        // A direct call keeps track_caller; a function-pointer fold loses it.
+        for argument in arguments {
+            self = self.call(argument);
+        }
+        self
+    }
+
+    /// Join deferred strings without dropping their Nix dependency contexts.
+    /// Parts is an opaque Nix list, possibly computed by a deferred callback.
+    /// Its entries must evaluate to strings; use to_text for explicit coercion.
+    #[track_caller]
+    pub fn join_text(separator: &str, parts: Self) -> Self {
+        Nixpkgs::new()
+            .function("concatStringsSep")
+            .apply([separator.into(), parts])
+    }
+
+    /// Concatenate Rust-selected parts while leaving their values deferred in Nix.
+    #[track_caller]
+    pub fn concat_text(parts: impl IntoIterator<Item = Self>) -> Self {
+        Self::join_text("", Self::list(parts))
+    }
+
     #[track_caller]
     pub fn select(self, path: &str) -> Self {
         Self(Node {
@@ -312,6 +338,32 @@ impl NixFunction {
     pub fn call(&self, argument: impl ConfigValue) -> NixValue {
         self.as_value().call(argument)
     }
+
+    /// Apply any number of curried arguments through the opaque boundary.
+    #[track_caller]
+    pub fn apply(&self, arguments: impl IntoIterator<Item = NixValue>) -> NixValue {
+        self.as_value().apply(arguments)
+    }
+}
+
+/// Mixed symbolic/opaque text parts. This constructs IR, never Nix source.
+#[macro_export]
+macro_rules! nix_text {
+    ($($part:expr),* $(,)?) => {
+        $crate::interop::NixValue::concat_text([$($crate::interop::NixValue::from($part)),*])
+    };
+}
+
+/// Structured mixed values with literal or parenthesized dynamic Rust keys.
+#[macro_export]
+macro_rules! nix_record {
+    (@key ($key:expr)) => { $key };
+    (@key $key:expr) => { $key };
+    ($($key:tt : $value:expr),* $(,)?) => {{
+        let fields: ::std::vec::Vec<(::std::string::String, $crate::interop::NixValue)> =
+            ::std::vec![$((::std::convert::Into::into($crate::nix_record!(@key $key)), $crate::interop::NixValue::from($value))),*];
+        $crate::interop::NixValue::record(fields)
+    }};
 }
 
 #[derive(Clone, Debug, Default)]

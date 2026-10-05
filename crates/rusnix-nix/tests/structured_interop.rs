@@ -701,3 +701,141 @@ fn session_value(artifact: &rusnix_nix::nixos::NixosArtifact) -> serde_json::Val
         .unwrap()
         .value
 }
+
+#[test]
+fn curried_apply_preserves_argument_order_and_the_authoring_call_origin() {
+    let pkgs = Nixpkgs::new();
+    let artifact = generated(
+        pkgs.package_function("writeText")
+            .apply([
+                "curried.conf".into(),
+                rusnix_ir::nix_text!("workers=", NixValue::from(4).to_text()),
+            ])
+            .select("text"),
+    );
+    let session = NixSession::new().unwrap();
+    assert_eq!(
+        session.evaluate_interop(&artifact).unwrap().value["result"],
+        "workers=4"
+    );
+
+    let writer = pkgs.package_function("writeText");
+    let arguments = ["bad.conf".into(), rusnix_ir::nix_record! { "wrong": true }];
+    let call_line = line!() + 1;
+    let invalid = writer.apply(arguments);
+    let diagnostic = session.evaluate_interop(&generated(invalid)).unwrap_err();
+    assert_eq!(diagnostic.provenance, Provenance::ErrorContext);
+    assert_eq!(diagnostic.primary.as_ref().unwrap().line, call_line);
+    assert_eq!(diagnostic.primary.as_ref().unwrap().file, file!());
+    assert!(
+        diagnostic
+            .reason
+            .contains("second argument should be a string")
+    );
+    assert!(!diagnostic.raw_nix.is_empty());
+}
+
+#[test]
+fn mixed_record_and_text_macros_preserve_opaque_values_and_literal_keys() {
+    let pkgs = Nixpkgs::new();
+    let dynamic_key = "literal.dot ${not interpolation}\"";
+    let value = rusnix_ir::nix_record! {
+        (dynamic_key): rusnix_ir::nix_record! {},
+        "package": pkgs.get("hello"),
+        "text": rusnix_ir::nix_text!("hello ", "world"),
+        "emptyText": rusnix_ir::nix_text!(),
+        "list": NixValue::list([1.into(), 2.into()]),
+    };
+    let summary = rusnix_ir::nix_record! {
+        "key": pkgs.function("getAttr").apply([dynamic_key.into(), value.clone()]),
+        "package": value.clone().select("package.pname"),
+        "text": value.clone().select("text"),
+        "emptyText": value.clone().select("emptyText"),
+        "list": value.select("list"),
+    };
+    let result = NixSession::new()
+        .unwrap()
+        .evaluate_interop(&generated(summary))
+        .unwrap()
+        .value;
+    assert_eq!(
+        result["result"],
+        serde_json::json!({
+            "key": {}, "package": "hello", "text": "hello world", "emptyText": "", "list": [1, 2]
+        })
+    );
+}
+
+#[test]
+fn joined_text_retains_store_dependencies_and_deferred_list_operations() {
+    let pkgs = Nixpkgs::new();
+    let dependency = pkgs.get("hello").as_value().to_text();
+    let text = rusnix_ir::nix_text!("prefix ", dependency.clone(), " suffix");
+    let contexts_equal = InputRef::local(
+        "context",
+        root().join("tests/fixtures/structured-interop.nix"),
+    )
+    .function("getContext")
+    .call(text)
+    .equals(
+        InputRef::local(
+            "context",
+            root().join("tests/fixtures/structured-interop.nix"),
+        )
+        .function("getContext")
+        .call(dependency),
+    );
+    let list = Nixpkgs::new().function("map").apply([
+        NixValue::function(|item| item.to_text()),
+        NixValue::list([1.into(), 2.into()]),
+    ]);
+    let summary = rusnix_ir::nix_record! {
+        "contextsEqual": contexts_equal,
+        "joined": NixValue::join_text("/", list),
+    };
+    let value = NixSession::new()
+        .unwrap()
+        .evaluate_interop(&generated(summary))
+        .unwrap()
+        .value;
+    assert_eq!(
+        value["result"],
+        serde_json::json!({"contextsEqual": true, "joined": "1/2"})
+    );
+}
+
+#[test]
+fn mixed_macros_retain_symbolic_references_and_unused_fields_stay_lazy() {
+    let value = rusnix_ir::nix_record! {
+        "command": rusnix_ir::nix_text!("port=", OptionRef::<i64>::new("services.example.port").into_expr().to_text()),
+        "unused": Expr::int(1).divide(Expr::int(0)),
+    };
+    let schema = InputRef::local(
+        "options",
+        root().join("tests/fixtures/symbolic-options.nix"),
+    );
+    let artifact = compile_module(
+        &NixosModule::empty()
+            .import_ref(schema.module("schema"))
+            .add(
+                Config::new()
+                    .set("services.example.port", 5432)
+                    .set("environment.result", value),
+            ),
+    )
+    .unwrap();
+    let session = NixSession::new().unwrap();
+    assert!(
+        artifact
+            .module
+            .source
+            .contains("(config).\"services\".\"example\".\"port\"")
+    );
+    assert_eq!(
+        session
+            .evaluate_nixos_interop(&artifact, &["environment", "result", "command"], false)
+            .unwrap()
+            .value,
+        "port=5432"
+    );
+}

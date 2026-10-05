@@ -756,27 +756,45 @@ boundary conversion, not a general serialization framework or Option derive.
 
 ```rust
 let pkgs = Nixpkgs::new();
-let args = NixValue::record([
-    ("name", "example.conf".into()),
-    ("text", "workers = 4\n".into()),
-    ("executable", false.into()),
-    ("passthru", NixValue::record([
-        ("package", pkgs.get("hello").into()),
-        ("labels", NixValue::list(["a".into(), "b".into()])),
-    ])),
-]);
+let args = rusnix_ir::nix_record! {
+    "name": "example.conf",
+    "text": rusnix_ir::nix_text!("workers = ", NixValue::from(4).to_text(), "\n"),
+    "executable": false,
+    "passthru": rusnix_ir::nix_record! {
+        "package": pkgs.get("hello"),
+        "labels": NixValue::list(["a".into(), "b".into()]),
+    },
+};
 let file = pkgs.package_function("writeTextFile").call(args);
 let curried = pkgs.package_function("writeText")
-    .call("postgresql.conf")
-    .call("workers = 4\n");
+    .apply(["postgresql.conf".into(), "workers = 4\n".into()]);
 ```
 
 `package_function` looks up functions in the real package set, retaining its
 overlays; the existing `function` looks in nixpkgs/lib. Each `.call` is ordinary
-Nix application; chained calls handle currying. Results stay `NixValue`, without
-automatic PackageRef inference. Existing package functions/overrides can also be
+Nix application; `.apply([args...])` handles currying on either NixFunction or
+NixValue and preserves the Rust application call site. Results stay `NixValue`,
+without automatic PackageRef inference. Existing package functions/overrides can also be
 selected through `as_value().select(...)` and called. Function schemas and errors
 belong to Nix. No builder or package-specific Rust code is involved.
+
+`nix_record!` accepts literal keys, key variables or parenthesized dynamic key
+expressions; these are escaped attribute names, never Nix source. `nix_text!`
+concatenates mixed literal/symbolic string values. It does not implicitly coerce
+packages or integers; use `.to_text()` explicitly. `NixValue::concat_text(parts)`
+is the iterator form, and `NixValue::join_text(separator, opaque_list)` also
+accepts lists produced by deferred Nix callbacks. These operations preserve Nix
+string dependency contexts and use the existing IR and AST.
+
+NixOS definition helpers live in `rusnix_ir::nixos`: `nixos::merge(values)` emits
+`mkMerge`; `value.when(condition)` emits `mkIf`; `value.priority(priority)` uses
+the existing DefinitionPriority enum; `.before()` and `.after()` emit ordering
+metadata. NixOS decides merge, priority and ordering semantics. `.when` describes
+a deferred module definition; `NixValue::if_else` selects a plain value. Neither
+performs eager forcing. Each `NixosModule::add` still creates an independent
+contribution. PostgreSQL uses these helpers locally without adding domain types
+to core; settings/SQL formatting, option dependencies and nullable file handling
+remain in its compatibility adapter.
 
 References embedded in structures remain Nix lookups. Expr/OptionRef leaves
 retain their nodes, contexts and origins: a structured `text` argument can
@@ -814,12 +832,12 @@ filesystem-relative compiler artifacts, local input paths, and one fixed pinned
 package root. Rust-origin IDs and multi-origin diagnostics remain unchanged.
 
 
-Current verification: `cargo test --workspace --locked` passes **215 tests**
-(211 ordinary tests and 4 doctests, including 3 compile-fail cases; zero
-failed/ignored). The interop target has 24 tests; structured_interop has 19
+Current verification: `cargo test --workspace --locked` passes **223 tests**
+(219 ordinary tests and 4 doctests, including 3 compile-fail cases; zero
+failed/ignored). The interop target has 24 tests; structured_interop has 23
 and PostgreSQL has 56.
 Formatting and all-target Clippy with warnings denied pass.
-The fixture script passes 186 integration checks, ten runnable
+The fixture script passes 194 integration checks, ten runnable
 showcase examples plus the legacy generic SSH compiler example, and 20 original
 CLI fixture invocations. All 14 diagnostic snapshots remain passing.
 Examples print generated source without Nix evaluation, fixture construction or

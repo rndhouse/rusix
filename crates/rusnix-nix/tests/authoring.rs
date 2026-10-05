@@ -244,3 +244,115 @@ fn direct_conversion_tracks_its_caller_and_one_config_still_validates_duplicates
     assert_eq!(diagnostic.kind, DiagnosticKind::Validation);
     assert_eq!(diagnostic.primary, Some(expected));
 }
+
+#[test]
+fn per_value_priorities_leave_selection_to_nixos() {
+    use rusnix_ir::interop::NixValue;
+
+    let session = NixSession::new().unwrap();
+    for (left, right, expected) in [
+        (
+            DefinitionPriority::Default,
+            DefinitionPriority::Normal,
+            "nobody",
+        ),
+        (
+            DefinitionPriority::Normal,
+            DefinitionPriority::Force,
+            "nobody",
+        ),
+        (
+            DefinitionPriority::Override(10),
+            DefinitionPriority::Force,
+            "root",
+        ),
+    ] {
+        let module = base()
+            .add(Config::new().set(
+                "services.openssh.authorizedKeysCommandUser",
+                NixValue::from("root").priority(left),
+            ))
+            .add(Config::new().set(
+                "services.openssh.authorizedKeysCommandUser",
+                NixValue::from("nobody").priority(right),
+            ));
+        assert_eq!(
+            session
+                .evaluate_nixos(
+                    &compile_module(&module).unwrap(),
+                    &["services", "openssh", "authorizedKeysCommandUser"],
+                    false
+                )
+                .unwrap()
+                .value,
+            expected
+        );
+    }
+}
+
+#[test]
+fn deferred_merge_orders_list_definitions_using_nixos_before_and_after() {
+    use rusnix_ir::{interop::NixValue, nixos};
+
+    let definitions = nixos::merge([
+        NixValue::list([2222.into()]),
+        NixValue::list([3333.into()]).after(),
+        NixValue::list([1111.into()]).before(),
+    ]);
+    let module = base().add(Config::new().set("services.openssh.ports", definitions));
+    assert_eq!(
+        NixSession::new()
+            .unwrap()
+            .evaluate_nixos(
+                &compile_module(&module).unwrap(),
+                &["services", "openssh", "ports"],
+                false
+            )
+            .unwrap()
+            .value,
+        serde_json::json!([1111, 2222, 3333])
+    );
+}
+
+#[test]
+fn deferred_when_discards_inactive_definitions_without_evaluating_their_values() {
+    use rusnix_ir::{interop::NixValue, nixos::OptionRef};
+
+    let discarded = NixValue::list([Expr::int(1).divide(Expr::int(0)).into()])
+        .when(OptionRef::<bool>::new("services.openssh.enable").into_expr());
+    let module = base().add(Config::new().set("services.openssh.ports", discarded));
+    let artifact = compile_module(&module).unwrap();
+    assert!(!artifact.module.source.contains("deepSeq"));
+    assert_eq!(
+        NixSession::new()
+            .unwrap()
+            .evaluate_nixos(&artifact, &["services", "openssh", "ports"], false)
+            .unwrap()
+            .value,
+        serde_json::json!([22])
+    );
+}
+
+#[test]
+fn active_deferred_definition_keeps_the_failing_operation_origin() {
+    use rusnix_ir::interop::NixValue;
+
+    let divide_line = line!() + 1;
+    let invalid = Expr::int(1).divide(Expr::int(0));
+    let module = base().add(Config::new().set(
+        "services.openssh.ports",
+        NixValue::list([invalid.into()]).when(true),
+    ));
+    let diagnostic = NixSession::new()
+        .unwrap()
+        .evaluate_nixos(
+            &compile_module(&module).unwrap(),
+            &["services", "openssh", "ports"],
+            false,
+        )
+        .unwrap_err();
+    assert_eq!(diagnostic.primary.as_ref().unwrap().file, file!());
+    assert_eq!(diagnostic.primary.as_ref().unwrap().line, divide_line);
+    assert!(diagnostic.reason.contains("division by zero"));
+    assert!(!diagnostic.raw_nix.is_empty());
+}

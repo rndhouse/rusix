@@ -429,7 +429,12 @@ option type. No service is built or run.
 migration imports; it does not recreate the NixOS option schema.
 The top of the file shows a Rust-native PostgreSQL model and ordinary Rusnix
 usage. A private `lowering` module implements compatibility using typed symbolic
-option references and opaque nixpkgs functions; the complete rewrite stays in one file.
+option references and opaque nixpkgs functions; the complete rewrite stays in
+one file. Generic currying (`.apply`),
+text/record construction (`nix_text!`/`nix_record!`), and NixOS definition helpers
+(`.when`, `.priority`, `.before`/`.after`, `nixos::merge`) come from Rusnix.
+PostgreSQL formatting, SQL, package policy and nullable-file guards stay local;
+Nix remains authoritative for function schemas, string contexts and merging.
 
 `Postgresql` supplies ordinary Rust inputs. `Database::Owned { name, clauses }`
 creates the matching database and role, so their names cannot disagree.

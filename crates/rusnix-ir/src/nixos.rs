@@ -1,8 +1,54 @@
 //! Explicit NixOS composition, priorities, imports and assertion boundaries.
 use crate::interop::AttrPath;
-use crate::interop::{ModuleRef, PackageRef};
+use crate::interop::{ModuleRef, NixValue, Nixpkgs, PackageRef};
 use crate::{Config, ConfigValue, Expr, IntoConfig, Node, Origin, ValueKind};
 use std::marker::PhantomData;
+
+/// Combine deferred definition trees using NixOS mkMerge, not Rust merging.
+#[track_caller]
+pub fn merge(values: impl IntoIterator<Item = NixValue>) -> NixValue {
+    Nixpkgs::new()
+        .function("mkMerge")
+        .call(NixValue::list(values))
+}
+
+impl NixValue {
+    /// NixOS mkIf retains a deferred definition until module processing.
+    /// Unlike if_else, this constructs module metadata, not a selected value.
+    #[track_caller]
+    pub fn when(self, condition: impl Into<Self>) -> Self {
+        Nixpkgs::new()
+            .function("mkIf")
+            .apply([condition.into(), self])
+    }
+
+    /// Definition priority is selected by NixOS, including for symbolic values.
+    /// This is the per-value counterpart of NixosModule::priority.
+    #[track_caller]
+    pub fn priority(self, priority: DefinitionPriority) -> Self {
+        let library = Nixpkgs::new();
+        match priority {
+            DefinitionPriority::Normal => self,
+            DefinitionPriority::Default => library.function("mkDefault").call(self),
+            DefinitionPriority::Force => library.function("mkForce").call(self),
+            DefinitionPriority::Override(value) => {
+                library.function("mkOverride").apply([value.into(), self])
+            }
+        }
+    }
+
+    /// Order this definition before ordinary list/lines definitions (mkBefore).
+    #[track_caller]
+    pub fn before(self) -> Self {
+        Nixpkgs::new().function("mkBefore").call(self)
+    }
+
+    /// Order this definition after ordinary list/lines definitions (mkAfter).
+    #[track_caller]
+    pub fn after(self) -> Self {
+        Nixpkgs::new().function("mkAfter").call(self)
+    }
+}
 
 /// An explicit dependency on a final merged NixOS option.
 ///
@@ -28,8 +74,8 @@ impl<T> OptionRef<T> {
 
     /// Explicitly cross into the opaque boundary, including collection options.
     /// This does not expose the referenced value to Rust.
-    pub fn into_value(self) -> crate::interop::NixValue {
-        crate::interop::NixValue::from_node(Node {
+    pub fn into_value(self) -> NixValue {
+        NixValue::from_node(Node {
             origin: self.origin,
             kind: ValueKind::OptionReference(self.path),
         })
