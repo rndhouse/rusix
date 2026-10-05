@@ -737,3 +737,145 @@ fn unit_enum_naming_and_provenance_survive_lowering() {
         serde_json::json!({"modes":["server","readOnly","client-only"],"external":["ReadOnly","exact-name"]})
     );
 }
+
+#[test]
+fn derived_records_remain_atomic_when_used_as_opaque_nix_values() {
+    #[derive(IntoRusnixValue)]
+    struct BuilderArguments {
+        endpoint: Endpoint,
+        items: Vec<Endpoint>,
+        package: PackageRef,
+        #[rusnix(rename = "literal.dot")]
+        literal_key: bool,
+    }
+
+    #[derive(IntoConfig)]
+    struct Contribution {
+        payload: NixValue,
+    }
+
+    let arguments = BuilderArguments {
+        endpoint: Endpoint {
+            host: "service.internal".into(),
+            port: Port(443),
+        },
+        items: vec![Endpoint {
+            host: "other.internal".into(),
+            port: Port(80),
+        }],
+        package: Nixpkgs::new().get("hello"),
+        literal_key: true,
+    }
+    .into_value()
+    .into_nix_value()
+    .unwrap();
+    let config = Contribution {
+        payload: arguments.clone(),
+    }
+    .into_config();
+    assert_eq!(config.assignments.len(), 1);
+    assert_eq!(config.assignments[0].path_segments(), &["payload"]);
+    assert!(matches!(
+        config.assignments[0].value.kind,
+        ValueKind::OpaqueRecord(_)
+    ));
+
+    // An ordinary Nix function receives the complete record; package references
+    // remain actual objects, and lists of structural records remain nested values.
+    let received = Nixpkgs::new()
+        .function("id")
+        .call(arguments.clone())
+        .select("package.pname");
+    let value = NixSession::new()
+        .unwrap()
+        .evaluate_interop(&compile(&Config::new().set("result", received)).unwrap())
+        .unwrap()
+        .value;
+    assert_eq!(value["result"], "hello");
+
+    let value = NixSession::new()
+        .unwrap()
+        .evaluate(&compile(&Config::new().set("result", arguments.select("items"))).unwrap())
+        .unwrap()
+        .value;
+    assert_eq!(
+        value["result"],
+        serde_json::json!([{"host": "other.internal", "port": 80}])
+    );
+}
+
+#[test]
+fn structural_to_opaque_conversion_preserves_laziness_and_child_error_origin() {
+    #[derive(IntoRusnixValue)]
+    struct Deferred {
+        good: String,
+        bad: Expr<i64>,
+    }
+
+    let operation_line = line!() + 1;
+    let bad = Expr::int(44).divide(Expr::int(0));
+    let value = Deferred {
+        good: "unused bad field stays lazy".into(),
+        bad,
+    }
+    .into_value()
+    .into_nix_value()
+    .unwrap();
+    let artifact = compile(
+        &Config::new()
+            .set("good", value.clone().select("good"))
+            .set("bad", value.select("bad")),
+    )
+    .unwrap();
+    let session = NixSession::new().unwrap();
+
+    assert_eq!(
+        session.evaluate_attribute(&artifact, "good").unwrap().value,
+        "unused bad field stays lazy"
+    );
+    let diagnostic = session.evaluate_attribute(&artifact, "bad").unwrap_err();
+    assert_eq!(diagnostic.primary.as_ref().unwrap().file, file!());
+    assert_eq!(diagnostic.primary.as_ref().unwrap().line, operation_line);
+    assert_eq!(diagnostic.provenance, Provenance::ErrorContext);
+    assert!(diagnostic.reason.contains("division by zero"));
+}
+
+#[test]
+fn structural_to_opaque_conversion_retains_flatten_validation() {
+    #[derive(IntoRusnixValue)]
+    struct Invalid {
+        #[rusnix(flatten)]
+        not_a_record: bool,
+    }
+
+    let error = Invalid { not_a_record: true }
+        .into_value()
+        .into_nix_value()
+        .unwrap_err();
+    assert_eq!(error.message, "rusnix flatten requires a record value");
+
+    #[derive(IntoRusnixValue)]
+    struct Flattened {
+        #[rusnix(flatten)]
+        endpoint: Endpoint,
+    }
+
+    let value = Flattened {
+        endpoint: Endpoint {
+            host: "flattened.internal".into(),
+            port: Port(5432),
+        },
+    }
+    .into_value()
+    .into_nix_value()
+    .unwrap();
+    let evaluated = NixSession::new()
+        .unwrap()
+        .evaluate(&compile(&Config::new().set("result", value)).unwrap())
+        .unwrap()
+        .value;
+    assert_eq!(
+        evaluated["result"],
+        serde_json::json!({"host": "flattened.internal", "port": 5432})
+    );
+}

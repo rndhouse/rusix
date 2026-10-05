@@ -441,6 +441,14 @@ option references and opaque nixpkgs functions; the complete rewrite stays in
 one file. Generic currying (`.apply`),
 text/record construction (`nix_text!`/`nix_record!`), and NixOS definition helpers
 (`.when`, `.priority`, `.before`/`.after`, `nixos::merge`) come from Rusnix.
+Fixed compatibility schemas (systemd properties, service definitions and Unix
+accounts) use local Rust structs so rustfmt can format their construction.
+`into_value().into_nix_value()` keeps these records atomic when applying NixOS
+wrappers or passing them to Nix functions. Open PostgreSQL settings use
+`NixValue::record` arrays/iterators; `nix_record!` remains for tiny records.
+Systemd's `UMask`, `RemoveIPC` and `RestrictSUIDSGID` need exact renames for
+their unusual capitalization; other property names follow PascalCase.
+
 PostgreSQL formatting, SQL, package policy and nullable-file guards stay local;
 Nix remains authoritative for function schemas, string contexts and merging.
 The adapter's `#[rusnix::options]` module replaces all 18 manual PostgreSQL

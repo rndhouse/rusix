@@ -121,7 +121,7 @@ pub fn model() -> NixosModule {
 mod lowering {
     use super::{Clause, Database, Postgresql, Role, RoleClauses};
     use rusnix_ir::{
-        self as rusnix, Config, Expr, IntoConfig,
+        self as rusnix, Config, Expr, IntoConfig, IntoRusnixValue,
         interop::{NixValue, Nixpkgs},
         nix_record as record, nix_text,
         nixos::{self, DefinitionPriority, NixosModule, OptionRef},
@@ -555,6 +555,180 @@ mod lowering {
         )
     }
 
+    // These finite compatibility records use reusable derives. Unlike configuration
+    // roots, they cross the Nix boundary as atomic values for mkIf, mkMerge and callbacks.
+    #[derive(IntoRusnixValue)]
+    struct Assertion {
+        // Retains an upstream invariant that ordinary Nix contributors can still violate.
+        assertion: NixValue,
+        // Explains the rejected input after symbolic values have been resolved by Nix.
+        message: NixValue,
+    }
+
+    // Maps the service's lifecycle and hardening policy to systemd property names.
+    #[derive(IntoRusnixValue)]
+    #[rusnix(rename_all = "PascalCase")]
+    struct ServiceConfig {
+        // Runs the database process as the dedicated Unix account.
+        user: &'static str,
+        // Shares database files through the dedicated Unix group.
+        group: &'static str,
+
+        // Selects notification support from the final PostgreSQL package version.
+        r#type: NixValue,
+        // Starts the opaque package selected after NixOS merging.
+        exec_start: NixValue,
+        // Signals the running server to reread its configuration.
+        exec_reload: NixValue,
+        // Requests PostgreSQL fast shutdown rather than terminating transactions abruptly.
+        kill_signal: &'static str,
+        // Lets PostgreSQL shut down its children before systemd intervenes.
+        kill_mode: &'static str,
+        // Bounds the time systemd allows for startup and shutdown.
+        timeout_sec: i64,
+
+        // Asks systemd to manage the PostgreSQL directory under /run.
+        runtime_directory: &'static str,
+        // Gives the service its own temporary directories.
+        private_tmp: bool,
+        // Hides users’ home directories from the service.
+        protect_home: bool,
+        // Makes system paths read-only except for explicitly permitted locations.
+        protect_system: &'static str,
+        // Chooses file permissions according to package support for group access.
+        #[rusnix(rename = "UMask")]
+        umask: NixValue,
+
+        // Drops all Linux capabilities; systemd spells the empty set as an empty string.
+        capability_bounding_set: Vec<&'static str>,
+        // Denies access to devices except those allowed by systemd.
+        device_policy: &'static str,
+        // Defaults to rejecting writable executable memory when final settings disable JIT.
+        memory_deny_write_execute: NixValue,
+        // Prevents the service from gaining privileges through exec.
+        no_new_privileges: bool,
+        // Prevents changes to the process execution personality.
+        lock_personality: bool,
+        // Gives the service a restricted private device namespace.
+        private_devices: bool,
+        // Isolates mount changes from the rest of the system.
+        private_mounts: bool,
+        // Limits /proc to process information.
+        proc_subset: &'static str,
+        // Prevents changes to the system clock.
+        protect_clock: bool,
+        // Makes control-group interfaces read-only.
+        protect_control_groups: bool,
+        // Prevents changes to the system hostname.
+        protect_hostname: bool,
+        // Blocks access to kernel logs.
+        protect_kernel_logs: bool,
+        // Prevents loading or unloading kernel modules.
+        protect_kernel_modules: bool,
+        // Makes kernel tuning interfaces read-only.
+        protect_kernel_tunables: bool,
+        // Hides other users’ processes from the service.
+        protect_proc: &'static str,
+        // Removes IPC objects owned by the service account when it stops.
+        #[rusnix(rename = "RemoveIPC")]
+        remove_ipc: bool,
+
+        // Allows only the socket families used by PostgreSQL and service management.
+        restrict_address_families: Vec<&'static str>,
+        // Prevents creating additional namespaces.
+        restrict_namespaces: bool,
+        // Prevents requesting real-time scheduling.
+        restrict_realtime: bool,
+        // Prevents creating files with set-user-ID or set-group-ID bits.
+        #[rusnix(rename = "RestrictSUIDSGID")]
+        restrict_suid_sgid: bool,
+        // Accepts only the host’s native syscall ABI.
+        system_call_architectures: &'static str,
+        // Retains upstream syscall allow/deny groups and their ordering.
+        system_call_filter: Vec<&'static str>,
+    }
+
+    // The NixOS service record contains deferred scripts and merged systemd properties.
+    #[derive(IntoRusnixValue)]
+    struct ServiceDefinition {
+        // Names the service in systemd status output.
+        description: &'static str,
+        // Starts the service with the normal multi-user target.
+        wanted_by: Vec<&'static str>,
+        // Preserves upstream ordering after network setup.
+        after: Vec<&'static str>,
+        // Passes the final data directory as PGDATA without reading it in Rust.
+        environment: NixValue,
+        // Makes the final PostgreSQL package and extensions available to generated scripts.
+        path: Vec<NixValue>,
+        // Initializes the data directory and installs generated configuration links.
+        pre_start: NixValue,
+        // Waits for readiness, then runs initialization and provisioning SQL.
+        post_start: NixValue,
+        // Carries the merged systemd properties, including conditional directory management.
+        service_config: NixValue,
+        // Keeps mount dependencies tied to the final data directory.
+        unit_config: NixValue,
+    }
+
+    // Supplies upstream defaults, while settings themselves remain an open record.
+    #[derive(IntoRusnixValue)]
+    struct PostgresqlDefaults {
+        // Adds generated file locations and defaults to the open PostgreSQL settings map.
+        settings: NixValue,
+        // Supplies the state-version-dependent package at NixOS default priority.
+        package: NixValue,
+        // Defaults the data directory from the final package’s database schema.
+        data_dir: NixValue,
+        // Combines the upstream header and fallback rules using normal NixOS ordering.
+        authentication: NixValue,
+    }
+
+    // The operating-system account is separate from PostgreSQL's database roles.
+    #[derive(IntoRusnixValue)]
+    struct UnixUser {
+        // Declares the operating-system account independently of database roles.
+        name: &'static str,
+        // Refers to the final NixOS allocation for the PostgreSQL Unix user.
+        uid: Expr<i64>,
+        // Places the account in the dedicated PostgreSQL Unix group.
+        group: &'static str,
+        // Labels the account in the generated user database.
+        description: &'static str,
+        // Uses the final data directory, retaining its Nix string dependency context.
+        home: NixValue,
+        // Retains the upstream account’s access to the default login shell.
+        use_default_shell: bool,
+    }
+
+    // Account names remain keys in open maps; the containing NixOS namespaces are fixed.
+    #[derive(IntoRusnixValue)]
+    struct UserDefinitions {
+        // Maps account names to Unix user definitions without closing the NixOS namespace.
+        users: NixValue,
+        // Maps group names to definitions whose IDs are resolved by NixOS.
+        groups: NixValue,
+    }
+
+    // Exposes PostgreSQL's package and shared files through the normal NixOS environment.
+    #[derive(IntoRusnixValue)]
+    struct Environment {
+        // Adds the effective PostgreSQL package, including selected extensions.
+        system_packages: Vec<NixValue>,
+        // Exposes PostgreSQL’s shared files in the system environment.
+        paths_to_link: Vec<&'static str>,
+    }
+
+    // These fixed records have no fallible flattening. Keep them atomic when applying
+    // NixOS wrappers instead of turning their fields into separate option bindings.
+    #[track_caller]
+    fn opaque(value: impl IntoRusnixValue) -> NixValue {
+        value
+            .into_value()
+            .into_nix_value()
+            .expect("fixed compatibility record has no structural flattening errors")
+    }
+
     fn assertions() -> NixValue {
         let pg = options::root().services.postgresql;
 
@@ -564,9 +738,15 @@ mod lowering {
             NixValue::function(|user| {
                 let name = user.clone().select("name");
 
-                record! {
-                    "assertion": NixValue::if_else(user.select("ensureDBOwnership"), Nixpkgs::new().function("elem").apply([name.clone(), pg.ensure_databases()]), true),
-                    "message": nix_text!(
+                opaque(Assertion {
+                    assertion: NixValue::if_else(
+                        user.select("ensureDBOwnership"),
+                        Nixpkgs::new()
+                            .function("elem")
+                            .apply([name.clone(), pg.ensure_databases()]),
+                        true,
+                    ),
+                    message: nix_text!(
                         r#"
                             For each database user defined with `services.postgresql.ensureUsers` and
                             `ensureDBOwnership = true;`, a database with the same name must be defined
@@ -576,7 +756,7 @@ mod lowering {
                         "#,
                         name = name,
                     ),
-                }
+                })
             }),
             pg.ensure_users(),
         ])
@@ -595,64 +775,133 @@ mod lowering {
             schema = pg.package().select("psqlSchema")
         );
 
-        let properties = record! {
-            "ExecReload": nix_text!("{coreutils}/bin/kill -HUP $MAINPID", coreutils = Nixpkgs::from_module().get("coreutils")),
-            "User": "postgres", "Group": "postgres", "RuntimeDirectory": "postgresql",
-            "Type": NixValue::if_else(Nixpkgs::new().function("versionAtLeast").apply([pg.package().select("version"), "9.6".into()]), "notify", "simple"),
-            "KillSignal": "SIGINT", "KillMode": "mixed", "TimeoutSec": 120_i64,
-            "ExecStart": nix_text!("{package}/bin/postgres", package = package),
-            "CapabilityBoundingSet": NixValue::list(["".into()]), "DevicePolicy": "closed",
-            "PrivateTmp": true, "ProtectHome": true, "ProtectSystem": "strict",
-            "MemoryDenyWriteExecute": NixValue::from(pg.settings.jit()).equals("off").priority(DefinitionPriority::Default),
-            "NoNewPrivileges": true, "LockPersonality": true, "PrivateDevices": true, "PrivateMounts": true,
-            "ProcSubset": "pid", "ProtectClock": true, "ProtectControlGroups": true, "ProtectHostname": true,
-            "ProtectKernelLogs": true, "ProtectKernelModules": true, "ProtectKernelTunables": true,
-            "ProtectProc": "invisible", "RemoveIPC": true,
-            "RestrictAddressFamilies": NixValue::list(["AF_INET", "AF_INET6", "AF_NETLINK", "AF_UNIX"].map(NixValue::from)),
-            "RestrictNamespaces": true, "RestrictRealtime": true, "RestrictSUIDSGID": true,
-            "SystemCallArchitectures": "native",
-            "SystemCallFilter": NixValue::list(["@system-service".into(), "~@privileged @resources".into()]),
-            "UMask": NixValue::if_else(group_access.clone(), "0027", "0077"),
-        };
+        let properties = opaque(ServiceConfig {
+            user: "postgres",
+            group: "postgres",
+
+            r#type: NixValue::if_else(
+                Nixpkgs::new()
+                    .function("versionAtLeast")
+                    .apply([pg.package().select("version"), "9.6".into()]),
+                "notify",
+                "simple",
+            ),
+            exec_start: nix_text!("{package}/bin/postgres", package = package),
+            exec_reload: nix_text!(
+                "{coreutils}/bin/kill -HUP $MAINPID",
+                coreutils = Nixpkgs::from_module().get("coreutils"),
+            ),
+            kill_signal: "SIGINT",
+            kill_mode: "mixed",
+            timeout_sec: 120,
+
+            runtime_directory: "postgresql",
+            private_tmp: true,
+            protect_home: true,
+            protect_system: "strict",
+            umask: NixValue::if_else(group_access.clone(), "0027", "0077"),
+
+            capability_bounding_set: vec![""],
+            device_policy: "closed",
+            memory_deny_write_execute: NixValue::from(pg.settings.jit())
+                .equals("off")
+                .priority(DefinitionPriority::Default),
+            no_new_privileges: true,
+            lock_personality: true,
+            private_devices: true,
+            private_mounts: true,
+            proc_subset: "pid",
+            protect_clock: true,
+            protect_control_groups: true,
+            protect_hostname: true,
+            protect_kernel_logs: true,
+            protect_kernel_modules: true,
+            protect_kernel_tunables: true,
+            protect_proc: "invisible",
+            remove_ipc: true,
+
+            restrict_address_families: vec!["AF_INET", "AF_INET6", "AF_NETLINK", "AF_UNIX"],
+            restrict_namespaces: true,
+            restrict_realtime: true,
+            restrict_suid_sgid: true,
+            system_call_architectures: "native",
+            system_call_filter: vec!["@system-service", "~@privileged @resources"],
+        });
 
         // Data paths matching the package-schema default get StateDirectory management. Other
         // directories retain upstream ReadWritePaths behavior and ownership responsibility.
         nixos::merge([
             properties,
-            record! { "ReadWritePaths": NixValue::list([data.clone()]) }
-                .when(NixValue::if_else(data.clone().equals("/var/lib/postgresql"), false, true)),
-            record! {
-                "StateDirectory": nix_text!("postgresql postgresql/{schema}", schema = pg.package().select("psqlSchema")),
-                "StateDirectoryMode": NixValue::if_else(group_access, "0750", "0700"),
-            }.when(data.equals(standard_data)),
+            record! { "ReadWritePaths": NixValue::list([data.clone()]) }.when(NixValue::if_else(
+                data.clone().equals("/var/lib/postgresql"),
+                false,
+                true,
+            )),
+            NixValue::record([
+                (
+                    "StateDirectory",
+                    nix_text!(
+                        "postgresql postgresql/{schema}",
+                        schema = pg.package().select("psqlSchema"),
+                    ),
+                ),
+                (
+                    "StateDirectoryMode",
+                    NixValue::if_else(group_access, "0750", "0700"),
+                ),
+            ])
+            .when(data.equals(standard_data)),
         ])
     }
 
     fn service() -> NixValue {
         let pg = options::root().services.postgresql;
 
-        record! {
-            "description": "PostgreSQL Server",
-            "wantedBy": NixValue::list(["multi-user.target".into()]),
-            "after": NixValue::list(["network.target".into()]),
-            "environment": record! { "PGDATA": pg.data_dir() },
-            "path": NixValue::list([effective_package()]),
-            "preStart": pre_start(), "postStart": post_start(),
-            "serviceConfig": service_config(),
-            "unitConfig": record! { "RequiresMountsFor": path_text(pg.data_dir()) },
-        }
+        opaque(ServiceDefinition {
+            description: "PostgreSQL Server",
+            wanted_by: vec!["multi-user.target"],
+            after: vec!["network.target"],
+
+            environment: record! { "PGDATA": pg.data_dir() },
+            path: vec![effective_package()],
+
+            pre_start: pre_start(),
+            post_start: post_start(),
+            service_config: service_config(),
+            unit_config: record! { "RequiresMountsFor": path_text(pg.data_dir()) },
+        })
     }
 
     fn settings() -> NixValue {
         let pg = options::root().services.postgresql;
 
-        record! {
-            "hba_file": Nixpkgs::from_module().package_function("writeText").apply(["pg_hba.conf".into(), pg.authentication().into()]).to_text(),
-            "ident_file": Nixpkgs::from_module().package_function("writeText").apply(["pg_ident.conf".into(), pg.ident_map().into()]).to_text(),
-            "log_destination": "stderr",
-            "listen_addresses": NixValue::if_else(pg.enable_tcpip(), "*", "localhost"),
-            "jit": NixValue::if_else(pg.enable_jit(), "on", "off").priority(DefinitionPriority::Default),
-        }
+        // PostgreSQL owns this open namespace, including its literal snake_case keys.
+        NixValue::record([
+            (
+                "hba_file",
+                Nixpkgs::from_module()
+                    .package_function("writeText")
+                    .apply(["pg_hba.conf".into(), pg.authentication().into()])
+                    .to_text(),
+            ),
+            (
+                "ident_file",
+                Nixpkgs::from_module()
+                    .package_function("writeText")
+                    .apply(["pg_ident.conf".into(), pg.ident_map().into()])
+                    .to_text(),
+            ),
+            ("log_destination", "stderr".into()),
+            (
+                "listen_addresses",
+                NixValue::if_else(pg.enable_tcpip(), "*", "localhost"),
+            ),
+            (
+                "jit",
+                NixValue::if_else(pg.enable_jit(), "on", "off")
+                    .priority(DefinitionPriority::Default),
+            ),
+        ])
     }
 
     fn checks() -> NixValue {
@@ -725,27 +974,41 @@ mod lowering {
                 NixValue::from("# default value of services.postgresql.authentication\nlocal all all              peer\nhost  all all 127.0.0.1/32 md5\nhost  all all ::1/128      md5\n").after(),
             ]);
 
+            let postgres_user = opaque(UnixUser {
+                name: "postgres",
+                uid: OptionRef::<i64>::new("ids.uids.postgres").into_expr(),
+                group: "postgres",
+                description: "PostgreSQL server user",
+                home: path_text(pg.data_dir()),
+                use_default_shell: true,
+            });
+
             Implementation {
                 assertions: guarded(assertions()),
                 services: Services {
-                    postgresql: guarded(record! {
-                        "settings": settings(),
-                        "package": default_package().priority(DefinitionPriority::Default),
-                        "dataDir": nix_text!("/var/lib/postgresql/{schema}", schema = pg.package().select("psqlSchema")).priority(DefinitionPriority::Default),
-                        "authentication": authentication,
-                    }),
+                    postgresql: guarded(opaque(PostgresqlDefaults {
+                        settings: settings(),
+                        package: default_package().priority(DefinitionPriority::Default),
+                        data_dir: nix_text!(
+                            "/var/lib/postgresql/{schema}",
+                            schema = pg.package().select("psqlSchema"),
+                        )
+                        .priority(DefinitionPriority::Default),
+                        authentication,
+                    })),
                 },
-                users: guarded(record! {
-                    "users": record! { "postgres": record! {
-                        "name": "postgres", "uid": OptionRef::<i64>::new("ids.uids.postgres").into_expr(), "group": "postgres",
-                        "description": "PostgreSQL server user", "home": path_text(pg.data_dir()), "useDefaultShell": true,
-                    } },
-                    "groups": record! { "postgres": record! { "gid": OptionRef::<i64>::new("ids.gids.postgres").into_expr() } },
-                }),
-                environment: guarded(record! {
-                    "systemPackages": NixValue::list([effective_package()]),
-                    "pathsToLink": NixValue::list(["/share/postgresql".into()]),
-                }),
+                users: guarded(opaque(UserDefinitions {
+                    users: record! { "postgres": postgres_user },
+                    groups: record! {
+                        "postgres": record! {
+                            "gid": OptionRef::<i64>::new("ids.gids.postgres").into_expr(),
+                        },
+                    },
+                })),
+                environment: guarded(opaque(Environment {
+                    system_packages: vec![effective_package()],
+                    paths_to_link: vec!["/share/postgresql"],
+                })),
                 system: guarded(record! { "checks": checks() }),
                 systemd: guarded(record! { "services": record! { "postgresql": service() } }),
             }

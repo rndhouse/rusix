@@ -71,6 +71,17 @@ impl RusnixValue {
         }
     }
 
+    /// Keep this structural value atomic at the opaque Nix boundary instead of
+    /// flattening it into configuration bindings. Useful for derived structs
+    /// passed to Nix functions or wrapped in NixOS conditions and priorities.
+    /// Child expressions retain their provenance and stay deferred; invalid
+    /// structural flattening returns an error. Other IR checks run at compilation.
+    pub fn into_nix_value(self) -> Result<crate::interop::NixValue, ValidationError> {
+        self.resolve(&[])
+            .map(opaque_record_nodes)
+            .map(crate::interop::NixValue::from_node)
+    }
+
     fn resolve(self, path: &[String]) -> Result<Node, ValidationError> {
         let placed = |purpose: &str| {
             Origin::new(
@@ -126,6 +137,24 @@ impl RusnixValue {
 
         Ok(Node { origin, kind })
     }
+}
+
+// Convert only structural containers; native deferred nodes stay untouched.
+fn opaque_record_nodes(mut node: Node) -> Node {
+    node.kind = match node.kind {
+        ValueKind::AttrSet(fields) => ValueKind::OpaqueRecord(
+            fields
+                .into_iter()
+                .map(|(name, value)| (name, opaque_record_nodes(value)))
+                .collect(),
+        ),
+        ValueKind::List(items) => {
+            ValueKind::List(items.into_iter().map(opaque_record_nodes).collect())
+        }
+        kind => kind,
+    };
+
+    node
 }
 
 fn display_path(path: &[String]) -> String {

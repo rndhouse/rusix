@@ -109,13 +109,19 @@ fn nested_paths_are_bound_to_placement_without_capturing_navigation_origins() {
 #[test]
 fn scalar_collection_and_nullable_values_evaluate_in_nixos() {
     let pg = options::root().services.example;
-    let value = rusnix_ir::nix_record! {
-        "enable": pg.enable(), "directory": pg.data_dir(), "port": pg.port(),
-        "payload": pg.payload(), "names": pg.names(), "optional": pg.optional(),
-        "values": pg.values(), "hashValues": pg.hash_values(),
-        "settings": pg.settings.as_value(), "jit": pg.settings.jit(),
-        "nestedPort": pg.settings.port(),
-    };
+    let value = NixValue::record([
+        ("enable", pg.enable().into()),
+        ("directory", pg.data_dir().into()),
+        ("port", pg.port().into()),
+        ("payload", pg.payload()),
+        ("names", pg.names()),
+        ("optional", pg.optional()),
+        ("values", pg.values()),
+        ("hashValues", pg.hash_values()),
+        ("settings", pg.settings.as_value()),
+        ("jit", pg.settings.jit().into()),
+        ("nestedPort", pg.settings.port().into()),
+    ]);
 
     let evaluated = NixSession::new()
         .unwrap()

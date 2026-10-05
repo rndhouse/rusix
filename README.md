@@ -762,15 +762,15 @@ boundary conversion, not a general serialization framework or Option derive.
 
 ```rust
 let pkgs = Nixpkgs::new();
-let args = rusnix_ir::nix_record! {
-    "name": "example.conf",
-    "text": rusnix_ir::nix_text!("workers = {workers}\n", workers = 4),
-    "executable": false,
-    "passthru": rusnix_ir::nix_record! {
+let args = NixValue::record([
+    ("name", "example.conf".into()),
+    ("text", rusnix_ir::nix_text!("workers = {workers}\n", workers = 4)),
+    ("executable", false.into()),
+    ("passthru", rusnix_ir::nix_record! {
         "package": pkgs.get("hello"),
         "labels": NixValue::list(["a".into(), "b".into()]),
-    },
-};
+    }),
+]);
 let file = pkgs.package_function("writeTextFile").call(args);
 let curried = pkgs.package_function("writeText")
     .apply(["postgresql.conf".into(), "workers = 4\n".into()]);
@@ -784,8 +784,11 @@ without automatic PackageRef inference. Existing package functions/overrides can
 selected through `as_value().select(...)` and called. Function schemas and errors
 belong to Nix. No builder or package-specific Rust code is involved.
 
-`nix_record!` accepts literal keys, key variables or parenthesized dynamic key
-expressions; these are escaped attribute names, never Nix source.
+Use derived Rust structs for meaningful fixed schemas and `NixValue::record`
+arrays/iterators for open records. `into_value().into_nix_value()` converts a
+structural value to an atomic opaque value without flattening it into bindings.
+`nix_record!` stays useful for tiny records; it accepts literal keys, key variables
+or parenthesized dynamic key expressions, never raw Nix source.
 
 `nix_text!("postgres --port={port}", port = port)` interpolates named values into
 a deferred Nix string. Arguments may be Rust literals, Expr/OptionRef expressions,
