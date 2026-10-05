@@ -184,6 +184,7 @@ leaf!(
     i32,
     i64,
     u16,
+    f64,
     String,
     &str,
     crate::Expr<i64>,

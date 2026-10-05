@@ -13,6 +13,8 @@ pub struct NixExpr {
 pub enum NixKind {
     Bool(bool),
     Int(i64),
+    Float(f64),
+    Null,
     String(String),
     /// Compiler-owned relative paths; never supplied by the frontend as syntax.
     Path(String),

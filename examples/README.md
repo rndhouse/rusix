@@ -332,6 +332,16 @@ Tests use offline pinned nixpkgs in the isolated store, evaluate package metadat
 without building, and retain the current fixed x86_64-linux root, handle-scoped
 overlays and partial NixOS harness. InputRef is not a general flake resolver.
 
+The example also calls `pkgs.package_function("writeTextFile")` with a structured
+`NixValue::record`: literals and a real package handle share one opaque argument.
+`function("toUpper")` refers to lib; `package_function` refers to the package set.
+Chained `.call` operations support curried functions such as writeText.
+[structured_interop.rs](../crates/rusnix-nix/tests/structured_interop.rs) verifies
+writeText/writeTextFile/runCommand without building, nested lists/maps and native
+references, and symbolic text following an ordinary Nix override on the same
+artifact. It also checks call/operation provenance and unforced sibling values.
+Function results remain NixValue; Rusnix does not infer their package category.
+
 ## Symbolic option
 
 Concrete Rust values are computed before lowering. `OptionRef<T>` instead declares
@@ -451,7 +461,8 @@ sum type, model-evolution matches, and their coexistence with opaque Nix objects
 
 The derive deliberately supports named structs and single-field value newtypes,
 not arbitrary Serde features. Flattening a non-record is an IR validation error.
-There is no Option/null representation or general map conversion yet; none was
-needed by the existing models. Foreign Nix may still force scalar heads while
-processing freeform option namespaces; list elements remain deferred. Derive
+Option/null and dynamic maps are supported explicitly at the NixValue boundary;
+this does not add general Option/map derive semantics. Foreign Nix may still
+force scalar heads while processing freeform option namespaces; list elements
+remain deferred. Derive
 adds no Nix forcing, and the existing selective-evaluation tests remain intact.

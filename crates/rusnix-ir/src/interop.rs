@@ -130,6 +130,8 @@ impl ConfigValue for PackageRef {
     }
 }
 
+/// Structured, opaque boundary data. References and symbolic expressions retain
+/// their native IR meaning; Nix remains authoritative for function schemas.
 #[derive(Clone, Debug)]
 pub struct NixValue(Node);
 
@@ -142,11 +144,46 @@ impl ConfigValue for NixValue {
 }
 
 impl NixValue {
+    /// Native leaves, preserving captured expression/reference origins. Float
+    /// literals support finite normal f64 values and zero; validation rejects
+    /// NaN, infinities and subnormals, which Nix cannot parse as literals.
     #[track_caller]
     pub fn literal(value: impl ConfigValue) -> Self {
         Self(value.into_node(Origin::caller("opaque call argument")))
     }
 
+    #[track_caller]
+    pub fn null() -> Self {
+        Self(Node {
+            origin: Origin::caller("opaque Nix null"),
+            kind: ValueKind::Null,
+        })
+    }
+
+    /// Keys are literal attribute names, not dotted paths. Accepts BTreeMap
+    /// directly; iterator order determines the deterministic generated order.
+    #[track_caller]
+    pub fn record(fields: impl IntoIterator<Item = (impl Into<String>, Self)>) -> Self {
+        Self(Node {
+            origin: Origin::caller("opaque Nix record"),
+            kind: ValueKind::OpaqueRecord(
+                fields
+                    .into_iter()
+                    .map(|(key, value)| (key.into(), value.0))
+                    .collect(),
+            ),
+        })
+    }
+
+    #[track_caller]
+    pub fn list(items: impl IntoIterator<Item = Self>) -> Self {
+        Self(Node {
+            origin: Origin::caller("opaque Nix list"),
+            kind: ValueKind::List(items.into_iter().map(|value| value.0).collect()),
+        })
+    }
+
+    /// One ordinary Nix application. Chain calls for curried functions.
     #[track_caller]
     pub fn call(self, argument: impl ConfigValue) -> Self {
         let origin = Origin::caller("opaque Nix function call");
@@ -162,6 +199,55 @@ impl NixValue {
             origin: Origin::caller(format!("opaque Nix selection {path}")),
             kind: ValueKind::Select(Box::new(self.0), AttrPath::dotted(path)),
         })
+    }
+}
+
+macro_rules! literal_conversion {
+    ($($ty:ty),* $(,)?) => { $(
+        impl From<$ty> for NixValue {
+            #[track_caller]
+            fn from(value: $ty) -> Self { Self::literal(value) }
+        }
+    )* };
+}
+
+literal_conversion!(
+    bool,
+    i32,
+    i64,
+    u16,
+    f64,
+    String,
+    &str,
+    crate::Expr<bool>,
+    crate::Expr<i64>,
+    crate::Expr<String>
+);
+
+macro_rules! reference_conversion {
+    ($($ty:ty),* $(,)?) => { $(
+        impl From<$ty> for NixValue {
+            fn from(value: $ty) -> Self { value.as_value() }
+        }
+    )* };
+}
+
+reference_conversion!(PackageRef, ModuleRef, NixFunction, OverlayRef);
+
+impl<T: Into<NixValue>> From<Option<T>> for NixValue {
+    #[track_caller]
+    fn from(value: Option<T>) -> Self {
+        match value {
+            Some(value) => value.into(),
+            None => Self::null(),
+        }
+    }
+}
+
+impl From<std::collections::BTreeMap<String, NixValue>> for NixValue {
+    #[track_caller]
+    fn from(value: std::collections::BTreeMap<String, NixValue>) -> Self {
+        Self::record(value)
     }
 }
 
@@ -220,6 +306,19 @@ impl Nixpkgs {
             source: Source::Library,
             path: Some(AttrPath::dotted(path)),
             origin: Origin::caller(format!("nixpkgs lib function lookup {path}")),
+        })
+    }
+
+    /// A function in the package set (e.g. writeText), including its overlays.
+    /// `function` separately addresses nixpkgs/lib. No schemas are inferred.
+    #[track_caller]
+    pub fn package_function(&self, path: &str) -> NixFunction {
+        NixFunction(Reference {
+            source: Source::Packages {
+                overlays: self.overlays.clone(),
+            },
+            path: Some(AttrPath::dotted(path)),
+            origin: Origin::caller(format!("nixpkgs function lookup {path}")),
         })
     }
 }

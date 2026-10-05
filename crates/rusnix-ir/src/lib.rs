@@ -95,9 +95,14 @@ pub struct Node {
 pub enum ValueKind {
     Bool(bool),
     Int(i64),
+    Float(f64),
+    Null,
     String(String),
     List(Vec<Node>),
     AttrSet(Vec<(String, Node)>),
+    /// An interop record stays one value; structural authoring must not flatten
+    /// its literal keys into NixOS option paths.
+    OpaqueRecord(Vec<(String, Node)>),
     Reference(interop::Reference),
     Apply(Box<Node>, Box<Node>),
     Select(Box<Node>, interop::AttrPath),
@@ -226,6 +231,8 @@ primitive!(i32, Int);
 primitive!(i64, Int);
 
 primitive!(u16, Int);
+
+primitive!(f64, Float);
 
 primitive!(String, String);
 
@@ -394,13 +401,15 @@ fn validate_value(node: &Node) -> Result<(), ValidationError> {
                 validate_value(item)?;
             }
         }
-        ValueKind::AttrSet(fields) => {
+        ValueKind::AttrSet(fields) | ValueKind::OpaqueRecord(fields) => {
             let mut seen = std::collections::BTreeSet::new();
             for (name, value) in fields {
-                reject_nul(name, &value.origin)?;
-                if name.is_empty() || !seen.insert(name) {
+                let opaque = matches!(node.kind, ValueKind::OpaqueRecord(_));
+                let origin = if opaque { &node.origin } else { &value.origin };
+                reject_nul(name, origin)?;
+                if (!opaque && name.is_empty()) || !seen.insert(name) {
                     return Err(ValidationError {
-                        origin: value.origin.clone(),
+                        origin: origin.clone(),
                         message: format!("invalid or duplicate record field: {name}"),
                     });
                 }
@@ -415,7 +424,13 @@ fn validate_value(node: &Node) -> Result<(), ValidationError> {
             reject_nul(message, &node.origin)?;
             validate_value(value)?;
         }
-        ValueKind::Bool(_) | ValueKind::Int(_) => {}
+        ValueKind::Float(value) if !value.is_finite() || value.is_subnormal() => {
+            return Err(ValidationError {
+                origin: node.origin.clone(),
+                message: "Nix float literals require finite normal values or zero (no NaN, infinity, or subnormals)".into(),
+            });
+        }
+        ValueKind::Bool(_) | ValueKind::Int(_) | ValueKind::Float(_) | ValueKind::Null => {}
         ValueKind::Reference(reference) => reference.validate()?,
         ValueKind::Select(value, path) => {
             validate_value(value)?;

@@ -112,4 +112,19 @@ fn main() {
     let value: NixValue = uppercase.call("rusnix");
     let generated = rusnix_nix::compile(&FunctionResult { result: value }.into_config()).unwrap();
     println!("{}", generated.source);
+
+    // Mixed records cross the same opaque boundary; Nix owns the builder's schema.
+    let pkgs = Nixpkgs::new();
+    let args = NixValue::record([
+        ("name", "example.conf".into()),
+        ("text", "workers = 4\n".into()),
+        ("executable", false.into()),
+        (
+            "passthru",
+            NixValue::record([("package", pkgs.get("hello").into())]),
+        ),
+    ]);
+    let file = pkgs.package_function("writeTextFile").call(args);
+    let generated = rusnix_nix::compile(&FunctionResult { result: file }.into_config()).unwrap();
+    println!("{}", generated.source);
 }

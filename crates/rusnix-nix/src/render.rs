@@ -104,6 +104,18 @@ fn emit_kind(kind: &NixKind, out: &mut Generated, depth: usize, enclosing: &[Ori
         NixKind::Int(i64::MIN) => out.source.push_str("(-9223372036854775807 - 1)"),
         NixKind::Int(v) if *v < 0 => out.source.push_str(&format!("({v})")),
         NixKind::Int(v) => out.source.push_str(&v.to_string()),
+        NixKind::Float(v) => {
+            // Keep a decimal point so integral floats remain floats in Nix.
+            // Rust's shortest round-trip representation avoids decimal rounding.
+            let mut literal = format!("{v:?}");
+            if let Some(exponent) = literal.find('e')
+                && !literal[..exponent].contains('.')
+            {
+                literal.insert_str(exponent, ".0");
+            }
+            out.source.push_str(&format!("({literal})"));
+        }
+        NixKind::Null => out.source.push_str("null"),
         NixKind::String(v) => out.source.push_str(&quote(v)),
         NixKind::Path(v) => out.source.push_str(v),
         NixKind::Variable(v) => out.source.push_str(v),

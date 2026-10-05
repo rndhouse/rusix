@@ -181,9 +181,10 @@ The [nine examples](examples/README.md) contain no handwritten IntoConfig impls;
 only nix-interop deliberately calls Config::set; layered-validation failure assemblies live in tests.
 
 `Expr<i64>` and `Expr<bool>` are distinct Rust types. Passing a boolean
-expression to integer division fails Rust type checking. Lists are homogeneous
-at the Rust API boundary. Plain bools, strings,
-and signed integers are supported, along with `u16` and nested Rust vectors.
+expression to integer division fails Rust type checking. Ordinary Rust vectors
+remain homogeneous; `NixValue::list` explicitly permits mixed boundary values.
+Plain bools, strings, signed integers, `u16`, f64 and nested Rust vectors are
+supported. NixValue adds nulls, maps, and structured opaque arguments.
 The sealed value conversion trait deliberately keeps the API small.
 
 | Component | Responsibility |
@@ -737,6 +738,66 @@ reports the selection origin, not the original call. Deep failures without a
 matching directly imported file or consuming generated span can remain unmapped.
 There is no new diagnostic parser or broad forcing. Full raw traces remain saved.
 
+### Structured opaque calls
+
+`NixValue::literal`, `null`, `list`, and `record` construct structured semantic
+IR. Records accept an iterator of literal keys and values, including a
+`BTreeMap<String, NixValue>`; keys are escaped names, never dotted option paths.
+An opaque record in a derived contribution remains one value instead of being
+flattened into option definitions. Duplicate keys and NULs are IR errors.
+Primitive values, Expr leaves and opaque handles support explicit `.into()`;
+`Option<T>` converts Some through the same boundary and None to null. This is
+boundary conversion, not a general serialization framework or Option derive.
+
+```rust
+let pkgs = Nixpkgs::new();
+let args = NixValue::record([
+    ("name", "example.conf".into()),
+    ("text", "workers = 4\n".into()),
+    ("executable", false.into()),
+    ("passthru", NixValue::record([
+        ("package", pkgs.get("hello").into()),
+        ("labels", NixValue::list(["a".into(), "b".into()])),
+    ])),
+]);
+let file = pkgs.package_function("writeTextFile").call(args);
+let curried = pkgs.package_function("writeText")
+    .call("postgresql.conf")
+    .call("workers = 4\n");
+```
+
+`package_function` looks up functions in the real package set, retaining its
+overlays; the existing `function` looks in nixpkgs/lib. Each `.call` is ordinary
+Nix application; chained calls handle currying. Results stay `NixValue`, without
+automatic PackageRef inference. Existing package functions/overrides can also be
+selected through `as_value().select(...)` and called. Function schemas and errors
+belong to Nix. No builder or package-specific Rust code is involved.
+
+References embedded in structures remain Nix lookups. Expr/OptionRef leaves
+retain their nodes, contexts and origins: a structured `text` argument can
+contain `config.services.postgresql.dataDir`. The generated-file smoke test
+evaluates one artifact with `/var/lib/postgresql`, then changes only an ordinary
+Nix module to force `/srv/postgresql`; both the final text and derivation path
+follow the override. Its tiny option schema is test data, not a PostgreSQL rewrite.
+Unused calls and nested fallible values remain lazy. Immediate call failures
+identify the Rust call; nested expression failures retain their operation origin.
+
+[structured_interop.rs](crates/rusnix-nix/tests/structured_interop.rs) exercises
+writeText, writeTextFile, runCommand, lib.recursiveUpdate and lib.isFloat with
+mixed values, arbitrary escaped keys, scopes, laziness and failure provenance.
+It evaluates derivation attributes/paths in disposable stores and verifies that
+outputs remain absent. It never builds or reads generated-file contents: the
+tested `text` is the derivation's evaluated input. Reviewable artifacts live in
+`target/structured-interop/`. Nix JSON coerces values with `outPath` to strings;
+metadata projections deliberately use `output` as their own key.
+
+Integers retain Nix's signed 64-bit semantics. Float leaves are Rust f64 values,
+rendered with a decimal point even when integral. NaN, infinities and subnormal
+f64 literals are rejected before code generation: the tested Nix parser rejects
+subnormals (for example `5.0e-324`). Finite normal values and signed zero are
+supported, including the tested minimum normal and maximum f64. Nix numeric/JSON
+semantics remain authoritative; this is not a decimal or arbitrary-precision API.
+
 This proves a small interoperability surface, not universal compatibility with
 all packages/modules/flake schemas. InputRef imports a local Nix value; it is not
 a flake evaluator. Handle categories are caller declarations, checked against
@@ -748,10 +809,11 @@ filesystem-relative compiler artifacts, local input paths, and one fixed pinned
 package root. Rust-origin IDs and multi-origin diagnostics remain unchanged.
 
 
-Current verification: `cargo test --workspace --locked` passes **128 tests**
-(124 ordinary tests and 4 doctests, including 3 compile-fail cases; zero
-failed/ignored). The interop integration target has 24 tests. Formatting and all-target Clippy with warnings
-denied pass. The fixture script passes 109 integration checks, nine runnable
+Current verification: `cargo test --workspace --locked` passes **151 tests**
+(147 ordinary tests and 4 doctests, including 3 compile-fail cases; zero
+failed/ignored). The interop target has 24 tests; structured_interop adds 14.
+Formatting and all-target Clippy with warnings denied pass.
+The fixture script passes 123 integration checks, nine runnable
 showcase examples plus the legacy generic SSH compiler example, and 20 original
 CLI fixture invocations. All 14 diagnostic snapshots remain passing.
 Examples print generated source without Nix evaluation, fixture construction or

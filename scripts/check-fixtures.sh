@@ -12,6 +12,7 @@ cargo test --locked -p rusnix-nix --test authoring
 cargo test --locked -p rusnix-nix --test symbolic_options
 cargo test --locked -p rusnix-nix --test derive
 cargo test --locked -p rusnix-nix --test config_module
+cargo test --locked -p rusnix-nix --test structured_interop
 cargo test --locked -p rusnix-nix --test typed_examples --test ui --test interop
 
 for example in enum-option typed-submodule invalid-states function-contracts exhaustive-match typed-values layered-validation nix-interop symbolic-option; do

@@ -38,7 +38,9 @@ fn option_reference(node: &Node) -> Option<&Node> {
     match &node.kind {
         ValueKind::OptionReference(_) => Some(node),
         ValueKind::List(items) => items.iter().find_map(option_reference),
-        ValueKind::AttrSet(fields) => fields.iter().find_map(|(_, node)| option_reference(node)),
+        ValueKind::AttrSet(fields) | ValueKind::OpaqueRecord(fields) => {
+            fields.iter().find_map(|(_, node)| option_reference(node))
+        }
         ValueKind::Apply(left, right) | ValueKind::Divide(left, right) => {
             option_reference(left).or_else(|| option_reference(right))
         }
@@ -46,9 +48,12 @@ fn option_reference(node: &Node) -> Option<&Node> {
         | ValueKind::ToText(value)
         | ValueKind::StringPrefix { value, .. }
         | ValueKind::InRange { value, .. } => option_reference(value),
-        ValueKind::Bool(_) | ValueKind::Int(_) | ValueKind::String(_) | ValueKind::Reference(_) => {
-            None
-        }
+        ValueKind::Bool(_)
+        | ValueKind::Int(_)
+        | ValueKind::Float(_)
+        | ValueKind::Null
+        | ValueKind::String(_)
+        | ValueKind::Reference(_) => None,
     }
 }
 
@@ -83,9 +88,11 @@ fn lower_value(node: &Node) -> NixExpr {
     let kind = match &node.kind {
         ValueKind::Bool(v) => NixKind::Bool(*v),
         ValueKind::Int(v) => NixKind::Int(*v),
+        ValueKind::Float(v) => NixKind::Float(*v),
+        ValueKind::Null => NixKind::Null,
         ValueKind::String(v) => NixKind::String(v.clone()),
         ValueKind::List(items) => NixKind::List(items.iter().map(lower_value).collect()),
-        ValueKind::AttrSet(fields) => NixKind::AttrSet(
+        ValueKind::AttrSet(fields) | ValueKind::OpaqueRecord(fields) => NixKind::AttrSet(
             fields
                 .iter()
                 .map(|(name, node)| (vec![name.clone()], lower_value(node)))
