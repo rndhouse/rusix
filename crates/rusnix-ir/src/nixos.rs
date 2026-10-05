@@ -65,9 +65,16 @@ pub struct OptionRef<T> {
 impl<T> OptionRef<T> {
     #[track_caller]
     pub fn new(path: &str) -> Self {
+        Self::from_segments(path.split('.'))
+    }
+
+    /// Literal attribute segments; dots and special characters stay within a key.
+    #[track_caller]
+    pub fn from_segments(parts: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        let path = AttrPath::segments(parts);
         Self {
-            path: AttrPath::dotted(path),
-            origin: Origin::caller(format!("NixOS option reference {path}")),
+            origin: Origin::caller(format!("NixOS option reference {}", path.parts().join("."))),
+            path,
             ty: PhantomData,
         }
     }

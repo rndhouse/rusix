@@ -5,6 +5,8 @@ use syn::{Data, DeriveInput, Fields, LitStr, parse_macro_input, parse_quote, spa
 
 mod config;
 
+mod options;
+
 /// Automatically lower local structs and unit enums in an inline config module.
 #[proc_macro_attribute]
 pub fn config(args: TokenStream, input: TokenStream) -> TokenStream {
@@ -17,6 +19,22 @@ pub fn config(args: TokenStream, input: TokenStream) -> TokenStream {
         .into();
     }
     config::expand(parse_macro_input!(input as syn::ItemMod))
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
+/// Declare a finite view of symbolic final NixOS option dependencies.
+#[proc_macro_attribute]
+pub fn options(args: TokenStream, input: TokenStream) -> TokenStream {
+    if !args.is_empty() {
+        return syn::Error::new_spanned(
+            proc_macro2::TokenStream::from(args),
+            "options takes no arguments; mark one root with #[rusnix(root)]",
+        )
+        .into_compile_error()
+        .into();
+    }
+    options::expand(parse_macro_input!(input as syn::ItemMod))
         .unwrap_or_else(syn::Error::into_compile_error)
         .into()
 }
@@ -43,6 +61,29 @@ enum Naming {
 }
 
 impl Naming {
+    fn parse(name: &LitStr) -> syn::Result<Self> {
+        match name.value().as_str() {
+            "lowerCamelCase" => Ok(Self::LowerCamel),
+            "PascalCase" => Ok(Self::Pascal),
+            _ => Err(syn::Error::new_spanned(
+                name,
+                "rename_all must be \"lowerCamelCase\" or \"PascalCase\"",
+            )),
+        }
+    }
+
+    fn mapped_field(self, field: &syn::Ident, rename: Option<LitStr>) -> syn::Result<LitStr> {
+        let name =
+            rename.unwrap_or_else(|| LitStr::new(&self.field(&field.to_string()), field.span()));
+        if name.value().is_empty() || name.value().contains('\0') {
+            return Err(syn::Error::new_spanned(
+                name,
+                "attribute name must be nonempty and NUL-free",
+            ));
+        }
+        Ok(name)
+    }
+
     fn variant(self, name: &str) -> String {
         let name = name.strip_prefix("r#").unwrap_or(name);
         let chars: Vec<_> = name.chars().collect();
@@ -94,16 +135,7 @@ fn expand(input: DeriveInput, rooted: bool) -> syn::Result<proc_macro2::TokenStr
                     return Err(meta.error("duplicate rename_all"));
                 }
                 let name: LitStr = meta.value()?.parse()?;
-                let convention = match name.value().as_str() {
-                    "lowerCamelCase" => Naming::LowerCamel,
-                    "PascalCase" => Naming::Pascal,
-                    _ => {
-                        return Err(syn::Error::new_spanned(
-                            name,
-                            "rename_all must be \"lowerCamelCase\" or \"PascalCase\"",
-                        ));
-                    }
-                };
+                let convention = Naming::parse(&name)?;
                 rename_all = Some((convention, name));
                 Ok(())
             })?;
@@ -193,19 +225,7 @@ fn expand(input: DeriveInput, rooted: bool) -> syn::Result<proc_macro2::TokenStr
                 let key = if flatten {
                     quote!(None)
                 } else {
-                    let logical = match rename {
-                        Some(name) => name,
-                        None => {
-                            let text = naming.field(&name.to_string());
-                            if text.is_empty() {
-                                return Err(syn::Error::new_spanned(
-                                    name,
-                                    "field name maps to an empty attribute; use an explicit rename",
-                                ));
-                            }
-                            LitStr::new(&text, name.span())
-                        }
-                    };
+                    let logical = naming.mapped_field(name, rename)?;
                     quote!(Some(#logical))
                 };
                 values.push(quote_spanned!(field.span()=>

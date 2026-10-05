@@ -67,6 +67,13 @@ Use `#[rusnix::config]` for local configuration trees. Use fine-grained derives
 for reusable or external types. Use explicit conversion implementations when the
 mapping itself carries domain meaning.
 
+`#[rusnix::config]` declares what a module defines. `#[rusnix::options]` declares
+finite symbolic dependencies on final NixOS options, as shown in PostgreSQL's
+private adapter. Nested fields navigate known paths; scalar methods return Expr
+and collection/opaque methods return NixValue. `#[rusnix(value)]` explicitly
+permits whole-subtree access. It does not create schemas, global bindings or
+read final values into Rust.
+
 For local configuration, one inline module boundary supplies structural lowering:
 
 ```rust
@@ -435,6 +442,13 @@ text/record construction (`nix_text!`/`nix_record!`), and NixOS definition helpe
 (`.when`, `.priority`, `.before`/`.after`, `nixos::merge`) come from Rusnix.
 PostgreSQL formatting, SQL, package policy and nullable-file guards stay local;
 Nix remains authoritative for function schemas, string contexts and merging.
+The adapter's `#[rusnix::options]` module replaces all 18 manual PostgreSQL
+accessors. For example, `pg.settings.port()` is typed and
+`pg.settings.as_value()` refers to the complete open settings attrset. Accessor
+calls retain their Rust origin; ordinary Nix overrides still affect the same
+artifact. The three one-off references to state version and Unix IDs remain
+explicit OptionRef calls.
+
 
 `Postgresql` supplies ordinary Rust inputs. `Database::Owned { name, clauses }`
 creates the matching database and role, so their names cannot disagree.

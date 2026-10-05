@@ -285,5 +285,85 @@
       "RoleClauses",
       "nonexistent_privilege"
     ]
+  },
+  {
+    "file": "options-unsupported.rs",
+    "code": null,
+    "count": 1,
+    "source": "u16",
+    "reason_tokens": [
+      "unsupported option-view type",
+      "i64"
+    ]
+  },
+  {
+    "file": "options-recursive.rs",
+    "code": null,
+    "count": 1,
+    "source": "Nested",
+    "reason_tokens": [
+      "recursive option views",
+      "finite"
+    ]
+  },
+  {
+    "file": "options-ambiguous.rs",
+    "code": null,
+    "count": 1,
+    "source": "duplicate",
+    "reason_tokens": [
+      "ambiguous option path",
+      "same attribute"
+    ]
+  },
+  {
+    "file": "options-root-value.rs",
+    "code": null,
+    "count": 1,
+    "source": "Root",
+    "reason_tokens": [
+      "whole-root access",
+      "specific subtree"
+    ]
+  },
+  {
+    "file": "options-whole-root.rs",
+    "code": "E0599",
+    "count": 1,
+    "source": "as_value",
+    "reason_tokens": [
+      "as_value",
+      "Root"
+    ]
+  },
+  {
+    "file": "options-external-alias.rs",
+    "code": null,
+    "count": 1,
+    "source": "External",
+    "reason_tokens": [
+      "unsupported option-view type",
+      "explicit OptionRef"
+    ]
+  },
+  {
+    "file": "options-multiple-roots.rs",
+    "code": null,
+    "count": 1,
+    "source": "options",
+    "reason_tokens": [
+      "exactly one",
+      "root"
+    ]
+  },
+  {
+    "file": "options-wrong-scalar.rs",
+    "code": "E0308",
+    "count": 1,
+    "source": "options::root().port()",
+    "reason_tokens": [
+      "Expr<bool>",
+      "Expr<i64>"
+    ]
   }
 ]

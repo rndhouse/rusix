@@ -49,6 +49,31 @@ mod value;
 /// ```
 pub use rusnix_derive::config;
 
+/// Finite final-option dependencies. Navigation builds paths; tracked leaf calls
+/// create OptionRef expressions. NixOS still owns existence and actual types.
+/// Only a subtree marked `#[rusnix(value)]` exposes `as_value`; roots never do.
+///
+/// ```
+/// use rusnix_ir::{self as rusnix, Expr};
+///
+/// #[rusnix::options]
+/// mod options {
+///     #[rusnix(root)]
+///     struct Root { services: Services }
+///
+///     struct Services { example: Example }
+///
+///     struct Example { enable: bool, settings: Settings }
+///
+///     #[rusnix(value)]
+///     struct Settings { port: i64 }
+/// }
+/// let service = options::root().services.example;
+/// let port: Expr<i64> = service.settings.port();
+/// let all_settings = service.settings.as_value();
+/// ```
+pub use rusnix_derive::options;
+
 pub use rusnix_derive::{IntoConfig, IntoRusnixValue};
 pub use value::{IntoRusnixValue, RusnixValue};
 

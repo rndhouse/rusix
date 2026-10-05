@@ -832,12 +832,12 @@ filesystem-relative compiler artifacts, local input paths, and one fixed pinned
 package root. Rust-origin IDs and multi-origin diagnostics remain unchanged.
 
 
-Current verification: `cargo test --workspace --locked` passes **223 tests**
-(219 ordinary tests and 4 doctests, including 3 compile-fail cases; zero
+Current verification: `cargo test --workspace --locked` passes **238 tests**
+(233 ordinary tests and 5 doctests, including 3 compile-fail cases; zero
 failed/ignored). The interop target has 24 tests; structured_interop has 23
 and PostgreSQL has 56.
 Formatting and all-target Clippy with warnings denied pass.
-The fixture script passes 194 integration checks, ten runnable
+The fixture script passes 203 integration checks, ten runnable
 showcase examples plus the legacy generic SSH compiler example, and 20 original
 CLI fixture invocations. All 14 diagnostic snapshots remain passing.
 Examples print generated source without Nix evaluation, fixture construction or
@@ -912,6 +912,58 @@ let service = ExampleService {
 let module = NixosModule::empty().add(service);
 ```
 
+For compatibility adapters, `#[rusnix::options]` replaces repeated accessor code
+with a local declaration of finite dependencies. `#[rusnix::config]` declares
+what a module defines; `#[rusnix::options]` declares which final options it
+symbolically depends on. Neither creates upstream option schemas or bindings.
+
+```rust
+#[rusnix::options]
+mod options {
+    #[rusnix(root)]
+    struct Root { services: Services }
+
+    struct Services { postgresql: Postgresql }
+
+    struct Postgresql {
+        enable: bool,
+        data_dir: String,
+        #[rusnix(rename = "enableJIT")]
+        enable_jit: bool,
+        settings: Settings,
+    }
+
+    #[rusnix(value)]
+    struct Settings { port: i64, jit: String }
+}
+let pg = options::root().services.postgresql;
+let command = pg.settings.port().to_text().with_prefix("--port=");
+let complete_settings = pg.settings.as_value();
+```
+
+The macro generates public navigation fields and tracked accessor methods inside
+the annotated module. Its declarations are reference descriptions, not concrete
+Rust data structs. The enclosing module controls visibility. Scalar leaves
+`bool`, `String`, and `i64` return their existing Expr types. NixValue, Option<T>,
+Vec<T>, BTreeMap<K, V> and HashMap<K, V> return opaque NixValue references; Rust
+never receives their deferred contents. A nested local struct creates a view;
+only one marked `#[rusnix(value)]` exposes the whole subtree. Roots cannot have
+that marker or method. Names reuse the same lowerCamelCase/PascalCase/rename
+rules as configuration lowering. Paths are literal segments, including renamed
+keys containing dots. `OptionRef::from_segments(parts)` also exposes this safe
+construction directly; the existing dotted `OptionRef::new(path)` remains.
+
+Leaf calls capture their caller, not root construction or navigation. Subsequent
+operations retain their own origins. NixOS owns actual option existence, types,
+merging and priorities. The first version supports one explicit root in an inline
+module containing named view structs and imports. Generic, conditional, recursive
+or ambiguous views, unsupported types and external aliases are rejected; aliases
+and one-off references can use OptionRef directly. Container derives, skip and
+flatten are intentionally unsupported in reference declarations. There is no
+runtime traversal or whole-config handle. The [view tests](crates/rusnix-nix/tests/options.rs)
+exercise opaque/typed leaves, exact keys, provenance, lazy evaluation and ordinary
+Nix overrides of the same artifact; UI fixtures check the compile-time boundary.
+
 The [symbolic dependency tests](crates/rusnix-nix/tests/symbolic_options.rs) add
 an ordinary Nix option-declaration fixture and an independent default-priority
 port contribution of 5432. Each contribution retains its own `_file` identity.
@@ -974,8 +1026,8 @@ structural enum mappings, record-list laziness and provenance (including source-
 merges/priorities and two-origin conflicts, native handle preservation, real
 package resolution, symbolic override compatibility and local naming conventions
 with explicit rename precedence. Three proc-macro naming tests cover mechanical
-conversion rules. Thirty UI fixtures check thirty-two errors (seventeen coded
-rustc errors and fifteen macro errors),
+conversion rules. Thirty-eight UI fixtures check forty errors (nineteen coded
+rustc errors and twenty-one macro errors),
 with primary spans and relevant tokens instead of full compiler snapshots.
 Dependencies reuse the already cached syn/quote/proc-macro2 versions; no fetch
 was needed. Nix invocation/store protections are unchanged. NixOS can still

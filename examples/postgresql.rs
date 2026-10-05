@@ -184,101 +184,46 @@ mod lowering {
         )
     }
 
-    // This finite view declares dependencies; it never reads final config in Rust.
-    struct PostgresqlOptions;
+    // These declarations name final-option dependencies, not the NixOS schema.
+    #[rusnix::options]
+    mod options {
+        use rusnix_ir::interop::NixValue;
 
-    const PG: PostgresqlOptions = PostgresqlOptions;
-
-    impl PostgresqlOptions {
-        #[track_caller]
-        fn enable(&self) -> Expr<bool> {
-            OptionRef::<bool>::new("services.postgresql.enable").into_expr()
+        #[rusnix(root)]
+        struct Root {
+            services: Services,
         }
 
-        #[track_caller]
-        fn enable_jit(&self) -> Expr<bool> {
-            OptionRef::<bool>::new("services.postgresql.enableJIT").into_expr()
+        struct Services {
+            postgresql: Postgresql,
         }
 
-        #[track_caller]
-        fn enable_tcpip(&self) -> Expr<bool> {
-            OptionRef::<bool>::new("services.postgresql.enableTCPIP").into_expr()
+        struct Postgresql {
+            enable: bool,
+            #[rusnix(rename = "enableJIT")]
+            enable_jit: bool,
+            #[rusnix(rename = "enableTCPIP")]
+            enable_tcpip: bool,
+            check_config: bool,
+            data_dir: String,
+            authentication: String,
+            ident_map: String,
+            super_user: String,
+            package: NixValue,
+            settings: Settings,
+            extra_plugins: NixValue,
+            initdb_args: Vec<String>,
+            initial_script: Option<NixValue>,
+            recovery_config: Option<String>,
+            ensure_databases: Vec<String>,
+            ensure_users: NixValue,
         }
 
-        #[track_caller]
-        fn check_config(&self) -> Expr<bool> {
-            OptionRef::<bool>::new("services.postgresql.checkConfig").into_expr()
-        }
-
-        #[track_caller]
-        fn data_dir(&self) -> Expr<String> {
-            OptionRef::<String>::new("services.postgresql.dataDir").into_expr()
-        }
-
-        #[track_caller]
-        fn authentication(&self) -> Expr<String> {
-            OptionRef::<String>::new("services.postgresql.authentication").into_expr()
-        }
-
-        #[track_caller]
-        fn ident_map(&self) -> Expr<String> {
-            OptionRef::<String>::new("services.postgresql.identMap").into_expr()
-        }
-
-        #[track_caller]
-        fn super_user(&self) -> Expr<String> {
-            OptionRef::<String>::new("services.postgresql.superUser").into_expr()
-        }
-
-        #[track_caller]
-        fn jit_setting(&self) -> Expr<String> {
-            OptionRef::<String>::new("services.postgresql.settings.jit").into_expr()
-        }
-
-        #[track_caller]
-        fn port(&self) -> Expr<i64> {
-            OptionRef::<i64>::new("services.postgresql.settings.port").into_expr()
-        }
-
-        #[track_caller]
-        fn package(&self) -> NixValue {
-            OptionRef::<NixValue>::new("services.postgresql.package").into_value()
-        }
-
-        #[track_caller]
-        fn settings(&self) -> NixValue {
-            OptionRef::<BTreeMap<String, NixValue>>::new("services.postgresql.settings")
-                .into_value()
-        }
-
-        #[track_caller]
-        fn extensions(&self) -> NixValue {
-            OptionRef::<NixValue>::new("services.postgresql.extraPlugins").into_value()
-        }
-
-        #[track_caller]
-        fn initdb_args(&self) -> NixValue {
-            OptionRef::<Vec<String>>::new("services.postgresql.initdbArgs").into_value()
-        }
-
-        #[track_caller]
-        fn initial_script(&self) -> NixValue {
-            OptionRef::<Option<NixValue>>::new("services.postgresql.initialScript").into_value()
-        }
-
-        #[track_caller]
-        fn recovery_config(&self) -> NixValue {
-            OptionRef::<Option<String>>::new("services.postgresql.recoveryConfig").into_value()
-        }
-
-        #[track_caller]
-        fn databases(&self) -> NixValue {
-            OptionRef::<Vec<String>>::new("services.postgresql.ensureDatabases").into_value()
-        }
-
-        #[track_caller]
-        fn roles(&self) -> NixValue {
-            OptionRef::<NixValue>::new("services.postgresql.ensureUsers").into_value()
+        // Settings remain open-ended; also depend on the complete final attrset.
+        #[rusnix(value)]
+        struct Settings {
+            port: i64,
+            jit: String,
         }
     }
 
@@ -294,20 +239,22 @@ mod lowering {
     }
 
     fn effective_package() -> NixValue {
-        let package = PG.package();
+        let pg = options::root().services.postgresql;
+        let package = pg.package();
         let base = NixValue::if_else(
-            PG.enable_jit(),
+            pg.enable_jit(),
             package.clone().select("withJIT"),
             package.select("withoutJIT"),
         );
         NixValue::if_else(
-            PG.extensions().equals(NixValue::list([])),
+            pg.extra_plugins().equals(NixValue::list([])),
             base.clone(),
-            base.select("withPackages").call(PG.extensions()),
+            base.select("withPackages").call(pg.extra_plugins()),
         )
     }
 
     fn default_package() -> NixValue {
+        let pg = options::root().services.postgresql;
         let removed = |version: &str| {
             Nixpkgs::new().function("throwIfNot").apply([
                 false.into(),
@@ -336,17 +283,18 @@ mod lowering {
                 package,
             );
         }
-        NixValue::if_else(PG.enable_jit(), package.clone().select("withJIT"), package)
+        NixValue::if_else(pg.enable_jit(), package.clone().select("withJIT"), package)
     }
 
     fn settings_text() -> NixValue {
+        let pg = options::root().services.postgresql;
         let printable = Nixpkgs::new().function("filterAttrs").apply([
             NixValue::function(|_| {
                 NixValue::function(|value| {
                     NixValue::if_else(value.equals(NixValue::null()), false, true)
                 })
             }),
-            PG.settings(),
+            pg.settings.as_value(),
         ]);
         let lines = Nixpkgs::new().function("mapAttrsToList").apply([
             NixValue::function(|name| {
@@ -388,14 +336,15 @@ mod lowering {
     }
 
     fn pre_start() -> NixValue {
-        let data = path_text(PG.data_dir());
+        let pg = options::root().services.postgresql;
+        let data = path_text(pg.data_dir());
         let recovery = optional_file_script(
-            PG.recovery_config(),
+            pg.recovery_config(),
             text!(
                 "ln -sfn \"",
                 Nixpkgs::from_module()
                     .package_function("writeText")
-                    .apply(["recovery.conf".into(), PG.recovery_config()])
+                    .apply(["recovery.conf".into(), pg.recovery_config()])
                     .to_text(),
                 "\" \\\n  \"",
                 data.clone(),
@@ -410,11 +359,11 @@ mod lowering {
             data.clone(),
             "/*.conf\n\n",
             "  # Initialise the database.\n  initdb -U ",
-            PG.super_user(),
+            pg.super_user(),
             " ",
             Nixpkgs::new()
                 .function("escapeShellArgs")
-                .apply([PG.initdb_args()]),
+                .apply([pg.initdb_args()]),
             "\n\n  # See postStart!\n  touch \"",
             data.clone(),
             "/.first_startup\"\nfi\n\n",
@@ -429,12 +378,13 @@ mod lowering {
     }
 
     fn post_start() -> NixValue {
-        let data = path_text(PG.data_dir());
+        let pg = options::root().services.postgresql;
+        let data = path_text(pg.data_dir());
         let initial = optional_file_script(
-            PG.initial_script(),
+            pg.initial_script(),
             text!(
                 "$PSQL -f \"",
-                PG.initial_script().to_text(),
+                pg.initial_script().to_text(),
                 "\" -d postgres\n"
             ),
         );
@@ -448,7 +398,7 @@ mod lowering {
                     "\"'\n",
                 )
             }),
-            PG.databases(),
+            pg.ensure_databases(),
         ]);
         let users = Nixpkgs::new().function("concatMapStrings").apply([
             NixValue::function(|user| {
@@ -497,11 +447,11 @@ mod lowering {
                     "\n"
                 )
             }),
-            PG.roles(),
+            pg.ensure_users(),
         ]);
         text!(
             "PSQL=\"psql --port=",
-            PG.port().to_text(),
+            pg.settings.port().to_text(),
             "\"\n\n",
             "while ! $PSQL -d postgres -c \"\" 2> /dev/null; do\n    if ! kill -0 \"$MAINPID\"; then exit 1; fi\n    sleep 0.1\ndone\n\n",
             "if test -e \"",
@@ -512,7 +462,7 @@ mod lowering {
             data,
             "/.first_startup\"\nfi\n",
             NixValue::if_else(
-                PG.databases().equals(NixValue::list([])),
+                pg.ensure_databases().equals(NixValue::list([])),
                 "",
                 text!(databases, "\n")
             ),
@@ -522,34 +472,36 @@ mod lowering {
     }
 
     fn assertions() -> NixValue {
+        let pg = options::root().services.postgresql;
         Nixpkgs::new().function("map").apply([
             NixValue::function(|user| {
                 let name = user.clone().select("name");
                 record! {
-                    "assertion": NixValue::if_else(user.select("ensureDBOwnership"), Nixpkgs::new().function("elem").apply([name.clone(), PG.databases()]), true),
+                    "assertion": NixValue::if_else(user.select("ensureDBOwnership"), Nixpkgs::new().function("elem").apply([name.clone(), pg.ensure_databases()]), true),
                     "message": text!("For each database user defined with `services.postgresql.ensureUsers` and\n`ensureDBOwnership = true;`, a database with the same name must be defined\nin `services.postgresql.ensureDatabases`.\n\nOffender: ", name, " has not been found among databases.\n"),
                 }
             }),
-            PG.roles(),
+            pg.ensure_users(),
         ])
     }
 
     fn service_config() -> NixValue {
+        let pg = options::root().services.postgresql;
         let package = effective_package();
         let group_access = Nixpkgs::new()
             .function("versionAtLeast")
             .apply([package.clone().select("version"), "11.0".into()]);
-        let data = NixValue::from(PG.data_dir());
-        let standard_data = text!("/var/lib/postgresql/", PG.package().select("psqlSchema"));
+        let data = NixValue::from(pg.data_dir());
+        let standard_data = text!("/var/lib/postgresql/", pg.package().select("psqlSchema"));
         let properties = record! {
             "ExecReload": text!(Nixpkgs::from_module().get("coreutils").as_value().to_text(), "/bin/kill -HUP $MAINPID"),
             "User": "postgres", "Group": "postgres", "RuntimeDirectory": "postgresql",
-            "Type": NixValue::if_else(Nixpkgs::new().function("versionAtLeast").apply([PG.package().select("version"), "9.6".into()]), "notify", "simple"),
+            "Type": NixValue::if_else(Nixpkgs::new().function("versionAtLeast").apply([pg.package().select("version"), "9.6".into()]), "notify", "simple"),
             "KillSignal": "SIGINT", "KillMode": "mixed", "TimeoutSec": 120_i64,
             "ExecStart": text!(package.to_text(), "/bin/postgres"),
             "CapabilityBoundingSet": NixValue::list(["".into()]), "DevicePolicy": "closed",
             "PrivateTmp": true, "ProtectHome": true, "ProtectSystem": "strict",
-            "MemoryDenyWriteExecute": NixValue::from(PG.jit_setting()).equals("off").priority(DefinitionPriority::Default),
+            "MemoryDenyWriteExecute": NixValue::from(pg.settings.jit()).equals("off").priority(DefinitionPriority::Default),
             "NoNewPrivileges": true, "LockPersonality": true, "PrivateDevices": true, "PrivateMounts": true,
             "ProcSubset": "pid", "ProtectClock": true, "ProtectControlGroups": true, "ProtectHostname": true,
             "ProtectKernelLogs": true, "ProtectKernelModules": true, "ProtectKernelTunables": true,
@@ -565,43 +517,46 @@ mod lowering {
             record! { "ReadWritePaths": NixValue::list([data.clone()]) }
                 .when(NixValue::if_else(data.clone().equals("/var/lib/postgresql"), false, true)),
             record! {
-                "StateDirectory": text!("postgresql postgresql/", PG.package().select("psqlSchema")),
+                "StateDirectory": text!("postgresql postgresql/", pg.package().select("psqlSchema")),
                 "StateDirectoryMode": NixValue::if_else(group_access, "0750", "0700"),
             }.when(data.equals(standard_data)),
         ])
     }
 
     fn service() -> NixValue {
+        let pg = options::root().services.postgresql;
         record! {
             "description": "PostgreSQL Server",
             "wantedBy": NixValue::list(["multi-user.target".into()]),
             "after": NixValue::list(["network.target".into()]),
-            "environment": record! { "PGDATA": PG.data_dir() },
+            "environment": record! { "PGDATA": pg.data_dir() },
             "path": NixValue::list([effective_package()]),
             "preStart": pre_start(), "postStart": post_start(),
             "serviceConfig": service_config(),
-            "unitConfig": record! { "RequiresMountsFor": path_text(PG.data_dir()) },
+            "unitConfig": record! { "RequiresMountsFor": path_text(pg.data_dir()) },
         }
     }
 
     fn settings() -> NixValue {
+        let pg = options::root().services.postgresql;
         record! {
-            "hba_file": Nixpkgs::from_module().package_function("writeText").apply(["pg_hba.conf".into(), PG.authentication().into()]).to_text(),
-            "ident_file": Nixpkgs::from_module().package_function("writeText").apply(["pg_ident.conf".into(), PG.ident_map().into()]).to_text(),
+            "hba_file": Nixpkgs::from_module().package_function("writeText").apply(["pg_hba.conf".into(), pg.authentication().into()]).to_text(),
+            "ident_file": Nixpkgs::from_module().package_function("writeText").apply(["pg_ident.conf".into(), pg.ident_map().into()]).to_text(),
             "log_destination": "stderr",
-            "listen_addresses": NixValue::if_else(PG.enable_tcpip(), "*", "localhost"),
-            "jit": NixValue::if_else(PG.enable_jit(), "on", "off").priority(DefinitionPriority::Default),
+            "listen_addresses": NixValue::if_else(pg.enable_tcpip(), "*", "localhost"),
+            "jit": NixValue::if_else(pg.enable_jit(), "on", "off").priority(DefinitionPriority::Default),
         }
     }
 
     fn checks() -> NixValue {
+        let pg = options::root().services.postgresql;
         let check = Nixpkgs::from_module()
             .package_function("runCommand")
             .apply([
                 "postgresql-configfile-check".into(),
                 record! {},
                 text!(
-                    PG.package().to_text(),
+                    pg.package().to_text(),
                     "/bin/postgres -D",
                     configuration_file().to_text(),
                     " -C config_file >/dev/null\ntouch $out\n"
@@ -611,7 +566,7 @@ mod lowering {
         let native = pkgs
             .value("stdenv.hostPlatform")
             .equals(pkgs.value("stdenv.buildPlatform"));
-        let enabled = NixValue::if_else(PG.check_config(), native, false);
+        let enabled = NixValue::if_else(pg.check_config(), native, false);
         Nixpkgs::new().function("optional").apply([enabled, check])
     }
 
@@ -645,7 +600,8 @@ mod lowering {
         }
 
         pub fn implementation() -> Implementation {
-            let enabled = PG.enable();
+            let pg = options::root().services.postgresql;
+            let enabled = pg.enable();
             let guarded = |value: NixValue| value.when(enabled.clone());
             let authentication = nixos::merge([
                 NixValue::from("# Generated file; do not edit!").before(),
@@ -657,14 +613,14 @@ mod lowering {
                     postgresql: guarded(record! {
                         "settings": settings(),
                         "package": default_package().priority(DefinitionPriority::Default),
-                        "dataDir": text!("/var/lib/postgresql/", PG.package().select("psqlSchema")).priority(DefinitionPriority::Default),
+                        "dataDir": text!("/var/lib/postgresql/", pg.package().select("psqlSchema")).priority(DefinitionPriority::Default),
                         "authentication": authentication,
                     }),
                 },
                 users: guarded(record! {
                     "users": record! { "postgres": record! {
                         "name": "postgres", "uid": OptionRef::<i64>::new("ids.uids.postgres").into_expr(), "group": "postgres",
-                        "description": "PostgreSQL server user", "home": path_text(PG.data_dir()), "useDefaultShell": true,
+                        "description": "PostgreSQL server user", "home": path_text(pg.data_dir()), "useDefaultShell": true,
                     } },
                     "groups": record! { "postgres": record! { "gid": OptionRef::<i64>::new("ids.gids.postgres").into_expr() } },
                 }),
