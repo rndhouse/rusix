@@ -1,5 +1,7 @@
-//! Declares the public services.postgresql interface, independently of the Rust-native model.
-//! NixOS still checks and merges ordinary Nix definitions. Documentation mirrors pinned nixpkgs (MIT).
+//! Defines the public services.postgresql interface for ordinary NixOS modules.
+//! These are declarations, not configured values: NixOS checks and merges definitions.
+//! The optional Rust-native authoring model lives in model.rs.
+//! Public documentation mirrors pinned nixpkgs (MIT).
 use rusnix_ir::{
     self as rusnix,
     interop::{NixValue, Nixpkgs},
@@ -10,74 +12,113 @@ use rusnix_ir::{
 mod declarations {
     use super::OptionDecl;
 
-    // Structural placement builds option paths; each leaf is a real lib.mkOption declaration.
+    // Passed to NixosModule::declare, this tree becomes options rather than config.
     #[rusnix(root)]
     pub(super) struct Root {
+        // Places the declarations under the standard NixOS services namespace.
         pub(super) services: Services,
     }
 
+    // Owns just PostgreSQL's interface; it does not describe every NixOS service.
     pub(super) struct Services {
+        // Nesting produces the services.postgresql option path automatically.
         pub(super) postgresql: Postgresql,
     }
 
+    // Public compatibility options, separate from the stronger Rust model in model.rs.
+    // Each OptionDecl supplies a NixOS type and metadata, not a concrete Rust setting.
     pub(super) struct Postgresql {
+        // Declares the switch that gates the generated service implementation.
         pub(super) enable: OptionDecl,
+        // Selects JIT support while retaining the upstream acronym spelling.
         #[rusnix(rename = "enableJIT")]
         pub(super) enable_jit: OptionDecl,
+        // Uses the real package validator and mkPackageOption's package-set default.
         pub(super) package: OptionDecl,
+        // Allows disabling the generated configuration check; defaults to true.
         pub(super) check_config: OptionDecl,
+        // Declares a path; lowering supplies its computed default, while this schema documents it.
         pub(super) data_dir: OptionDecl,
+        // Mergeable pg_hba.conf text; mkForce can replace the implementation's default rules.
         pub(super) authentication: OptionDecl,
+        // Mergeable pg_ident.conf text; PostgreSQL interprets the mapping syntax.
         pub(super) ident_map: OptionDecl,
+        // An ordered, mergeable list of extra initdb arguments.
         pub(super) initdb_args: OptionDecl,
+        // Accepts null or a SQL-file path, including a derivation, for cluster initialization.
         pub(super) initial_script: OptionDecl,
+        // An ordered list of database names to ensure when the service starts.
         pub(super) ensure_databases: OptionDecl,
+        // A list of role submodules; ownership relationships are checked by the implementation.
         pub(super) ensure_users: OptionDecl,
+        // Controls the default TCP listening setting, preserving the legacy option name.
         #[rusnix(rename = "enableTCPIP")]
         pub(super) enable_tcpip: OptionDecl,
+        // Accepts a package-set callback; NixOS also coerces lists of extension paths to callbacks.
         pub(super) extra_plugins: OptionDecl,
+        // Keeps arbitrary PostgreSQL setting names open while validating their value types.
         pub(super) settings: OptionDecl,
+        // Nullable, mergeable recovery.conf text retained for older PostgreSQL versions.
         pub(super) recovery_config: OptionDecl,
+        // An internal read-only bootstrap role name, fixed to postgres by the schema default.
         pub(super) super_user: OptionDecl,
     }
 
-    // Submodules preserve the ordinary Nix user interface, including all nullable clauses.
+    // Declares one ensureUsers entry, retaining the public Nix shape instead of the Rust ownership model.
     pub(super) struct User {
+        // A required role name; omitting it remains a NixOS evaluation error.
         pub(super) name: OptionDecl,
+        // Requests ownership of a same-named ensured database; lowering checks that it exists.
         #[rusnix(rename = "ensureDBOwnership")]
         pub(super) ensure_db_ownership: OptionDecl,
+        // A nested submodule whose omitted clauses each default to null.
         pub(super) ensure_clauses: OptionDecl,
     }
 
+    // Every clause accepts true, false or null: enable, disable or leave PostgreSQL's state alone.
     pub(super) struct Clauses {
+        // Controls unrestricted superuser privileges.
         pub(super) superuser: OptionDecl,
+        // Controls permission to create and manage roles.
         pub(super) createrole: OptionDecl,
+        // Controls permission to create databases.
         pub(super) createdb: OptionDecl,
+        // Controls automatic inheritance of privileges from granted roles.
         pub(super) inherit: OptionDecl,
+        // Controls whether this role can authenticate as a database user.
         pub(super) login: OptionDecl,
+        // Controls replication-role privileges.
         pub(super) replication: OptionDecl,
+        // Controls whether the role bypasses row-level security policies.
         pub(super) bypassrls: OptionDecl,
     }
 
-    // PostgreSQL setting names are literal snake_case, unlike the surrounding NixOS interface.
+    // Only these settings have explicit declarations; freeformType validates all other setting values.
+    // PostgreSQL's literal snake_case names override Rusnix's default lowerCamelCase mapping.
     pub(super) struct Settings {
+        // Accepts null, text or a string list coerced to comma-separated library names.
         #[rusnix(rename = "shared_preload_libraries")]
         pub(super) shared_preload_libraries: OptionDecl,
+        // Supplies the format prefix used for PostgreSQL log messages.
         #[rusnix(rename = "log_line_prefix")]
         pub(super) log_line_prefix: OptionDecl,
+        // Uses NixOS's actual port validator, with a schema default of 5432.
         pub(super) port: OptionDecl,
     }
 }
 
 fn literal(text: &str) -> NixValue {
+    // Documentation code stays unevaluated; this does not inject executable Nix source.
     Nixpkgs::new().function("literalExpression").call(text)
 }
 
 fn markdown(text: &str) -> NixValue {
+    // Retain NixOS's documentation wrapper for formatted default descriptions.
     Nixpkgs::new().function("literalMD").call(text)
 }
 
 fn clauses() -> OptionType {
+    // Null means no SQL change, not false; PostgreSQL supplies the initial state for a new role.
     let clause = |description| {
         OptionDecl::new(OptionType::named("bool").null_or())
         .default(NixValue::null())
@@ -101,6 +142,7 @@ fn clauses() -> OptionType {
 }
 
 fn users() -> OptionType {
+    // The empty clause submodule still applies each clause's null default during NixOS evaluation.
     OptionType::submodule(declarations::User {
         name: OptionDecl::new(OptionType::named("str")).description(docs::USER_NAME),
         ensure_db_ownership: OptionDecl::new(OptionType::named("bool"))
@@ -114,7 +156,7 @@ fn users() -> OptionType {
 }
 
 fn settings() -> OptionType {
-    // Only these three settings are declared; all other keys use the actual upstream freeform type.
+    // Unknown keys accept these four scalar types, not arbitrary lists, records or null.
     let freeform =
         OptionType::one_of(["bool", "float", "int", "str"].map(OptionType::named)).attrs_of();
     let preload = OptionType::named("str")
@@ -145,6 +187,7 @@ fn settings() -> OptionType {
 
 /// Complete public declarations and migration imports, without the original PostgreSQL module.
 pub(crate) fn module() -> NixosModule {
+    // Legacy extension lists become constant callbacks; function results keep the real path validator.
     let plugins = OptionType::named("path")
         .list_of()
         .function_to()
@@ -152,6 +195,8 @@ pub(crate) fn module() -> NixosModule {
             OptionType::named("path").list_of(),
             NixValue::function(|paths| NixValue::function(|_| paths)),
         );
+
+    // Use NixOS's supplied pkgs so package defaults respect its platform, configuration and overlays.
     let package = Nixpkgs::new().function("mkPackageOption").apply([
         Nixpkgs::from_module().as_value(),
         "postgresql".into(),

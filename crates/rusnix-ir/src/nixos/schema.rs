@@ -4,10 +4,14 @@ use crate::{
     interop::{NixValue, Nixpkgs},
 };
 
-/// An opaque NixOS option type, distinct from a Rust field's static type.
-/// This wraps real lib.types values; NixOS owns their checks, coercions and merges.
+/// A real NixOS option type used by an [`OptionDecl`], not a Rust value type.
+/// Construction remains deferred: NixOS checks merged definitions and applies
+/// the type's coercion and merge rules during evaluation.
 #[derive(Clone, Debug)]
-pub struct OptionType(NixValue);
+pub struct OptionType(
+    /// Preserves the Nix-side type object and its operations without evaluating them in Rust.
+    NixValue,
+);
 
 impl OptionType {
     /// Select a real named lib.types value, such as bool, str, path, port or package.
@@ -73,7 +77,9 @@ impl OptionType {
 
     /// Declare nested options using ordinary structural lowering; an optional
     /// freeform type keeps undeclared keys open with NixOS's actual validation.
-    /// Shape errors are reported in Rust; submodule checks and defaults stay in Nix.
+    /// With no freeform type, undeclared keys are rejected by NixOS.
+    /// Structural conversion errors are returned in Rust; checking actual definitions
+    /// and applying nested defaults remain deferred to NixOS.
     #[track_caller]
     pub fn submodule(
         options: impl IntoRusnixValue,
@@ -93,10 +99,15 @@ impl OptionType {
 }
 
 /// One public NixOS option declaration, used as a leaf of a structural schema.
-/// Metadata stays explicit. This declares the backend interface; it neither
-/// replaces Rust types nor provides a concrete option value in Rust.
+/// Pass the schema to [`super::NixosModule::declare`]; nested Rust fields determine
+/// the declared paths. This defines the interface ordinary Nix modules configure,
+/// rather than assigning a configuration value or replacing Rust's type system.
+///
+/// Defaults and metadata may contain deferred Nix values. Setting the same metadata
+/// property twice replaces that property; NixOS still merges configuration definitions.
 #[derive(Clone, Debug)]
 pub struct OptionDecl {
+    /// The deferred declaration record, including its real NixOS type and documentation metadata.
     value: NixValue,
 }
 
@@ -131,12 +142,14 @@ impl OptionDecl {
     }
 
     /// Supply an actual option default, which remains lazy and may be symbolic.
+    /// NixOS applies its usual default priority; ordinary definitions can override it.
     #[track_caller]
     pub fn default(self, value: impl Into<NixValue>) -> Self {
         self.metadata("default", value.into())
     }
 
     /// Supply documentation for a default without defining an actual value.
+    /// Use this when the implementation computes the default as a separate contribution.
     #[track_caller]
     pub fn default_text(self, value: impl Into<NixValue>) -> Self {
         self.metadata("defaultText", value.into())

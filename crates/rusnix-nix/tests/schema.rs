@@ -11,18 +11,26 @@ use std::path::Path;
 mod schema {
     use super::OptionDecl;
 
+    // A complete declaration tree, distinct from definitions supplied by consumers.
     #[rusnix(root)]
     pub struct Root {
+        // Structural nesting determines the first option-path segment.
         pub services: Services,
     }
 
+    // Limits the fixture to one service namespace, without importing an external schema.
     pub struct Services {
+        // Hosts the options used to exercise defaults, symbolic dependencies and literal keys.
         pub example: Options,
     }
 
+    // Declaration leaves can describe different backend types while sharing the same Rust type.
     pub struct Options {
+        // Supplies a source default that an ordinary Nix definition may override.
         pub source: OptionDecl,
+        // Can hold a symbolic default or a deferred failure, selected independently of source.
         pub derived: OptionDecl,
+        // The dot belongs to a single attribute name, not an extra nesting level.
         #[rusnix(rename = "literal.dot")]
         pub unusual: OptionDecl,
     }
@@ -132,8 +140,10 @@ fn unused_schema_defaults_remain_lazy_and_failure_keeps_expression_origin() {
 
 #[test]
 fn submodule_structural_errors_use_existing_ir_validation() {
+    // Deliberately malformed structural input: only records can be flattened.
     #[derive(IntoRusnixValue)]
     struct Invalid {
+        // A scalar must fail before becoming a NixOS submodule declaration.
         #[rusnix(flatten)]
         value: i64,
     }
@@ -141,9 +151,12 @@ fn submodule_structural_errors_use_existing_ir_validation() {
     let error = OptionType::submodule(Invalid { value: 42 }, None).unwrap_err();
     assert!(error.message.contains("flatten requires a record"));
 
+    // A single declaration contribution cannot declare the same path twice.
     #[derive(IntoConfig)]
     struct Duplicate {
+        // Establishes the path that the renamed field below also tries to declare.
         port: OptionDecl,
+        // Exercises duplicate-path validation after explicit naming is applied.
         #[rusnix(rename = "port")]
         other: OptionDecl,
     }
