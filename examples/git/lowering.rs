@@ -1,12 +1,18 @@
 //! Reproduces the pinned Git package recipe using real nixpkgs builders and helpers.
 //! Helpers construct deferred values and shell scripts; they never execute build commands in Rust.
 use super::inputs::{ARGUMENTS, Inputs, args};
-use rusnix_ir::{IntoRusnixValue, interop::NixValue, nix_text};
+use rusnix_ir::{
+    Expr, IntoRusnixValue,
+    interop::{NixLibrary, NixValue},
+    nix_text,
+};
 
 /// A native Nix package function, suitable for ordinary callPackage and overrides.
 pub fn factory() -> NixValue {
     NixValue::function_attrs(ARGUMENTS.iter().copied(), |args| {
         let inputs = args::from_value(args);
+        // All helper calls use the lib supplied by this Nix function's caller.
+        let lib = NixLibrary::from_value(inputs.lib.as_value());
         let defaults = vec![
             ("svnSupport", false.into()),
             ("perlSupport", inputs.native()),
@@ -24,7 +30,7 @@ pub fn factory() -> NixValue {
             ("withSsh", false.into()),
             (
                 "doInstallCheck",
-                inputs.not(inputs.stdenv.host_platform.is_darwin()),
+                (!inputs.stdenv.host_platform.is_darwin()).into(),
             ),
         ];
 
@@ -38,12 +44,12 @@ pub fn factory() -> NixValue {
             }));
         let checks = [
             (
-                inputs.lib(
+                lib.apply(
                     "any",
                     [
                         NixValue::function(|x| x),
                         NixValue::list([
-                            inputs.not(inputs.osxkeychain_support()),
+                            (!inputs.osxkeychain_support()).into(),
                             inputs.stdenv.host_platform.is_darwin().into(),
                         ]),
                     ],
@@ -51,12 +57,12 @@ pub fn factory() -> NixValue {
                 "osxkeychainSupport requires Darwin",
             ),
             (
-                inputs.lib(
+                lib.apply(
                     "any",
                     [
                         NixValue::function(|x| x),
                         NixValue::list([
-                            inputs.not(inputs.send_email_support()),
+                            (!inputs.send_email_support()).into(),
                             inputs.perl_support().into(),
                         ]),
                     ],
@@ -64,12 +70,12 @@ pub fn factory() -> NixValue {
                 "sendEmailSupport requires perlSupport",
             ),
             (
-                inputs.lib(
+                lib.apply(
                     "any",
                     [
                         NixValue::function(|x| x),
                         NixValue::list([
-                            inputs.not(inputs.svn_support()),
+                            (!inputs.svn_support()).into(),
                             inputs.perl_support().into(),
                         ]),
                     ],
@@ -81,7 +87,7 @@ pub fn factory() -> NixValue {
             .into_iter()
             .rev()
             .fold(derivation, |body, (condition, message)| {
-                inputs.lib("throwIfNot", [condition, message.into(), body])
+                lib.apply("throwIfNot", [condition, message.into(), body])
             });
 
         (defaults, body)
@@ -155,17 +161,20 @@ struct Derivation {
 /// Assemble the builder attributes from deferred feature and platform inputs.
 /// The finalAttrs parameter preserves the install-check test's dependency on later overrides.
 fn attributes(i: &Inputs, final_attrs: NixValue) -> NixValue {
-    let minimal = i.all(
-        [
-            i.svn_support(),
-            i.gui_support(),
-            i.send_email_support(),
-            i.with_manual(),
-            i.python_support(),
-            i.withpcre2(),
-        ]
-        .map(|condition| i.not(condition)),
-    );
+    let lib = NixLibrary::from_value(i.lib.as_value());
+
+    let minimal = [
+        i.svn_support(),
+        i.gui_support(),
+        i.send_email_support(),
+        i.with_manual(),
+        i.python_support(),
+        i.withpcre2(),
+    ]
+    .into_iter()
+    .fold(Expr::boolean(true), |result, condition| {
+        result.and(!condition)
+    });
     let svn = i
         .subversion_client()
         .select("override")
@@ -174,17 +183,17 @@ fn attributes(i: &Inputs, final_attrs: NixValue) -> NixValue {
             i.perl_support().into(),
         )]));
     let perl = i.perl_packages.perl.as_value();
-    let patches = i.lists([
+    let patches = lib.concat_lists([
         NixValue::list(["docbook2texi.patch", "git-sh-i18n.patch", "git-send-email-honor-PATH.patch", "installCheck-path.patch"].map(|p| i.file(p))),
-        i.optional(i.with_ssh(), i.file("ssh-path.patch")),
-        i.optional(i.all([i.gui_support().into(), i.stdenv.host_platform.is_darwin().into()]), i.fetchpatch().call(NixValue::record([
+        lib.optional(i.with_ssh(), i.file("ssh-path.patch")),
+        lib.optional(i.gui_support().and(i.stdenv.host_platform.is_darwin()), i.fetchpatch().call(NixValue::record([
             ("name", "gitk_check_main_window_visibility_before_waiting_for_it_to_show.patch".into()),
             ("url", "https://github.com/git/git/commit/1db62e44b7ec93b6654271ef34065b31496cd02e.patch".into()),
             ("hash", "sha256-ntvnrYFFsJ1Ebzc6vM9/AMFLHMS1THts73PIOG5DkQo=".into()),
         ]))),
     ]);
 
-    let native_build_inputs = i.lists([
+    let native_build_inputs = lib.concat_lists([
         NixValue::list([
             i.deterministic_host_uname(),
             i.gettext(),
@@ -192,7 +201,7 @@ fn attributes(i: &Inputs, final_attrs: NixValue) -> NixValue {
             i.make_wrapper(),
             i.pkg_config(),
         ]),
-        i.optionals(
+        lib.optionals(
             i.with_manual(),
             NixValue::list([
                 i.asciidoc(),
@@ -205,7 +214,7 @@ fn attributes(i: &Inputs, final_attrs: NixValue) -> NixValue {
             ]),
         ),
     ]);
-    let build_inputs = i.lists([
+    let build_inputs = lib.concat_lists([
         NixValue::list([
             i.curl(),
             i.openssl(),
@@ -219,22 +228,22 @@ fn attributes(i: &Inputs, final_attrs: NixValue) -> NixValue {
             ),
             i.bash(),
         ]),
-        i.optional(i.perl_support(), perl.clone()),
-        i.optionals(i.gui_support(), NixValue::list([i.tcl(), i.tk()])),
-        i.optional(i.withpcre2(), i.pcre2()),
-        i.optionals(
+        lib.optional(i.perl_support(), perl.clone()),
+        lib.optionals(i.gui_support(), NixValue::list([i.tcl(), i.tk()])),
+        lib.optional(i.withpcre2(), i.pcre2()),
+        lib.optionals(
             i.stdenv.host_platform.is_darwin(),
             NixValue::list([i.security(), i.core_services()]),
         ),
-        i.optionals(
+        lib.optionals(
             i.with_libsecret(),
             NixValue::list([i.glib(), i.libsecret()]),
         ),
     ]);
 
-    let make_flags = i.lists([
+    let make_flags = lib.concat_lists([
         NixValue::list(["prefix=${out}".into()]),
-        i.optional(
+        lib.optional(
             i.native(),
             nix_text!("SHELL_PATH={shell}", shell = i.stdenv.shell()),
         ),
@@ -251,7 +260,7 @@ fn attributes(i: &Inputs, final_attrs: NixValue) -> NixValue {
             )]),
             NixValue::list(["NO_PYTHON=1".into()]),
         ),
-        i.optionals(
+        lib.optionals(
             i.stdenv.host_platform.is_sun_os(),
             NixValue::list(
                 ["INSTALL=install", "NO_INET_NTOP=", "NO_INET_PTON="].map(NixValue::from),
@@ -262,15 +271,15 @@ fn attributes(i: &Inputs, final_attrs: NixValue) -> NixValue {
             NixValue::list(["NO_APPLE_COMMON_CRYPTO=1".into()]),
             NixValue::list(["sysconfdir=/etc".into()]),
         ),
-        i.optionals(
+        lib.optionals(
             i.stdenv.host_platform.is_musl(),
             NixValue::list(["NO_SYS_POLL_H=1", "NO_GETTEXT=YesPlease"].map(NixValue::from)),
         ),
-        i.optional(i.withpcre2(), "USE_LIBPCRE2=1".into()),
-        i.optional(i.not(i.nls_support()), "NO_GETTEXT=1".into()),
-        i.optional(
+        lib.optional(i.withpcre2(), "USE_LIBPCRE2=1"),
+        lib.optional(!i.nls_support(), "NO_GETTEXT=1"),
+        lib.optional(
             i.stdenv.host_platform.is_darwin(),
-            "TKFRAMEWORK=/nonexistent".into(),
+            "TKFRAMEWORK=/nonexistent",
         ),
     ]);
 
@@ -281,7 +290,7 @@ fn attributes(i: &Inputs, final_attrs: NixValue) -> NixValue {
         .call(NixValue::function(|_| {
             NixValue::record([("doInstallCheck", true.into())])
         }));
-    let passthru_tests = i.lib(
+    let passthru_tests = lib.apply(
         "mergeAttrs",
         [
             NixValue::record([
@@ -295,8 +304,8 @@ fn attributes(i: &Inputs, final_attrs: NixValue) -> NixValue {
     Derivation {
         pname: NixValue::concat_text([
             "git".into(),
-            i.optional_text(i.svn_support(), "-with-svn".into()),
-            i.optional_text(minimal, "-minimal".into()),
+            lib.optional_text(i.svn_support(), "-with-svn"),
+            lib.optional_text(minimal, "-minimal"),
         ]),
         version: "2.47.0",
         src: i.fetchurl().call(NixValue::record([
@@ -309,9 +318,9 @@ fn attributes(i: &Inputs, final_attrs: NixValue) -> NixValue {
                 "sha256-HOEU2ohwQnG0PgJ8UeBNk5n4yI6e91Qtrnrrrn2HvE4=".into(),
             ),
         ])),
-        outputs: i.lists([
+        outputs: lib.concat_lists([
             NixValue::list(["out".into()]),
-            i.optional(i.with_manual(), "doc".into()),
+            lib.optional(i.with_manual(), "doc"),
         ]),
         separate_debug_info: true,
         hardening_disable: vec!["format"],
@@ -321,22 +330,23 @@ fn attributes(i: &Inputs, final_attrs: NixValue) -> NixValue {
         native_build_inputs,
         build_inputs,
         nix_ldflags: NixValue::concat_text([
-            i.optional_text(
-                i.all([
-                    i.stdenv.cc.is_gnu().into(),
-                    NixValue::from(i.stdenv.host_platform.libc()).equals("glibc"),
-                ]),
-                "-lgcc_s".into(),
+            lib.optional_text(
+                i.stdenv.cc.is_gnu().and(
+                    NixValue::from(i.stdenv.host_platform.libc())
+                        .equals("glibc")
+                        .into_expr(),
+                ),
+                "-lgcc_s",
             ),
-            i.optional_text(i.stdenv.host_platform.is_free_bsd(), "-lthr".into()),
+            lib.optional_text(i.stdenv.host_platform.is_free_bsd(), "-lthr"),
         ]),
-        configure_flags: i.lists([
+        configure_flags: lib.concat_lists([
             NixValue::list([nix_text!(
                 "ac_cv_prog_CURL_CONFIG={curl}/bin/curl-config",
-                curl = i.lib("getDev", [i.curl()])
+                curl = lib.apply("getDev", [i.curl()])
             )]),
-            i.optionals(
-                i.not(i.native()),
+            lib.optionals(
+                !i.native(),
                 NixValue::list(
                     [
                         "ac_cv_fread_reads_directories=yes",
@@ -349,7 +359,7 @@ fn attributes(i: &Inputs, final_attrs: NixValue) -> NixValue {
         ]),
         pre_build: pre_build(),
         make_flags,
-        disallowed_references: i.optional(i.not(i.native()), i.stdenv.shell_package()),
+        disallowed_references: lib.optional(!i.native(), i.stdenv.shell_package()),
         post_build: post_build(i),
         install_flags: vec!["NO_INSTALL_HARDLINKS=1"],
         pre_install: pre_install(i),
@@ -361,8 +371,8 @@ fn attributes(i: &Inputs, final_attrs: NixValue) -> NixValue {
             "DEFAULT_TEST_TARGET=prove".into(),
             nix_text!("PERL_PATH={perl}/bin/perl", perl = i.build_packages.perl()),
         ]),
-        native_install_check_inputs: i.optional(
-            i.lib(
+        native_install_check_inputs: lib.optional(
+            lib.apply(
                 "any",
                 [
                     NixValue::function(|x| x),
@@ -510,6 +520,8 @@ fn secret_install() -> NixValue {
 /// Common installation commands for contrib tools, completions and embedded runtime-tool paths.
 /// Also defines the removal helper used by disabled-feature installation branches.
 fn base_install(i: &Inputs) -> NixValue {
+    let lib = NixLibrary::from_value(i.lib.as_value());
+
     nix_text!(
         r#"
             notSupported() {{
@@ -564,12 +576,12 @@ fn base_install(i: &Inputs) -> NixValue {
             ln -s $out/libexec/git-core/git-http-backend $out/bin/git-http-backend
             ln -s $out/share/git/contrib/git-jump/git-jump $out/bin/git-jump
         "#,
-        install_doc = i.optional_text(i.with_manual(), "install-doc".into()),
+        install_doc = lib.optional_text(i.with_manual(), "install-doc"),
         grep = i.gnugrep(),
         sed = i.gnused(),
         awk = i.gawk(),
         coreutils = i.coreutils(),
-        perl_program = i.optional_text(
+        perl_program = lib.optional_text(
             i.perl_support(),
             nix_text!(
                 ", '{perl}/bin/perl'",
@@ -581,6 +593,8 @@ fn base_install(i: &Inputs) -> NixValue {
 
 /// Wrap Perl helpers with their library paths and patch gitweb's gzip and CGI dependencies.
 fn perl_install(i: &Inputs) -> NixValue {
+    let lib = NixLibrary::from_value(i.lib.as_value());
+
     nix_text!(
         r#"
             # wrap perl commands
@@ -608,7 +622,7 @@ fn perl_install(i: &Inputs) -> NixValue {
         perl_prefix = i.perl_packages.perl.lib_prefix(),
         perl_path = i.perl_packages.make_perl_path().call(i.perl_libs()),
         gzip = i.gzip(),
-        gitweb_libs = i.lib(
+        gitweb_libs = lib.apply(
             "concatStringsSep",
             [
                 " ".into(),
@@ -627,6 +641,8 @@ fn perl_install(i: &Inputs) -> NixValue {
 
 /// Wrap git-svn with the selected Subversion package and its Perl libraries.
 fn svn_install(i: &Inputs, svn: NixValue) -> NixValue {
+    let lib = NixLibrary::from_value(i.lib.as_value());
+
     nix_text!(
         r#"
             # wrap git-svn
@@ -638,7 +654,7 @@ fn svn_install(i: &Inputs, svn: NixValue) -> NixValue {
         perl_path = i
             .perl_packages
             .make_perl_path()
-            .call(i.lists([i.perl_libs(), NixValue::list([svn.clone().select("out")])])),
+            .call(lib.concat_lists([i.perl_libs(), NixValue::list([svn.clone().select("out")])])),
         svn = svn.select("out")
     )
 }
@@ -733,6 +749,8 @@ fn keychain_config() -> NixValue {
 /// Prepare installed tests and exclude sandbox-incompatible tests exactly as upstream does.
 /// SVN test selection remains dependent on the final factory arguments.
 fn base_check(i: &Inputs) -> NixValue {
+    let lib = NixLibrary::from_value(i.lib.as_value());
+
     nix_text!(
         r#"
             installCheckFlagsArray+=(
@@ -767,7 +785,7 @@ fn base_check(i: &Inputs) -> NixValue {
             # Our patched gettext never fallbacks
             disable_test t0201-gettext-fallbacks
         "#,
-        no_svn = i.optional_text(i.not(i.svn_support()), "NO_SVN_TESTS=y".into())
+        no_svn = lib.optional_text(!i.svn_support(), "NO_SVN_TESTS=y")
     )
 }
 
@@ -835,58 +853,68 @@ fn musl_check() -> NixValue {
 
 /// Compose the patch phase, including SSH substitutions only when requested.
 fn post_patch(i: &Inputs) -> NixValue {
+    let lib = NixLibrary::from_value(i.lib.as_value());
+
     NixValue::concat_text([
         gettext_patch(i),
-        i.optional_text(i.with_ssh(), ssh_patch(i)),
+        lib.optional_text(i.with_ssh(), ssh_patch(i)),
     ])
 }
 
 /// Compose auxiliary builds in upstream order, retaining symbolic feature conditions.
 fn post_build(i: &Inputs) -> NixValue {
+    let lib = NixLibrary::from_value(i.lib.as_value());
+
     NixValue::concat_text([
         subtree_build(),
-        i.optional_text(i.perl_support(), diff_highlight_build()),
-        i.optional_text(i.osxkeychain_support(), keychain_build()),
-        i.optional_text(i.with_libsecret(), secret_build()),
+        lib.optional_text(i.perl_support(), diff_highlight_build()),
+        lib.optional_text(i.osxkeychain_support(), keychain_build()),
+        lib.optional_text(i.with_libsecret(), secret_build()),
     ])
 }
 
 /// Compose pre-install preparation for whichever credential helpers are enabled.
 fn pre_install(i: &Inputs) -> NixValue {
+    let lib = NixLibrary::from_value(i.lib.as_value());
+
     NixValue::concat_text([
-        i.optional_text(i.osxkeychain_support(), keychain_install()),
-        i.optional_text(i.with_libsecret(), secret_install()),
+        lib.optional_text(i.osxkeychain_support(), keychain_install()),
+        lib.optional_text(i.with_libsecret(), secret_install()),
     ])
 }
 
 /// Compose installation and wrapping branches in upstream order.
 /// Nix selects feature branches later, preserving laziness and string dependency context.
 fn post_install(i: &Inputs, svn: NixValue) -> NixValue {
+    let lib = NixLibrary::from_value(i.lib.as_value());
+
     NixValue::concat_text([
         base_install(i),
-        i.optional_text(i.perl_support(), perl_install(i)),
+        lib.optional_text(i.perl_support(), perl_install(i)),
         NixValue::if_else(i.svn_support(), svn_install(i, svn), no_svn_install()),
         NixValue::if_else(i.send_email_support(), email_install(i), no_email_install()),
-        i.optional_text(i.with_manual(), manual_install(i)),
+        lib.optional_text(i.with_manual(), manual_install(i)),
         NixValue::if_else(i.gui_support(), gui_install(i), no_gui_install()),
-        i.optional_text(i.osxkeychain_support(), keychain_config()),
+        lib.optional_text(i.osxkeychain_support(), keychain_config()),
     ])
 }
 
 /// Compose installed-test setup and feature/platform exclusions in upstream order.
 fn pre_install_check(i: &Inputs) -> NixValue {
+    let lib = NixLibrary::from_value(i.lib.as_value());
+
     NixValue::concat_text([
         base_check(i),
-        i.optional_text(i.not(i.send_email_support()), no_email_check()),
+        lib.optional_text(!i.send_email_support(), no_email_check()),
         common_check(),
-        i.optional_text(i.stdenv.host_platform.is_darwin(), darwin_check()),
-        i.optional_text(
-            i.all([
-                i.stdenv.host_platform.is_darwin().into(),
-                i.stdenv.host_platform.is_aarch64().into(),
-            ]),
+        lib.optional_text(i.stdenv.host_platform.is_darwin(), darwin_check()),
+        lib.optional_text(
+            i.stdenv
+                .host_platform
+                .is_darwin()
+                .and(i.stdenv.host_platform.is_aarch64()),
             darwin_arm_check(),
         ),
-        i.optional_text(i.stdenv.host_platform.is_musl(), musl_check()),
+        lib.optional_text(i.stdenv.host_platform.is_musl(), musl_check()),
     ])
 }

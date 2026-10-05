@@ -327,13 +327,6 @@ pub(super) mod args {
 pub(super) use args::Inputs;
 
 impl Inputs {
-    /// Call a function from the caller's `lib`, applying arguments left to right.
-    /// Nix performs the curried application and validates the function's arguments.
-    #[track_caller]
-    pub(super) fn lib(&self, name: &str, args: impl IntoIterator<Item = NixValue>) -> NixValue {
-        self.lib.as_value().select(name).apply(args)
-    }
-
     /// Defer the upstream native-build test: build and host platform records are equal.
     /// The result is a Nix boolean expression, not a boolean Rust can inspect.
     #[track_caller]
@@ -349,49 +342,6 @@ impl Inputs {
     #[track_caller]
     pub(super) fn file(&self, name: &str) -> NixValue {
         Nixpkgs::new().source_path(&format!("pkgs/applications/version-management/git/{name}"))
-    }
-
-    /// Produce a one-element list when the Nix condition is true, otherwise `[]`.
-    /// The excluded value stays unforced when the condition is false.
-    #[track_caller]
-    pub(super) fn optional(&self, condition: impl Into<NixValue>, value: NixValue) -> NixValue {
-        self.lib("optional", [condition.into(), value])
-    }
-
-    /// Keep an entire deferred list when the Nix condition is true, otherwise `[]`.
-    /// Unlike `optional`, this does not wrap the supplied list in another list.
-    #[track_caller]
-    pub(super) fn optionals(&self, condition: impl Into<NixValue>, values: NixValue) -> NixValue {
-        self.lib("optionals", [condition.into(), values])
-    }
-
-    /// Keep symbolic text when the Nix condition is true, otherwise an empty string.
-    /// Selected text retains its store dependencies; excluded text stays unforced.
-    #[track_caller]
-    pub(super) fn optional_text(&self, condition: impl Into<NixValue>, text: NixValue) -> NixValue {
-        self.lib("optionalString", [condition.into(), text])
-    }
-
-    /// Negate a deferred boolean; Nix checks its type and chooses the result later.
-    #[track_caller]
-    pub(super) fn not(&self, condition: impl Into<NixValue>) -> NixValue {
-        NixValue::if_else(condition, false, true)
-    }
-
-    /// Defer a conjunction of conditions using `lib.all`, stopping at the first false.
-    /// An empty collection is true, matching the Nix library's behavior.
-    #[track_caller]
-    pub(super) fn all(&self, conditions: impl IntoIterator<Item = NixValue>) -> NixValue {
-        self.lib(
-            "all",
-            [NixValue::function(|x| x), NixValue::list(conditions)],
-        )
-    }
-
-    /// Flatten one level of deferred lists in order, for composing dependency groups.
-    #[track_caller]
-    pub(super) fn lists(&self, lists: impl IntoIterator<Item = NixValue>) -> NixValue {
-        self.lib("concatLists", [NixValue::list(lists)])
     }
 }
 

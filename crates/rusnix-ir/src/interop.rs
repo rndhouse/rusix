@@ -6,6 +6,10 @@
 use crate::{ConfigValue, Node, Origin, ValidationError, ValueKind, sealed};
 use std::path::{Component, PathBuf};
 
+mod library;
+
+pub use library::NixLibrary;
+
 /// Literal attribute segments for an opaque lookup or symbolic option dependency.
 /// Segment contents are data, not Nix source; use [`Self::segments`] for names with dots.
 #[derive(Clone, Debug)]
@@ -207,6 +211,7 @@ impl ConfigValue for PackageRef {
 /// Records/lists may mix Rust literals, package references and symbolic option
 /// dependencies without converting them to strings. Use [`Self::to_text`] only
 /// when text coercion is intended; Nix owns object types and function schemas.
+/// `!value` negates a deferred boolean; its actual type is checked during Nix evaluation.
 ///
 /// Constructors build a graph and record Rust origins without evaluating it.
 /// `From` conversions support literals, supported [`crate::Expr`] types, handles,
@@ -440,6 +445,16 @@ impl NixValue {
             node: self.0,
             ty: std::marker::PhantomData,
         }
+    }
+}
+
+/// Negates a deferred Nix boolean, preserving its origin and checking its type in Nix.
+impl std::ops::Not for NixValue {
+    type Output = Self;
+
+    #[track_caller]
+    fn not(self) -> Self {
+        Self::if_else(self, false, true)
     }
 }
 
@@ -680,6 +695,20 @@ impl Nixpkgs {
             path: Some(AttrPath::dotted(path)),
             origin: Origin::caller(format!("nixpkgs lib function lookup {path}")),
         })
+    }
+
+    /// Use the pinned library that supplies [`Self::function`], without package-set overrides.
+    /// For a function's caller-supplied `lib`, use [`NixLibrary::from_value`] instead.
+    #[track_caller]
+    pub fn library(&self) -> NixLibrary {
+        NixLibrary::from_value(NixValue(
+            Reference {
+                source: Source::Library,
+                path: None,
+                origin: Origin::caller("nixpkgs library lookup"),
+            }
+            .node(),
+        ))
     }
 
     /// Arbitrary package-set data, without claiming a package/function category.

@@ -1007,6 +1007,16 @@ runtime traversal or whole-config handle. The [view tests](crates/rusnix-nix/tes
 exercise opaque/typed leaves, exact keys, provenance, lazy evaluation and ordinary
 Nix overrides of the same artifact; UI fixtures check the compile-time boundary.
 
+Generic package lowering can bind a small library vocabulary to the caller's
+opaque `lib` with `NixLibrary::from_value(inputs.lib.as_value())`. Its `apply`,
+`optional`, `optionals`, `optional_text`, `all` and `concat_lists` methods call
+that exact library, so caller overrides remain authoritative. For the pinned
+library used by `Nixpkgs::function`, explicitly choose `Nixpkgs::library()`.
+Boolean `!` works on `Expr<bool>` and opaque NixValue; `Expr<bool>::and` provides
+lazy conjunction independent of library overrides. Both stay deferred and
+check actual boolean types in Nix. These operations preserve child origins,
+laziness and Nix string dependency context rather than computing in Rust.
+
 For package-function adapters, `#[rusnix::args]` provides the same finite structural
 navigation over a supplied deferred argument record. Bind it with
 `args::from_value(arguments)` inside `NixValue::function_attrs`; accessors such as

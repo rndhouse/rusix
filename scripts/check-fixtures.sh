@@ -16,7 +16,7 @@ cargo test --locked -p rusnix-nix --test options --test args
 cargo test --locked -p rusnix-nix --test postgresql
 cargo test --locked -p rusnix-nix --test schema --test postgresql_schema
 cargo test --locked -p rusnix-nix --test symbolic_text
-cargo test --locked -p rusnix-nix --test structured_interop
+cargo test --locked -p rusnix-nix --test structured_interop --test library
 cargo test --locked -p rusnix-nix --test package_functions --test git
 cargo test --locked -p rusnix-nix --test typed_examples --test ui --test interop
 

@@ -547,5 +547,25 @@
       "Expr<bool>",
       "Expr<i64>"
     ]
+  },
+  {
+    "file": "boolean-negation-wrong-type.rs",
+    "code": "E0600",
+    "count": 1,
+    "source": "!Expr::int(42)",
+    "reason_tokens": [
+      "!",
+      "Expr<i64>"
+    ]
+  },
+  {
+    "file": "boolean-and-wrong-type.rs",
+    "code": "E0308",
+    "count": 1,
+    "source": "Expr::int(42)",
+    "reason_tokens": [
+      "Expr<bool>",
+      "Expr<i64>"
+    ]
   }
 ]

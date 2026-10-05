@@ -88,6 +88,35 @@ fn default_git_has_identical_derivation_and_passthru() {
     compare("default", []);
 }
 
+#[test]
+fn caller_library_all_override_does_not_change_native_boolean_decisions() {
+    // Upstream uses && for the name and linker decisions, not lib.all.
+    // These decisions must remain independent of a replacement library function.
+    let library = Nixpkgs::new().function("recursiveUpdate").apply([
+        Nixpkgs::new().value("lib"),
+        NixValue::record([(
+            "all",
+            NixValue::function(|_| NixValue::function(|_| false.into())),
+        )]),
+    ]);
+    let mut fields: Vec<_> = [
+        "svnSupport",
+        "guiSupport",
+        "sendEmailSupport",
+        "withManual",
+        "pythonSupport",
+        "withpcre2",
+    ]
+    .map(|name| (name, false.into()))
+    .into();
+    fields.push(("lib", library));
+
+    compare(
+        "caller-library-override",
+        [("features", NixValue::record(fields))],
+    );
+}
+
 fn features(fields: impl IntoIterator<Item = (&'static str, bool)>) -> NixValue {
     NixValue::record(fields.into_iter().map(|(k, v)| (k, v.into())))
 }
@@ -155,6 +184,30 @@ feature_case!(
 feature_case!(install_checks_disabled, "doInstallCheck" = false);
 
 feature_case!(install_checks_enabled, "doInstallCheck" = true);
+
+#[test]
+fn caller_supplied_optional_text_override_controls_both_factories() {
+    let library = Nixpkgs::new().function("recursiveUpdate").apply([
+        Nixpkgs::new().value("lib"),
+        NixValue::record([(
+            "optionalString",
+            NixValue::function(|condition| {
+                NixValue::function(move |text| {
+                    NixValue::if_else(
+                        condition,
+                        rusnix_ir::nix_text!("caller-{text}", text = text),
+                        "",
+                    )
+                })
+            }),
+        )]),
+    ]);
+
+    compare(
+        "caller-optional-text-override",
+        [("features", NixValue::record([("lib", library)]))],
+    );
+}
 
 #[test]
 fn darwin_intel_default() {

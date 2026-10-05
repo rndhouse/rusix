@@ -270,6 +270,7 @@ pub enum ValueKind {
 /// A typed deferred expression whose value is resolved by Nix, never read into Rust.
 /// `T` restricts available Rust operations; symbolic option references still rely
 /// on NixOS to validate their actual backend types. Child expression origins are retained.
+/// Boolean expressions support `!` and lazy [`Expr::and`], without reading a Rust value.
 ///
 /// Integer and boolean expressions cannot be interchanged:
 #[doc = concat!("```compile_fail,E0308\n", include_str!("../../../tests/fixtures/rust-type-failure.rs"), "\n```")]
@@ -349,6 +350,25 @@ impl Expr<bool> {
     #[track_caller]
     pub fn boolean(value: bool) -> Self {
         Self::new(ValueKind::Bool(value), Origin::caller("boolean literal"))
+    }
+
+    /// Deferred boolean conjunction, independent of any supplied Nix library.
+    /// Nix checks both operands as booleans and leaves the right operand unforced
+    /// when the left is false. Rust only constructs the dependency expression.
+    #[track_caller]
+    pub fn and(self, other: Self) -> Self {
+        let other = interop::NixValue::if_else(other, true, false);
+        interop::NixValue::if_else(self, other, false).into_expr()
+    }
+}
+
+/// Keeps boolean negation typed without evaluating the expression in Rust.
+impl std::ops::Not for Expr<bool> {
+    type Output = Self;
+
+    #[track_caller]
+    fn not(self) -> Self {
+        (!interop::NixValue::from(self)).into_expr()
     }
 }
 

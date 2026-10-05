@@ -730,7 +730,7 @@ fn checks() -> NixValue {
         .equals(pkgs.value("stdenv.buildPlatform"));
     let enabled = NixValue::if_else(pg.check_config(), native, false);
 
-    Nixpkgs::new().function("optional").apply([enabled, check])
+    Nixpkgs::new().library().optional(enabled, check)
 }
 
 #[rusnix::config]
