@@ -4,6 +4,9 @@ use crate::{Assignment, Config, ConfigValue, Node, Origin, ValidationError, Valu
 /// Convert a reusable value without deciding its global configuration placement.
 /// Prefer the derive for mechanical struct/unit-enum mapping; implement this
 /// trait when conversion carries domain meaning. The parent supplies placement.
+/// Ordinary `Option<T>` converts `Some(value)` normally and `None` to Nix null.
+/// Use the explicit `#[rusnix(omit_none)]` field or named-struct attribute to omit
+/// absent definitions instead; it applies only to direct Option fields and is not inherited.
 pub trait IntoRusnixValue {
     /// Consume this value into structural data or a native deferred leaf.
     /// Caller tracking propagates through tracked helpers and preserves child origins.
@@ -245,6 +248,16 @@ leaf!(
     crate::interop::PackageRef,
     crate::interop::NixValue
 );
+
+impl<T: IntoRusnixValue> IntoRusnixValue for Option<T> {
+    #[track_caller]
+    fn into_value(self) -> RusnixValue {
+        match self {
+            Some(value) => value.into_value(),
+            None => RusnixValue::leaf(crate::interop::NixValue::null()),
+        }
+    }
+}
 
 impl<T: IntoRusnixValue> IntoRusnixValue for Vec<T> {
     #[track_caller]

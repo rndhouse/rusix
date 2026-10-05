@@ -71,7 +71,12 @@ pub fn options(args: TokenStream, input: TokenStream) -> TokenStream {
 /// `IntoRusnixValue`. Names default to lowerCamelCase. Container `rename_all`
 /// accepts `lowerCamelCase` or `PascalCase`; field `rename` overrides it.
 /// Field `skip` omits a value, and `flatten` inserts a nested record at its
-/// parent's level. This conversion neither evaluates Nix nor declares a schema.
+/// parent's level. `omit_none` on a field omits `None` rather than emitting Nix
+/// null. On a named struct it applies to direct `Option<T>` fields only, without
+/// inheritance or per-field opt-outs; other fields are unchanged. It cannot be
+/// combined with `flatten` or an explicit field `skip`. Use literal `Option<T>`,
+/// `std::option::Option<T>` or `core::option::Option<T>` spelling, not a type alias.
+/// This conversion neither evaluates Nix nor declares a schema.
 #[proc_macro_derive(IntoConfig, attributes(rusnix))]
 pub fn into_config(input: TokenStream) -> TokenStream {
     expand(parse_macro_input!(input as DeriveInput), true)
@@ -168,13 +173,21 @@ impl Naming {
 
 fn expand(input: DeriveInput, rooted: bool) -> syn::Result<proc_macro2::TokenStream> {
     let mut rename_all = None;
+    let mut omit_none = None;
 
     for attr in &input.attrs {
         if attr.path().is_ident("rusnix") {
             attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("omit_none") {
+                    if omit_none.is_some() {
+                        return Err(meta.error("duplicate omit_none"));
+                    }
+                    omit_none = Some(meta.path.span());
+                    return Ok(());
+                }
                 if !meta.path.is_ident("rename_all") {
                     return Err(meta.error(
-                        "supported container mapping is rename_all; nesting defines placement",
+                        "supported container mappings are rename_all and omit_none; nesting defines placement",
                     ));
                 }
                 if rename_all.is_some() {
@@ -194,6 +207,12 @@ fn expand(input: DeriveInput, rooted: bool) -> syn::Result<proc_macro2::TokenStr
         .unwrap_or_default();
 
     if let Data::Enum(data) = &input.data {
+        if let Some(span) = omit_none {
+            return Err(syn::Error::new(
+                span,
+                "omit_none requires a named-field struct",
+            ));
+        }
         if rooted {
             return Err(syn::Error::new_spanned(
                 &input.ident,
@@ -219,6 +238,15 @@ fn expand(input: DeriveInput, rooted: bool) -> syn::Result<proc_macro2::TokenStr
         ));
     }
 
+    if let Some(span) = omit_none
+        && !matches!(data.fields, Fields::Named(_))
+    {
+        return Err(syn::Error::new(
+            span,
+            "omit_none requires a named-field struct",
+        ));
+    }
+
     let mut generics = input.generics.clone();
     let body = match &data.fields {
         Fields::Named(fields) => {
@@ -228,6 +256,7 @@ fn expand(input: DeriveInput, rooted: bool) -> syn::Result<proc_macro2::TokenStr
                 let mut rename: Option<LitStr> = None;
                 let mut skip = false;
                 let mut flatten = false;
+                let mut field_omit_none = None;
 
                 for attr in &field.attrs {
                     if !attr.path().is_ident("rusnix") {
@@ -253,9 +282,15 @@ fn expand(input: DeriveInput, rooted: bool) -> syn::Result<proc_macro2::TokenStr
                                 return Err(meta.error("duplicate flatten"));
                             }
                             flatten = true;
+                        } else if meta.path.is_ident("omit_none") {
+                            if field_omit_none.is_some() {
+                                return Err(meta.error("duplicate omit_none"));
+                            }
+                            field_omit_none = Some(meta.path.span());
                         } else {
-                            return Err(meta
-                                .error("supported field mappings are rename, skip, and flatten"));
+                            return Err(meta.error(
+                                "supported field mappings are rename, skip, flatten, and omit_none",
+                            ));
                         }
                         Ok(())
                     })?;
@@ -268,12 +303,35 @@ fn expand(input: DeriveInput, rooted: bool) -> syn::Result<proc_macro2::TokenStr
                     ));
                 }
 
+                let optional = option_inner(&field.ty);
+                if let Some(span) = field_omit_none {
+                    if optional.is_none() {
+                        return Err(syn::Error::new(
+                            span,
+                            "omit_none requires an Option<T> field",
+                        ));
+                    }
+                    if skip || flatten {
+                        return Err(syn::Error::new(
+                            span,
+                            "omit_none cannot be combined with skip or flatten",
+                        ));
+                    }
+                }
                 if skip {
                     continue;
                 }
 
+                let omit = field_omit_none.is_some() || (omit_none.is_some() && optional.is_some());
+                if omit && flatten {
+                    return Err(syn::Error::new_spanned(
+                        field,
+                        "omit_none cannot be combined with flatten",
+                    ));
+                }
+
                 let name = field.ident.as_ref().unwrap();
-                let ty = &field.ty;
+                let ty = if omit { optional.unwrap() } else { &field.ty };
                 generics
                     .make_where_clause()
                     .predicates
@@ -286,12 +344,26 @@ fn expand(input: DeriveInput, rooted: bool) -> syn::Result<proc_macro2::TokenStr
                     quote!(Some(#logical))
                 };
 
-                values.push(quote_spanned!(field.span()=>
-                    (#key, ::rusnix_ir::IntoRusnixValue::into_value(self.#name))
-                ));
+                values.push(if omit {
+                    quote_spanned!(field.span()=>
+                        if let ::core::option::Option::Some(__rusnix_value) = self.#name {
+                            __rusnix_fields.push((#key, ::rusnix_ir::IntoRusnixValue::into_value(__rusnix_value)));
+                        }
+                    )
+                } else {
+                    quote_spanned!(field.span()=>
+                        __rusnix_fields.push((#key, ::rusnix_ir::IntoRusnixValue::into_value(self.#name)));
+                    )
+                });
             }
 
-            quote!(::rusnix_ir::RusnixValue::__record(vec![#(#values),*]))
+            quote!({
+                let mut __rusnix_fields = ::std::vec::Vec::new();
+
+                #(#values)*
+
+                ::rusnix_ir::RusnixValue::__record(__rusnix_fields)
+            })
         }
         Fields::Unnamed(fields) if !rooted && fields.unnamed.len() == 1 => {
             let field = fields.unnamed.first().unwrap();
@@ -329,6 +401,39 @@ fn expand(input: DeriveInput, rooted: bool) -> syn::Result<proc_macro2::TokenStr
 
         #config_impl
     ))
+}
+
+// Attributes inspect spelling, not Rust type resolution; aliases remain explicit conversions.
+fn option_inner(ty: &syn::Type) -> Option<&syn::Type> {
+    let syn::Type::Path(ty) = ty else { return None };
+    if ty.qself.is_some() {
+        return None;
+    }
+
+    let names: Vec<_> = ty
+        .path
+        .segments
+        .iter()
+        .map(|segment| segment.ident.to_string())
+        .collect();
+    if names != ["Option"]
+        && names != ["std", "option", "Option"]
+        && names != ["core", "option", "Option"]
+    {
+        return None;
+    }
+
+    let syn::PathArguments::AngleBracketed(args) = &ty.path.segments.last()?.arguments else {
+        return None;
+    };
+    if args.args.len() != 1 {
+        return None;
+    }
+
+    match args.args.first()? {
+        syn::GenericArgument::Type(inner) => Some(inner),
+        _ => None,
+    }
 }
 
 fn enum_value(

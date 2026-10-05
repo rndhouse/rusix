@@ -22,6 +22,10 @@ mod value;
 /// container `rename_all = "PascalCase"` changes the mechanical convention.
 /// Field `rename` handles exceptions, `skip` omits a field and `flatten` inserts
 /// a nested record at its parent's level. Symbolic and opaque values stay deferred.
+/// `Option<T>` normally lowers `None` to Nix null. Explicit `#[rusnix(omit_none)]`
+/// on a field or named struct omits absent definitions; a struct setting applies
+/// only to its direct Option fields, not nested structs. There is no per-field
+/// opt-out from a struct setting; use field annotations for mixed behavior.
 ///
 /// ```
 /// use rusnix_ir::{self as rusnix, nixos::NixosModule};

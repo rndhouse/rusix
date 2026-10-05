@@ -30,7 +30,7 @@ semantic types, unrepresentable field combinations, caller contracts, and
 exhaustive model consumers. Nine single-file showcases and the multi-file
 PostgreSQL example define their own domain types and distinguish user models,
 opaque Nix objects and the generic escape hatch.
-Seven tested Nix comparisons and forty-six UI fixtures
+Seven tested Nix comparisons and fifty UI fixtures
 (including interop category safety and missing TLS keys) back their claims. The examples explain
 which guarantees are static, which require IR checks, and which remain NixOS
 checks; generic configuration/IR escape hatches remain explicit.
@@ -1098,6 +1098,11 @@ including collection values, to this boundary without reading it in Rust.
 `Nixpkgs::from_module()` selects the NixOS-supplied package set, preserving its
 configuration and overlays; these references require NixosModule lowering.
 
+
+Structural lowering keeps optional values and optional definitions distinct:
+`Option<T>` normally lowers `None` to Nix `null`; `#[rusnix(omit_none)]` on a field
+or named struct omits absent direct Option fields instead. Struct settings are
+local and are not inherited by nested structs. Empty collections are unchanged.
 
 ## PostgreSQL implementation rewrite
 

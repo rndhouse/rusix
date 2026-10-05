@@ -879,3 +879,233 @@ fn structural_to_opaque_conversion_retains_flatten_validation() {
         serde_json::json!({"host": "flattened.internal", "port": 5432})
     );
 }
+
+#[test]
+fn omit_none_is_local_and_ordinary_options_remain_nullable_values() {
+    #[derive(IntoConfig)]
+    #[rusnix(omit_none, rename_all = "PascalCase")]
+    struct Root<T> {
+        included: Option<T>,
+        omitted: Option<String>,
+        #[rusnix(rename = "enableJIT")]
+        enabled: std::option::Option<bool>,
+        nested: Nested,
+        empty: Vec<String>,
+    }
+
+    #[derive(IntoRusnixValue)]
+    struct Nested {
+        ordinary: Option<String>,
+        #[rusnix(omit_none, rename = "literal.dot")]
+        exceptional: Option<i64>,
+        #[rusnix(omit_none)]
+        absent: core::option::Option<i64>,
+        #[rusnix(omit_none)]
+        explicit_null: Option<Option<i64>>,
+    }
+
+    let conversion_line = line!() + 1;
+    let config = Root {
+        included: Some(0_i64),
+        omitted: None,
+        enabled: Some(false),
+        nested: Nested {
+            ordinary: None,
+            exceptional: Some(42),
+            absent: None,
+            explicit_null: Some(None),
+        },
+        empty: vec![],
+    }
+    .into_config();
+    let actual_conversion_line = line!() - 1;
+    assert!(actual_conversion_line > conversion_line);
+
+    let artifact = compile(&config).unwrap();
+    assert_eq!(
+        NixSession::new()
+            .unwrap()
+            .evaluate(&artifact)
+            .unwrap()
+            .value,
+        serde_json::json!({
+            "Included": 0, "enableJIT": false, "Empty": [],
+            "Nested": {"ordinary": null, "literal.dot": 42, "explicitNull": null},
+        })
+    );
+    assert_eq!(config.assignments.len(), 6);
+
+    for assignment in &config.assignments {
+        assert_eq!(assignment.origin.line, actual_conversion_line);
+        assert!(!assignment.path.contains("Omitted"));
+        assert!(!assignment.path.contains("absent"));
+    }
+    for span in &artifact.spans {
+        for origin in std::iter::once(&span.origin).chain(&span.enclosing) {
+            assert!(!origin.purpose.contains("Omitted"));
+            assert!(!origin.purpose.contains("absent"));
+        }
+    }
+}
+
+#[test]
+fn a_fully_omitted_root_has_no_definitions_or_field_source_spans() {
+    #[derive(IntoConfig)]
+    struct Root {
+        #[rusnix(omit_none)]
+        unused: Option<Expr<i64>>,
+    }
+
+    let config = Root { unused: None }.into_config();
+    assert!(config.assignments.is_empty());
+    let artifact = compile(&config).unwrap();
+    assert!(!artifact.source.contains("unused"));
+    assert!(artifact.spans.iter().all(|span| {
+        !span.origin.purpose.contains("unused")
+            && span.enclosing.iter().all(|o| !o.purpose.contains("unused"))
+    }));
+    assert_eq!(
+        NixSession::new()
+            .unwrap()
+            .evaluate(&artifact)
+            .unwrap()
+            .value,
+        serde_json::json!({})
+    );
+}
+
+#[test]
+fn emitted_optional_expressions_and_packages_keep_child_origins_and_laziness() {
+    use rusnix_ir as rusnix;
+
+    #[rusnix::config]
+    mod config {
+        use super::{Expr, PackageRef};
+
+        #[rusnix(root, omit_none)]
+        pub struct Root {
+            pub good: Option<String>,
+            pub bad: Option<Expr<i64>>,
+            pub package: Option<PackageRef>,
+        }
+    }
+
+    let operation_line = line!() + 1;
+    let bad = Expr::int(44).divide(Expr::int(0));
+    let lookup_line = line!() + 1;
+    let missing = Nixpkgs::new().get("rusnixDefinitelyMissing");
+    let artifact = compile(
+        &config::Root {
+            good: Some("only this field is selected".into()),
+            bad: Some(bad),
+            package: Some(missing.clone()),
+        }
+        .into_config(),
+    )
+    .unwrap();
+    let session = NixSession::new().unwrap();
+
+    assert_eq!(
+        session.evaluate_attribute(&artifact, "good").unwrap().value,
+        "only this field is selected"
+    );
+    let diagnostic = session.evaluate_attribute(&artifact, "bad").unwrap_err();
+    assert_eq!(diagnostic.primary.as_ref().unwrap().line, operation_line);
+    assert_eq!(diagnostic.provenance, Provenance::ErrorContext);
+    assert!(diagnostic.reason.contains("division by zero"));
+
+    let package = compile(
+        &config::Root {
+            good: None,
+            bad: None,
+            package: Some(missing),
+        }
+        .into_config(),
+    )
+    .unwrap();
+    let diagnostic = session.evaluate_interop(&package).unwrap_err();
+    assert_eq!(diagnostic.primary.as_ref().unwrap().line, lookup_line);
+    assert!(diagnostic.reason.contains("rusnixDefinitelyMissing"));
+    assert!(!diagnostic.raw_nix.is_empty());
+}
+
+#[test]
+fn omitted_definitions_keep_nixos_defaults_while_explicit_null_changes_them() {
+    use rusnix_ir as rusnix;
+
+    #[rusnix::config]
+    mod config {
+        #[rusnix(root)]
+        pub struct Root {
+            pub services: Services,
+        }
+
+        pub struct Services {
+            pub example: Example,
+        }
+
+        pub struct Example {
+            #[rusnix(omit_none)]
+            pub port: Option<i64>,
+            #[rusnix(omit_none)]
+            pub label: Option<String>,
+        }
+
+        #[rusnix(root)]
+        pub struct NullableRoot {
+            pub services: NullableServices,
+        }
+
+        pub struct NullableServices {
+            pub example: NullableExample,
+        }
+
+        pub struct NullableExample {
+            pub label: Option<String>,
+        }
+    }
+
+    let fixture = InputRef::local(
+        "omission",
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/omit-none.nix"),
+    );
+    let module = NixosModule::empty()
+        .import_ref(fixture.module("schema"))
+        .add(config::Root {
+            services: config::Services {
+                example: config::Example {
+                    port: None,
+                    label: None,
+                },
+            },
+        });
+    let session = NixSession::new().unwrap();
+    let artifact = compile_module(&module).unwrap();
+    let selection = &["services", "example"];
+    assert_eq!(
+        session
+            .evaluate_nixos(&artifact, selection, false)
+            .unwrap()
+            .value,
+        serde_json::json!({"port": 5432, "label": "fallback"})
+    );
+
+    let explicit_null = module.clone().add(config::NullableRoot {
+        services: config::NullableServices {
+            example: config::NullableExample { label: None },
+        },
+    });
+    assert_eq!(
+        session
+            .evaluate_nixos(&compile_module(&explicit_null).unwrap(), selection, false)
+            .unwrap()
+            .value,
+        serde_json::json!({"port": 5432, "label": null})
+    );
+    let invalid = module.add(Config::new().set("services.example.port", NixValue::null()));
+    let diagnostic = session
+        .evaluate_nixos(&compile_module(&invalid).unwrap(), selection, false)
+        .unwrap_err();
+    assert_eq!(diagnostic.kind, DiagnosticKind::NixosType);
+    assert!(diagnostic.reason.contains("services.example.port"));
+}

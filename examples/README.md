@@ -48,7 +48,8 @@ substantial compatibility implementation uses four files, separating the model,
 symbolic dependencies, lowering and entry point. Examples invoke no Nix evaluator
 and write no artifacts; integration tests prove the behavioral claims. There is
 no handwritten mechanical lowering in the nine small examples. PostgreSQL adds
-one semantic IntoConfig adapter for optional inputs and ownership-derived roles.
+one semantic IntoConfig adapter for ownership-derived roles and collection policy;
+optional scalar fields lower structurally with `omit_none`.
 The first six use a fictional `demo` schema, not bindings for actual NixOS
 services. Each file defines its own small types directly, including its enums,
 newtypes and policies. Small definitions repeat intentionally so an example is
@@ -148,6 +149,16 @@ convention. Raw identifiers such as `r#type` become `type`.
 | Field/variant `rename = "..."` | One exact name, overriding the convention | Identity's `name` maps to `owner` |
 | `flatten` | Place a record's fields into the containing record | typed-values and the test-only layered-validation collision |
 | `skip` | Exclude local state from conversion and trait bounds | the tested generic derive fixture |
+| `omit_none` | Omit absent direct Option fields instead of defining null | PostgreSQL input and role-clause records |
+
+`Option<T>` normally represents a Nix value: `Some(v)` lowers normally and `None`
+lowers to `null`. Explicit `#[rusnix(omit_none)]` on a field changes `None` to
+**no definition**. On a named struct it applies only to direct `Option<T>` fields;
+nested structs do not inherit it, and there is no per-field opt-out. Use field
+annotations when a record needs both meanings. Renames still apply normally.
+`omit_none` cannot be combined with flattening or an explicit field skip, and
+requires Option spelling rather than a type alias. Empty lists/maps remain real
+values; PostgreSQL explicitly chooses which empty inputs should be omitted.
 
 Unit enums use lowerCamelCase labels by default, with enum-level rename_all
 (PascalCase or lowerCamelCase) and variant-level rename for exceptions. Explicit
@@ -498,8 +509,10 @@ let module = lowering::implementation().add(postgres);
 ```
 
 The two local roots automatically lower input and implementation trees.
-The input adapter's dynamic record omits unset options and derives matching roles;
-that is semantic conversion, not repetitive field lowering. The implementation
+The input adapter derives matching roles and explicitly chooses omission for empty
+collections. Typed input and role-clause records use `#[rusnix(omit_none)]` to omit
+unset fields structurally; `Some(Clause::Preserve)` still contributes explicit null.
+The implementation
 uses a local `#[rusnix::options]` view: known booleans, strings and the port remain
 `Expr<bool>`, `Expr<String>` and `Expr<i64>` until the Nix boundary. Dynamic
 settings, packages, nullable files and final collections remain opaque NixValue.
@@ -586,7 +599,7 @@ Tests retain reviewable generated Nix/results under `target/typed-examples/` and
 Seven important Nix comparisons live in `tests/comparisons/` as executable test
 data. Backend tests import the actual Rust examples and compare
 their evaluated outputs with these modules, including native enum/assertion
-rejections. Forty-six UI fixtures back the documented invalid Rust cases through the
+rejections. Fifty UI fixtures back the documented invalid Rust cases through the
 code/span/type-label checker. They import actual example-local types and functions
 or deliberately evolve a test-local enum; the moved fixture-only SSH helper's
 contract is also checked. Two fixtures verify two independent errors each.
@@ -615,8 +628,8 @@ sum type, model-evolution matches, and their coexistence with opaque Nix objects
 
 The derive deliberately supports named structs and single-field value newtypes,
 not arbitrary Serde features. Flattening a non-record is an IR validation error.
-Option/null and dynamic maps are supported explicitly at the NixValue boundary;
-this does not add general Option/map derive semantics. Foreign Nix may still
+Ordinary Option values and explicit optional-field omission are supported by
+structural lowering; dynamic maps remain supported at the NixValue boundary. Foreign Nix may still
 force scalar heads while processing freeform option namespaces; list elements
 remain deferred. Derive
 adds no Nix forcing, and the existing selective-evaluation tests remain intact.

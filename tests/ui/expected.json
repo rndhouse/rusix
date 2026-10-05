@@ -441,5 +441,41 @@
     "reason_tokens": [
       "nested brace in nix_text placeholder"
     ]
+  },
+  {
+    "file": "omit-none-non-option.rs",
+    "code": null,
+    "count": 1,
+    "source": "#[rusnix(omit_none)]",
+    "reason_tokens": [
+      "omit_none requires an Option<T> field"
+    ]
+  },
+  {
+    "file": "omit-none-flatten.rs",
+    "code": null,
+    "count": 1,
+    "source": "#[rusnix(omit_none, flatten)]",
+    "reason_tokens": [
+      "omit_none cannot be combined with skip or flatten"
+    ]
+  },
+  {
+    "file": "omit-none-enum.rs",
+    "code": null,
+    "count": 1,
+    "source": "#[rusnix(omit_none)]",
+    "reason_tokens": [
+      "omit_none requires a named-field struct"
+    ]
+  },
+  {
+    "file": "omit-none-duplicate.rs",
+    "code": null,
+    "count": 1,
+    "source": "#[rusnix(root, omit_none, omit_none)]",
+    "reason_tokens": [
+      "duplicate omit_none"
+    ]
   }
 ]

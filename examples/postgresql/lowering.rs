@@ -6,11 +6,10 @@ use super::{
 };
 use rusnix_ir::{
     self as rusnix, Config, Expr, IntoConfig, IntoRusnixValue,
-    interop::{NixValue, Nixpkgs},
+    interop::{NixValue, Nixpkgs, PackageRef},
     nix_record as record, nix_text,
     nixos::{self, DefinitionPriority, NixosModule},
 };
-use std::collections::BTreeMap;
 
 impl Clause {
     fn value(self) -> NixValue {
@@ -28,49 +27,18 @@ impl Clause {
 impl IntoConfig for Postgresql {
     #[track_caller]
     fn into_config(self) -> Config {
-        let mut fields = BTreeMap::from([("enable", self.enable.into())]);
-
-        macro_rules! optional {
-            ($name:literal, $value:expr) => {
-                if let Some(value) = $value {
-                    fields.insert($name, value.into());
-                }
-            };
-        }
-
-        optional!("package", self.package);
-        optional!("enableJIT", self.enable_jit);
-        optional!("enableTCPIP", self.enable_tcpip);
-        optional!("checkConfig", self.check_config);
-        optional!("dataDir", self.data_dir);
-        optional!("authentication", self.authentication);
-        optional!("identMap", self.ident_map);
-        optional!("initialScript", self.initial_script);
-        optional!("recoveryConfig", self.recovery_config);
-
-        if !self.extensions.is_empty() {
-            fields.insert(
-                "extraPlugins",
-                NixValue::function(move |packages| {
-                    NixValue::list(
-                        self.extensions
-                            .into_iter()
-                            .map(|name| packages.clone().select(&name)),
-                    )
-                }),
-            );
-        }
-
-        if !self.settings.is_empty() {
-            fields.insert("settings", NixValue::record(self.settings));
-        }
-
-        if !self.initdb_args.is_empty() {
-            fields.insert(
-                "initdbArgs",
-                NixValue::list(self.initdb_args.into_iter().map(NixValue::from)),
-            );
-        }
+        // Empty collections mean no author-supplied definition here, not an empty override.
+        let extra_plugins = (!self.extensions.is_empty()).then(|| {
+            NixValue::function(move |packages| {
+                NixValue::list(
+                    self.extensions
+                        .into_iter()
+                        .map(|name| packages.clone().select(&name)),
+                )
+            })
+        });
+        let settings = (!self.settings.is_empty()).then(|| NixValue::record(self.settings));
+        let initdb_args = (!self.initdb_args.is_empty()).then_some(self.initdb_args);
 
         let mut databases = Vec::new();
         let mut roles = Vec::new();
@@ -87,15 +55,24 @@ impl IntoConfig for Postgresql {
 
         roles.extend(self.roles.into_iter().map(|role| role_value(role, false)));
 
-        if !databases.is_empty() {
-            fields.insert("ensureDatabases", NixValue::list(databases));
-        }
-
-        if !roles.is_empty() {
-            fields.insert("ensureUsers", NixValue::list(roles));
-        }
-
-        config::inputs(NixValue::record(fields)).into_config()
+        config::inputs(config::PostgresqlInput {
+            enable: self.enable,
+            package: self.package,
+            enable_jit: self.enable_jit,
+            enable_tcpip: self.enable_tcpip,
+            check_config: self.check_config,
+            data_dir: self.data_dir,
+            authentication: self.authentication,
+            ident_map: self.ident_map,
+            initial_script: self.initial_script,
+            recovery_config: self.recovery_config,
+            extra_plugins,
+            settings,
+            initdb_args,
+            ensure_databases: (!databases.is_empty()).then_some(databases),
+            ensure_users: (!roles.is_empty()).then_some(roles),
+        })
+        .into_config()
     }
 }
 
@@ -108,19 +85,16 @@ fn role_value(role: Role, owns_database: bool) -> NixValue {
 }
 
 fn role_clauses(clauses: RoleClauses) -> NixValue {
-    NixValue::record(
-        [
-            ("superuser", clauses.superuser),
-            ("createrole", clauses.createrole),
-            ("createdb", clauses.createdb),
-            ("inherit", clauses.inherit),
-            ("login", clauses.login),
-            ("replication", clauses.replication),
-            ("bypassrls", clauses.bypassrls),
-        ]
-        .into_iter()
-        .filter_map(|(name, clause)| clause.map(|clause| (name, clause.value()))),
-    )
+    // Omit absent clauses, but preserve Some(Preserve) as an explicit null value.
+    opaque(config::RoleClauseInputs {
+        superuser: clauses.superuser.map(Clause::value),
+        createrole: clauses.createrole.map(Clause::value),
+        createdb: clauses.createdb.map(Clause::value),
+        inherit: clauses.inherit.map(Clause::value),
+        login: clauses.login.map(Clause::value),
+        replication: clauses.replication.map(Clause::value),
+        bypassrls: clauses.bypassrls.map(Clause::value),
+    })
 }
 
 // NixOS path options accept strings or paths; toString preserves their context.
@@ -766,7 +740,69 @@ mod config {
     // Places the author's optional input record at the existing PostgreSQL option path.
     #[rusnix(root)]
     pub(super) struct Inputs {
-        services: Services,
+        services: InputServices,
+    }
+
+    struct InputServices {
+        postgresql: PostgresqlInput,
+    }
+
+    // Struct-level omission affects only this record's direct optional fields.
+    #[rusnix(omit_none)]
+    pub(super) struct PostgresqlInput {
+        // Always contribute enable; the remaining scalars leave upstream defaults intact when unset.
+        pub(super) enable: bool,
+        // Selects an opaque package only when the author supplies one.
+        pub(super) package: Option<PackageRef>,
+        #[rusnix(rename = "enableJIT")]
+        // Leaves the package-specific JIT default intact when unset.
+        pub(super) enable_jit: Option<bool>,
+        #[rusnix(rename = "enableTCPIP")]
+        // Contributes a TCP-listening choice only when requested.
+        pub(super) enable_tcpip: Option<bool>,
+        // Optionally overrides inclusion of the configuration check.
+        pub(super) check_config: Option<bool>,
+        // Overrides the final data-directory definition without fixing dependent paths.
+        pub(super) data_dir: Option<String>,
+        // Adds author-supplied authentication text to the normal NixOS merge.
+        pub(super) authentication: Option<String>,
+        // Defines ident-map content only when supplied.
+        pub(super) ident_map: Option<String>,
+        // Preserves the supplied SQL-file object as an opaque Nix value.
+        pub(super) initial_script: Option<NixValue>,
+        // Contributes optional recovery content rather than a null definition.
+        pub(super) recovery_config: Option<String>,
+
+        // The adapter explicitly decides whether empty collections should contribute.
+        // Carries the callback that selects extensions from the final package set.
+        pub(super) extra_plugins: Option<NixValue>,
+        // Keeps arbitrary setting keys literal inside an opaque record.
+        pub(super) settings: Option<NixValue>,
+        // An absent list preserves upstream initialization defaults.
+        pub(super) initdb_args: Option<Vec<String>>,
+        // Keeps the author-derived database provisioning order.
+        pub(super) ensure_databases: Option<Vec<NixValue>>,
+        // Includes ownership-derived roles followed by explicitly declared roles.
+        pub(super) ensure_users: Option<Vec<NixValue>>,
+    }
+
+    // The pinned role schema is finite; null inside Some remains a deliberate SQL preserve value.
+    #[rusnix(omit_none)]
+    pub(super) struct RoleClauseInputs {
+        // Contributes the requested SUPERUSER state, including explicit null to preserve it.
+        pub(super) superuser: Option<NixValue>,
+        // Contributes role-management privileges only when specified.
+        pub(super) createrole: Option<NixValue>,
+        // Contributes database-creation privileges only when specified.
+        pub(super) createdb: Option<NixValue>,
+        // Contributes privilege-inheritance behavior only when specified.
+        pub(super) inherit: Option<NixValue>,
+        // Contributes login permission only when specified.
+        pub(super) login: Option<NixValue>,
+        // Contributes replication privileges only when specified.
+        pub(super) replication: Option<NixValue>,
+        // Contributes row-security bypass behavior only when specified.
+        pub(super) bypassrls: Option<NixValue>,
     }
 
     struct Services {
@@ -784,9 +820,9 @@ mod config {
         systemd: NixValue,
     }
 
-    pub(super) fn inputs(postgresql: NixValue) -> Inputs {
+    pub(super) fn inputs(postgresql: PostgresqlInput) -> Inputs {
         Inputs {
-            services: Services { postgresql },
+            services: InputServices { postgresql },
         }
     }
 
