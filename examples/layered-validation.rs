@@ -2,31 +2,40 @@
 //! and NixOS checks the final configuration against its option declarations.
 use rusnix_ir::{self as rusnix, IntoRusnixValue};
 
-// A reusable value type; the config module supplies its placement.
+/// A reusable port-domain number; Rusnix lowers the inner u16 without checking NixOS's schema.
 #[derive(IntoRusnixValue)]
 pub struct Port(pub u16);
 
+// Automatic structural lowering supplies paths, not NixOS option declarations.
 #[rusnix::config]
 mod config {
     use super::Port;
     use rusnix_ir::nixos::NixosModule;
 
-    // These structs describe just the options this configuration uses.
+    /// Defines only this contribution's tree, not a Rust binding for all NixOS services.
     #[rusnix(root)]
     pub struct SshContribution<T> {
+        /// Places the supplied service values under the existing NixOS `services` namespace.
         pub services: Services<T>,
     }
 
+    /// Structural placement shared by valid and deliberately invalid test inputs.
     pub struct Services<T> {
+        /// NixOS's imported schema ultimately checks whatever T lowers into this option.
         pub openssh: T,
     }
 
+    // A small user-defined model of just the SSH fields used here.
     struct SshOptions {
+        // Defines the existing enable option; the example keeps the daemon disabled.
         enable: bool,
+        // Rust checks the element type; NixOS decides which lowered port values are valid.
         ports: Vec<Port>,
     }
 
     pub fn module() -> NixosModule {
+        // Each add keeps a separate contribution for NixOS merging and priorities.
+        // The import supplies real upstream option declarations without modeling their internals.
         NixosModule::empty()
             .add(SshContribution {
                 services: Services {

@@ -51,9 +51,9 @@ The first six use a fictional `demo` schema, not bindings for actual NixOS
 services. Each file defines its own small types directly, including its enums,
 newtypes and policies. Small definitions repeat intentionally so an example is
 self-contained; there is no example-types crate. The examples use direct tuple
-construction and only the derives needed for lowering. Mode keeps Clone/Copy
-where the same choice feeds several by-value consumers. A few types, fields and
-model functions remain public so integration/UI tests can import the actual
+construction and only the derives needed for lowering. Policy functions borrow
+Mode so the same choice can feed several consumers without Clone/Copy. A few
+types, fields and model functions remain public so integration/UI tests can import the actual
 example code; other declarations are private. Production validation and builders
 are deliberately omitted. Each main unwraps only compilation of its known-valid
 model, rather than introducing a separate error-handling API.
@@ -432,8 +432,9 @@ option type. No service is built or run.
 
 [postgresql.rs](postgresql.rs) replaces the configuration-generation side of the
 679-line PostgreSQL module at `8b27c1239e5c421a2bbc2c65d52e4a6fbf2ff296` (about
-210 implementation lines). It reuses upstream public option declarations and
-migration imports; it does not recreate the NixOS option schema.
+210 implementation lines). The equivalence harness pairs the generated module
+with upstream public option declarations and migration imports; the Rust
+implementation supplies replacement definitions, not the NixOS option schema.
 The top of the file shows a Rust-native PostgreSQL model and ordinary Rusnix
 usage. A private `lowering` module implements compatibility using typed symbolic
 option references and opaque nixpkgs functions; the complete rewrite stays in
@@ -480,7 +481,7 @@ let module = implementation().add(postgres);
 The two local roots automatically lower input and implementation trees.
 The input adapter's dynamic record omits unset options and derives matching roles;
 that is semantic conversion, not repetitive field lowering. The implementation
-uses a local `PostgresqlOptions` view: known booleans, strings and the port remain
+uses a local `#[rusnix::options]` view: known booleans, strings and the port remain
 `Expr<bool>`, `Expr<String>` and `Expr<i64>` until the Nix boundary. Dynamic
 settings, packages, nullable files and final collections remain opaque NixValue.
 Every dependency still resolves through OptionRef after NixOS merging; no value

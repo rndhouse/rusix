@@ -2,16 +2,21 @@
 //! Nested structs become nested Nix attributes without handwritten paths.
 use rusnix_ir::{self as rusnix, IntoConfig, IntoRusnixValue};
 
-// These are normal Rust types chosen by this configuration.
+/// An ordinary Rust domain type; its inner value lowers to a Nix string.
+/// This separates names from other strings without adding hostname validation.
 #[derive(IntoRusnixValue)]
 pub struct Hostname(pub String);
 
+/// A distinct Rust type for a listening port; its inner value lowers to an integer.
 #[derive(IntoRusnixValue)]
 pub struct Port(pub u16);
 
+/// A reusable record that can appear wherever a parent places it.
 #[derive(IntoRusnixValue)]
 pub struct Endpoint {
+    /// Requires a hostname-domain value rather than an arbitrary domain string.
     pub host: Hostname,
+    /// Requires a Port; another integer-backed domain type will not compile here.
     pub port: Port,
 }
 
@@ -20,12 +25,16 @@ pub struct Endpoint {
 mod config {
     use super::{Endpoint, Hostname, Port};
 
+    /// Places the reusable Endpoint in this configuration's attribute tree.
     #[rusnix(root)]
     pub struct Root {
+        // Introduces the fictional `demo` namespace, without changing Endpoint.
         demo: Demo,
     }
 
+    // Structural placement belongs to the parent, not to the reusable value.
     struct Demo {
+        // Produces `demo.endpoint.host` and `demo.endpoint.port`.
         endpoint: Endpoint,
     }
 
@@ -44,6 +53,7 @@ mod config {
 pub use config::model;
 
 fn main() {
+    // This prints compiler output; Nix/NixOS validates the lowered values later.
     let generated = rusnix_nix::compile(&model().into_config()).unwrap();
     println!("{}", generated.source);
 }

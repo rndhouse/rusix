@@ -6,27 +6,37 @@ use rusnix_ir::{
     nixos::NixosModule,
 };
 
-// Rust requires both credentials when this configuration chooses TLS.
+/// A model owned by this configuration; Rust requires both credentials for TLS.
 pub enum Transport {
+    /// A plain connection carries no TLS paths.
     Plain,
+    /// A TLS connection must supply both paths; this example does not inspect their files.
     Tls {
+        /// Certificate path emitted as a string, not an opaque Nix ecosystem object.
         certificate: String,
+        /// Private-key path required by the Rust alternative.
         private_key: String,
     },
 }
 
 impl IntoRusnixValue for Transport {
     fn into_value(self) -> RusnixValue {
-        // Function-local records express the two shapes chosen by this mapping.
+        // Our domain chooses these two record shapes; opaque Nix objects need no such model.
+        // The plain shape omits credential fields entirely.
         #[derive(IntoRusnixValue)]
         struct Plain {
+            // Emits the disabled-TLS flag for Transport::Plain.
             tls: bool,
         }
 
+        // The TLS shape carries the two paths required by Transport::Tls.
         #[derive(IntoRusnixValue)]
         struct Tls {
+            // Emits the enabled-TLS flag for this alternative.
             tls: bool,
+            // Preserves the concrete certificate-path string.
             certificate: String,
+            // Becomes `privateKey` under the default naming rule.
             private_key: String,
         }
 
@@ -45,22 +55,28 @@ impl IntoRusnixValue for Transport {
     }
 }
 
+// One module boundary lowers these local trees; each explicit root is a separate contribution type.
 #[rusnix::config]
 mod config {
     use super::{NixValue, PackageRef, Transport};
 
+    /// A rooted contribution for the domain model this Rust program owns.
     #[rusnix(root)]
     pub struct OwnedContribution {
+        /// Places our typed Transport at `demo`; NixOS can validate the resulting shape later.
         pub demo: Transport,
     }
 
-    // Rust describes the package list; Nix resolves the actual packages.
+    /// A separate rooted contribution for packages from the existing Nix ecosystem.
     #[rusnix(root)]
     pub struct PackageContribution {
+        // Introduces the existing NixOS environment namespace.
         environment: Environment,
     }
 
+    // Rust describes the list's category, not the packages' internal schemas.
     struct Environment {
+        // PackageRef keeps actual Nix package expressions; NixOS checks the resolved objects.
         system_packages: Vec<PackageRef>,
     }
 
@@ -72,8 +88,10 @@ mod config {
         }
     }
 
+    /// A generic output contribution used to display an opaque function result.
     #[rusnix(root)]
     pub struct FunctionResult {
+        /// Keeps the Nix-side result deferred; Rust does not infer its type or stringify it.
         pub result: NixValue,
     }
 }
@@ -82,10 +100,14 @@ use config::FunctionResult;
 pub use config::{OwnedContribution, packages};
 
 pub fn module(local: InputRef) -> NixosModule {
+    // These lookups describe existing Nix objects; Rust never loads their internals.
+    // Dotted paths select nested attributes without package-specific Rust bindings.
     let pkgs = Nixpkgs::new();
     let hello: PackageRef = pkgs.get("hello");
     let requests = pkgs.get("python312Packages.requests");
     let ssh: ModuleRef = pkgs.module("services/networking/ssh/sshd.nix");
+
+    // Nix applies the overlay; a local input can supply packages and modules too.
     let overlay: OverlayRef = local.overlay("overlays.example");
     let overlaid = pkgs.with_overlay(overlay).get("rusnixOverlayHello");
     let external = local.package("packages.example");
@@ -94,6 +116,8 @@ pub fn module(local: InputRef) -> NixosModule {
     let arbitrary_path = ["services", "rusnixExternal", "enable"].join(".");
     let arbitrary = Config::new().set(arbitrary_path, true);
 
+    // Each add remains an independent contribution, retaining NixOS merge and priority rules.
+    // Imports reuse upstream modules and retain a Rust boundary if their Nix code fails.
     NixosModule::empty()
         .add(packages(vec![hello, requests, overlaid, external]))
         .add(arbitrary)

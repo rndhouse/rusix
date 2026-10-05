@@ -6,59 +6,98 @@ use rusnix_ir::{
 };
 use std::collections::BTreeMap;
 
-// These types belong to this example; Rusnix core has no PostgreSQL model.
+/// Models role-clause intent using ordinary Rust; Rusnix core knows nothing about PostgreSQL.
 pub enum Clause {
+    /// Leave this clause unchanged on an existing role; new roles use PostgreSQL's default.
     Preserve,
+    /// Emit the positive clause in provisioning SQL, such as LOGIN.
     Enable,
+    /// Emit its negative clause, such as NOLOGIN, rather than simply omitting it.
     Disable,
 }
 
-// None leaves a definition unset; Some(Preserve) explicitly preserves a privilege.
+/// The seven role clauses supported by the pinned NixOS schema.
+/// None omits a definition; Some(Preserve) explicitly contributes null, which skips that SQL clause.
 #[derive(Default)]
 pub struct RoleClauses {
+    /// Controls superuser status through SUPERUSER or NOSUPERUSER.
     pub superuser: Option<Clause>,
+    /// Controls permission to create and manage other roles.
     pub createrole: Option<Clause>,
+    /// Controls permission to create databases.
     pub createdb: Option<Clause>,
+    /// Controls whether privileges of granted roles are inherited automatically.
     pub inherit: Option<Clause>,
+    /// Controls whether the role can log in as a database user.
     pub login: Option<Clause>,
+    /// Controls replication-role privileges.
     pub replication: Option<Clause>,
+    /// Controls whether the role bypasses row-level security policies.
     pub bypassrls: Option<Clause>,
 }
 
+/// An additional database role, independent of the owned databases listed below.
 pub struct Role {
+    /// The role ensured by startup SQL; no same-named database is implied.
     pub name: String,
+    /// Explicit changes to apply after ensuring the role exists.
     pub clauses: RoleClauses,
 }
 
-// An owned database creates the matching role; their names cannot disagree.
+/// A provisioning choice: ensure a database alone, or also ensure its matching owner role.
 pub enum Database {
+    /// Ensure this named database exists without explicitly assigning its ownership.
     Unowned(String),
-    Owned { name: String, clauses: RoleClauses },
+    /// Ensure a database and same-named owner; this shape prevents their names from diverging.
+    Owned {
+        /// One name used for both the database and the role that will own it.
+        name: String,
+        /// Role-clause changes for the generated owner role.
+        clauses: RoleClauses,
+    },
 }
 
-// None leaves an upstream default alone. Package and settings schemas stay in Nix.
+/// Rust inputs for this example's PostgreSQL component, not built-in Rusnix domain types.
+/// Unset optional fields and empty collections contribute no definitions; NixOS defaults still apply.
 #[derive(Default)]
 pub struct Postgresql {
+    /// Defines the existing NixOS enable option, gating the generated service behavior.
     pub enable: bool,
+    /// Selects an existing nixpkgs package; Rusnix keeps its version and internals opaque.
     pub package: Option<PackageRef>,
+    /// Requests the package's JIT variant; nixpkgs remains authoritative for its implementation.
     pub enable_jit: Option<bool>,
+    /// Controls the generated TCP listening-address setting.
     pub enable_tcpip: Option<bool>,
+    /// Controls inclusion of the upstream configuration-check derivation; this example builds nothing.
     pub check_config: Option<bool>,
+    /// Extension attribute paths selected from the final PostgreSQL package's package set in Nix.
     pub extensions: Vec<String>,
+    /// Overrides the data-directory definition; dependent paths follow the final NixOS value.
     pub data_dir: Option<String>,
+    /// Arbitrary setting keys with mixed literal or deferred values; Nix/PostgreSQL validate them.
     pub settings: BTreeMap<String, NixValue>,
+    /// Adds pg_hba.conf rules before upstream defaults; ordinary Nix mkForce can replace them.
     pub authentication: Option<String>,
+    /// Supplies pg_ident.conf mappings as text interpreted by PostgreSQL.
     pub ident_map: Option<String>,
+    /// Extra initdb arguments, shell-escaped by the existing Nix library.
     pub initdb_args: Vec<String>,
+    /// An opaque SQL-file path or derivation to run only when initializing the database cluster.
     pub initial_script: Option<NixValue>,
+    /// Optional recovery.conf content, retained for compatibility with the pinned module.
     pub recovery_config: Option<String>,
+    /// Ordered databases to ensure at startup; the owned alternative also generates matching roles.
     pub databases: Vec<Database>,
+    /// Additional roles to ensure after the ownership-derived roles.
     pub roles: Vec<Role>,
 }
 
-// Reuse upstream declarations, replacing only their configuration generation.
+/// Supplies replacement definitions; the compatibility harness pairs them with upstream declarations.
 pub use lowering::implementation;
 
+/// Configure an enabled server and an app database with a same-named login role.
+/// The lowering stays symbolic so ordinary NixOS modules can change its final option values.
 pub fn model() -> NixosModule {
     let postgres = Postgresql {
         enable: true,
@@ -74,6 +113,7 @@ pub fn model() -> NixosModule {
         ..Postgresql::default()
     };
 
+    // Keep the implementation and these inputs independent for NixOS merging and priorities.
     implementation().add(postgres)
 }
 
@@ -90,6 +130,7 @@ mod lowering {
 
     impl Clause {
         fn value(self) -> NixValue {
+            // null means preserve; false must instead generate an explicit NO... clause.
             match self {
                 Self::Preserve => NixValue::null(),
                 Self::Enable => true.into(),
@@ -98,6 +139,8 @@ mod lowering {
         }
     }
 
+    // This adapter has domain semantics: omit unspecified inputs and derive matching owner roles.
+    // The structural roots below determine placement under services.postgresql.
     impl IntoConfig for Postgresql {
         #[track_caller]
         fn into_config(self) -> Config {
@@ -196,7 +239,8 @@ mod lowering {
         )
     }
 
-    // These declarations name final-option dependencies, not the NixOS schema.
+    // These finite dependencies remain symbolic: accessors build config.* references,
+    // never read values into Rust. NixOS resolves them after merging, including ordinary Nix overrides.
     #[rusnix::options]
     mod options {
         use rusnix_ir::interop::NixValue;
@@ -259,6 +303,8 @@ mod lowering {
             package.select("withoutJIT"),
         );
 
+        // The upstream empty-list special case avoids calling withPackages at all.
+        // Otherwise nixpkgs resolves extensions for the selected package variant.
         NixValue::if_else(
             pg.extra_plugins().equals(NixValue::list([])),
             base.clone(),
@@ -279,6 +325,8 @@ mod lowering {
             ])
         };
 
+        // Preserve state-version defaults and lazy errors for removed versions.
+        // A later package definition can override this default without forcing those errors.
         let mut package = removed("9_5");
 
         for (state_version, candidate) in [
@@ -304,6 +352,8 @@ mod lowering {
 
     fn settings_text() -> NixValue {
         let pg = options::root().services.postgresql;
+
+        // null omits a setting; the callbacks run in Nix over the final merged settings.
         let printable = Nixpkgs::new().function("filterAttrs").apply([
             NixValue::function(|_| {
                 NixValue::function(|value| {
@@ -325,6 +375,7 @@ mod lowering {
                         ]),
                     );
 
+                    // Match upstream boolean spelling and PostgreSQL single-quote escaping.
                     let rendered = NixValue::if_else(
                         value.clone().equals(true),
                         "yes",
@@ -349,6 +400,8 @@ mod lowering {
     }
 
     fn configuration_file() -> NixValue {
+        // This opaque helper call produces a derivation, retaining store-path string context.
+        // Rust describes its inputs; nixpkgs owns file generation and nothing is built here.
         Nixpkgs::from_module()
             .package_function("writeTextDir")
             .apply(["postgresql.conf".into(), settings_text()])
@@ -428,6 +481,7 @@ mod lowering {
             NixValue::function(|user| {
                 let name = user.clone().select("name");
 
+                // Preserve leaves a clause out of ALTER ROLE; Disable emits NO plus its name.
                 let clauses = Nixpkgs::new().function("filterAttrs").apply([
                     NixValue::function(|_| {
                         NixValue::function(|value| {
@@ -504,6 +558,8 @@ mod lowering {
     fn assertions() -> NixValue {
         let pg = options::root().services.postgresql;
 
+        // Rust's owned form guarantees matching names, but ordinary Nix contributors
+        // can still violate the invariant; retain the upstream assertion for those inputs.
         Nixpkgs::new().function("map").apply([
             NixValue::function(|user| {
                 let name = user.clone().select("name");
@@ -559,6 +615,8 @@ mod lowering {
             "UMask": NixValue::if_else(group_access.clone(), "0027", "0077"),
         };
 
+        // Data paths matching the package-schema default get StateDirectory management. Other
+        // directories retain upstream ReadWritePaths behavior and ownership responsibility.
         nixos::merge([
             properties,
             record! { "ReadWritePaths": NixValue::list([data.clone()]) }
@@ -616,6 +674,7 @@ mod lowering {
             ]);
 
         let pkgs = Nixpkgs::from_module();
+        // Upstream skips executing the configuration-check derivation for cross builds.
         let native = pkgs
             .value("stdenv.hostPlatform")
             .equals(pkgs.value("stdenv.buildPlatform"));
@@ -628,6 +687,7 @@ mod lowering {
     mod config {
         use super::*;
 
+        // Places the author's optional input record at the existing PostgreSQL option path.
         #[rusnix(root)]
         pub struct Inputs {
             services: Services,
@@ -637,6 +697,7 @@ mod lowering {
             postgresql: NixValue,
         }
 
+        // A separate contribution deriving service behavior from final merged options.
         #[rusnix(root)]
         pub struct Implementation {
             assertions: NixValue,
@@ -658,6 +719,7 @@ mod lowering {
             let enabled = pg.enable();
             let guarded = |value: NixValue| value.when(enabled.clone());
 
+            // Normal rules go between the header and fallback rules; mkForce can replace all.
             let authentication = nixos::merge([
                 NixValue::from("# Generated file; do not edit!").before(),
                 NixValue::from("# default value of services.postgresql.authentication\nlocal all all              peer\nhost  all all 127.0.0.1/32 md5\nhost  all all ::1/128      md5\n").after(),
@@ -690,7 +752,8 @@ mod lowering {
         }
     }
 
-    // Reuse the upstream public schema, but replace its implementation with this contribution.
+    /// Supplies configuration-generation definitions without importing the upstream implementation.
+    /// The equivalence harness separately retains its public option declarations and migration imports.
     pub fn implementation() -> NixosModule {
         NixosModule::empty().add(config::implementation())
     }
