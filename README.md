@@ -1104,13 +1104,15 @@ Structural lowering keeps optional values and optional definitions distinct:
 or named struct omits absent direct Option fields instead. Struct settings are
 local and are not inherited by nested structs. Empty collections are unchanged.
 
-## PostgreSQL implementation rewrite
+## Complete PostgreSQL module rewrite
 
 The substantial [PostgreSQL example](examples/postgresql/main.rs) separates its
-user-defined Rust model (`model.rs`), finite symbolic dependencies (`options.rs`),
-and configuration implementation / lowering (`lowering.rs`). It rewrites the pinned
-module's configuration implementation while reusing upstream option declarations /
-public schema.
+user-defined Rust model (`model.rs`), public option schema (`schema.rs`), finite
+symbolic dependencies (`options.rs`), and configuration implementation / lowering
+(`lowering.rs`). Both sides of the pinned module are authored in Rust. The candidate
+imports no original PostgreSQL module; the equivalence harness keeps it as a reference.
+Ordinary NixOS modules use the same `services.postgresql.*` interface.
+
 Typed owned-database provisioning and three-state role clauses coexist with
 finite final-option dependencies and opaque package/build-helper calls.
 The [equivalence suite](crates/rusnix-nix/tests/postgresql.rs) compares full NixOS
@@ -1118,6 +1120,15 @@ evaluation, generated-file/check derivation recipes and string dependency contex
 including ordinary downstream overrides of the same generated artifact. It builds
 and activates nothing. See [the example notes](examples/README.md#postgresql-compatibility-rewrite)
 for coverage and limitations.
+
+Public schemas use structural `OptionDecl` trees with `NixosModule::declare`.
+`OptionType` selects and composes real `lib.types` values, including submodules,
+freeform attrsets and coercions; NixOS performs validation and merging. Defaults,
+defaultText and examples remain separate metadata. The PostgreSQL schema suite
+compares documentation and all 32 ordinary, nested and migration options, plus
+ordinary Nix consumers and invalid definitions. Declaration origins remain separate
+from configuration definitions: a foreign bad value is not blamed on schema Rust,
+while a bad schema default can identify its declaration.
 
 `NixSession::evaluate_nixos_with_driver` lets backend/test infrastructure use a
 custom semantic projection while retaining generated-module parsing and existing

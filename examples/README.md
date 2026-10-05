@@ -44,8 +44,8 @@ configuration, while keeping Nix's ecosystem and final checks underneath.
 
 The nine small showcases each use **one Rust file** for user models, structural
 placement and lightweight source generation. PostgreSQL is the exception: its
-substantial compatibility implementation uses four files, separating the model,
-symbolic dependencies, lowering and entry point. Examples invoke no Nix evaluator
+substantial complete module rewrite uses five files, separating the model, public
+schema, symbolic dependencies, lowering and entry point. Examples invoke no Nix evaluator
 and write no artifacts; integration tests prove the behavioral claims. There is
 no handwritten mechanical lowering in the nine small examples. PostgreSQL adds
 one semantic IntoConfig adapter for ownership-derived roles and collection policy;
@@ -443,19 +443,21 @@ option type. No service is built or run.
 
 ## PostgreSQL compatibility rewrite
 
-[postgresql/lowering.rs](postgresql/lowering.rs) rewrites the configuration
-implementation / lowering of the 679-line PostgreSQL module at
-`8b27c1239e5c421a2bbc2c65d52e4a6fbf2ff296` (about 210 implementation lines). The equivalence harness pairs the generated module
-with upstream option declarations / public schema and migration imports. The Rust
-rewrite supplies the configuration implementation / lowering; it does not rewrite
-the public schema.
+[The PostgreSQL example](postgresql/main.rs) replaces the complete 679-line module
+at `8b27c1239e5c421a2bbc2c65d52e4a6fbf2ff296`: both **option declarations / public
+schema** and **configuration implementation / lowering** are authored in Rust.
+The candidate imports no original PostgreSQL module; tests retain it only as the
+reference. The Rust-native model remains an optional surface: ordinary Nix modules
+can configure the same `services.postgresql.*` interface.
 
 - [model.rs](postgresql/model.rs) contains ordinary Rust domain types and `model()`,
   which returns a PostgreSQL component without depending on lowering.
+- [schema.rs](postgresql/schema.rs) supplies public declarations, documentation,
+  nested/freeform types and migration helpers using real NixOS machinery.
 - [options.rs](postgresql/options.rs) lists finite dependencies on final merged
   NixOS values, including state version and Unix IDs.
 - [lowering.rs](postgresql/lowering.rs) implements PostgreSQL compatibility policy.
-- [main.rs](postgresql/main.rs) composes the implementation and model as independent
+- [main.rs](postgresql/main.rs) composes schema, implementation and model as independent
   contributions and prints generated Nix.
 
 Generic currying (`.apply`),
@@ -505,7 +507,7 @@ let postgres = Postgresql {
     }],
     ..Postgresql::default()
 };
-let module = lowering::implementation().add(postgres);
+let module = schema::module().module(lowering::implementation()).add(postgres);
 ```
 
 The two local roots automatically lower input and implementation trees.
@@ -527,12 +529,26 @@ Nix operations. Text templates contain shell/SQL/configuration data, not Nix syn
 
 [The integration suite](../crates/rusnix-nix/tests/postgresql.rs) evaluates the full
 pinned NixOS module set twice: once with upstream PostgreSQL, once replacing that
-import slot with upstream declarations plus the generated Rust implementation.
+import slot with the complete generated Rust module, including declarations.
 It compares settings, authentication/ident files, generated-file derivation
 recipes, service scripts and unit text, environment, hardening, directories,
 Unix accounts, package identities and check recipes. Store paths and Nix string
 contexts are compared exactly. Only the set-like pathsToLink list is sorted;
 SQL, package, argument and executable-string ordering remain significant.
+
+[Schema tests](../crates/rusnix-nix/tests/postgresql_schema.rs) compare all 29 ordinary
+and nested declarations plus three migration options: type names/descriptions,
+actual defaults, defaultText, examples and public documentation. They also compare
+valid/invalid ordinary Nix inputs, coercions, freeform values, list/attrset merges,
+read-only enforcement, aliases and defaults across state versions and JIT choices.
+Foreign invalid definitions keep their Nix origin; schema defaults and symbolic
+operations retain Rust provenance. No PostgreSQL outputs are built or run.
+
+Schemas reuse `#[rusnix::config]` for structural placement, but compose through
+`NixosModule::declare`, with `OptionDecl` leaves and `OptionType` composition.
+Rust types constrain authoring code; NixOS option types validate merged definitions.
+`default` defines a value, `defaultText` documents it, and implementation defaults
+remain normal NixOS contributions. The freeform settings schema stays open.
 
 The matrix covers disabled/default/custom packages, JIT, extension functions and
 list coercion, directories, all setting primitives and preload-list coercion,

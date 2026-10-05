@@ -41,6 +41,7 @@ fn nix_module(source: &str) -> NixosArtifact {
             spans: vec![],
         },
         definitions: vec![],
+        declarations: vec![],
         assertions: vec![],
         imports: vec![],
     }

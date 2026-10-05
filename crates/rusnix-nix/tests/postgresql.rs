@@ -10,6 +10,10 @@ use std::{
 #[path = "../../../examples/postgresql/main.rs"]
 mod example;
 
+fn candidate() -> rusnix_ir::nixos::NixosModule {
+    example::schema::module().module(example::lowering::implementation())
+}
+
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
@@ -25,9 +29,9 @@ fn compare(case: &str) {
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     let module = if case == "rust_model" {
-        example::lowering::implementation().add(example::model::model())
+        candidate().add(example::model::model())
     } else {
-        example::lowering::implementation()
+        candidate()
     };
 
     let artifact = compile_module(&module).unwrap();
@@ -89,7 +93,7 @@ fn recovery_link_formatting_keeps_shell_arguments_and_nix_context() {
     let session = session()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let artifact = compile_module(&example::lowering::implementation()).unwrap();
+    let artifact = compile_module(&candidate()).unwrap();
     fs::copy(
         root().join("tests/fixtures/postgresql-equivalence.nix"),
         session.root().join("postgresql-driver.nix"),
@@ -224,7 +228,7 @@ fn ordinary_nix_overrides_change_six_output_classes_without_rust_relowering() {
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
 
-    let artifact = compile_module(&example::lowering::implementation()).unwrap();
+    let artifact = compile_module(&candidate()).unwrap();
     let original_source = artifact.module.source.clone();
     fs::write(session.root().join("downstream.nix"), "{}\n").unwrap();
 
@@ -295,7 +299,7 @@ macro_rules! rejected {
         #[test]
         fn $name() {
             let session = session().lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-            let artifact = compile_module(&example::lowering::implementation()).unwrap();
+            let artifact = compile_module(&candidate()).unwrap();
             fs::write(session.root().join("downstream.nix"), "{}\n").unwrap();
 
             let upstream = evaluate(&session, &artifact, stringify!($name), false, true).unwrap_err();
@@ -330,7 +334,7 @@ fn foreign_invalid_ownership_retains_the_nixos_assertion_reason() {
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
 
-    let artifact = compile_module(&example::lowering::implementation()).unwrap();
+    let artifact = compile_module(&candidate()).unwrap();
     fs::write(session.root().join("downstream.nix"), "{}\n").unwrap();
 
     for rewritten in [false, true] {
@@ -355,7 +359,7 @@ fn provisioning_contribution_conflicts_keep_both_rust_origins() {
     fs::write(session.root().join("downstream.nix"), "{}\n").unwrap();
 
     let first_line = line!() + 1;
-    let module = example::lowering::implementation().add(Postgresql {
+    let module = candidate().add(Postgresql {
         enable: true,
         data_dir: Some("/srv/one".into()),
         ..Postgresql::default()
@@ -396,7 +400,7 @@ fn symbolic_generated_file_errors_keep_the_rust_operation_origin() {
     fs::write(session.root().join("downstream.nix"), "{}\n").unwrap();
     let operation_line = line!() + 1;
     let failure = Expr::int(44).divide(Expr::int(0));
-    let module = example::lowering::implementation().add(Postgresql {
+    let module = candidate().add(Postgresql {
         enable: true,
         settings: std::collections::BTreeMap::from([("max_connections".into(), failure.into())]),
         ..Postgresql::default()
@@ -416,7 +420,7 @@ fn extension_lookup_failures_retain_a_rust_boundary_origin() {
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     fs::write(session.root().join("downstream.nix"), "{}\n").unwrap();
-    let module = example::lowering::implementation().add(example::model::Postgresql {
+    let module = candidate().add(example::model::Postgresql {
         enable: true,
         extensions: vec!["rusnixMissingExtension".into()],
         ..example::model::Postgresql::default()
@@ -460,7 +464,7 @@ fn typed_role_clauses_match_all_upstream_three_state_cases() {
             })
         };
 
-        let module = example::lowering::implementation().add(Postgresql {
+        let module = candidate().add(Postgresql {
             enable: true,
             roles: vec![Role {
                 name: "alice".into(),

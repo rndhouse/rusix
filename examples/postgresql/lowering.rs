@@ -1,5 +1,5 @@
 //! Configuration implementation / lowering compatible with the pinned NixOS PostgreSQL module.
-//! Final-option dependencies stay symbolic; public option declarations are still supplied upstream.
+//! Final-option dependencies stay symbolic; schema.rs separately supplies the public declarations.
 use super::{
     model::{Clause, Database, Postgresql, Role, RoleClauses},
     options,
@@ -879,7 +879,7 @@ mod config {
 }
 
 /// Supplies configuration-generation definitions without importing the upstream implementation.
-/// The equivalence harness separately retains its public option declarations and migration imports.
+/// schema.rs separately supplies the public option declarations and migration imports.
 pub(crate) fn implementation() -> NixosModule {
     NixosModule::empty().add(config::implementation())
 }

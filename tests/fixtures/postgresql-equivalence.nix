@@ -1,10 +1,7 @@
-# Compatibility harness only: real NixOS options/modules, no replacement schema.
+# Complete-module compatibility harness: upstream reference versus Rust declarations and implementation.
 { nixpkgs, generated, caseName, rewritten ? true, downstream ? {}, checkAssertions ? false, normalizeRecovery ? true }:
 let
   lib = import (nixpkgs + "/lib");
-  schema = args@{ config, lib, pkgs, ... }: {
-    inherit (import (nixpkgs + "/nixos/modules/services/databases/postgresql.nix") args) options imports;
-  };
   # The Rust example puts the recovery symlink command on one line. Normalize
   # only this shell-equivalent formatting difference before unit derivation;
   # all resulting script bytes, store references and contexts still compare.
@@ -104,7 +101,7 @@ let
     # Replace exactly the original import slot, retaining list-definition order.
     baseModules = map (module:
       if module == nixpkgs + "/nixos/modules/services/databases/postgresql.nix"
-      then if rewritten then { imports = [ schema generated ]; }
+      then if rewritten then generated
         else if normalizeRecovery then upstream else module
       else module
     ) (import (nixpkgs + "/nixos/modules/module-list.nix"));

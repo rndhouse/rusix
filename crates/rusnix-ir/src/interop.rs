@@ -608,6 +608,33 @@ impl Nixpkgs {
         )
     }
 
+    /// The complete opaque package set, for helpers accepting pkgs as an argument.
+    /// This is ecosystem access, not introspection of the final NixOS configuration.
+    #[track_caller]
+    pub fn as_value(&self) -> NixValue {
+        NixValue(
+            Reference {
+                source: self.package_source(),
+                path: None,
+                origin: Origin::caller("nixpkgs package set"),
+            }
+            .node(),
+        )
+    }
+
+    /// Opaque data from pinned nixpkgs/lib, including real NixOS option types.
+    #[track_caller]
+    pub fn lib_value(&self, path: &str) -> NixValue {
+        NixValue(
+            Reference {
+                source: Source::Library,
+                path: Some(AttrPath::dotted(path)),
+                origin: Origin::caller(format!("nixpkgs lib value lookup {path}")),
+            }
+            .node(),
+        )
+    }
+
     /// A function in the package set (e.g. writeText), including its overlays.
     /// `function` separately addresses nixpkgs/lib. No schemas are inferred.
     #[track_caller]

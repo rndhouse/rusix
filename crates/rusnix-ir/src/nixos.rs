@@ -2,11 +2,16 @@
 //!
 //! [`NixosModule`] describes definitions and imports; it does not run NixOS.
 //! [`OptionRef`] declares finite dependencies on the final merged configuration.
-//! NixOS owns option schemas, merging and actual value types.
+//! Structural [`OptionDecl`] trees author public schemas using real NixOS types.
+//! NixOS owns schema evaluation, merging and actual value checks.
 use crate::interop::AttrPath;
 use crate::interop::{ModuleRef, NixValue, Nixpkgs, PackageRef};
 use crate::{Config, ConfigValue, Expr, IntoConfig, Node, Origin, ValueKind};
 use std::marker::PhantomData;
+
+mod schema;
+
+pub use schema::{OptionDecl, OptionType};
 
 /// Construct one standard NixOS assertion record for the `assertions` option.
 /// Both the condition and message may remain symbolic, including inside Nix
@@ -168,6 +173,10 @@ pub struct Assertion {
 pub struct NixosModule {
     /// Bindings owned directly by this module, subject to its priority.
     pub config: Config,
+    /// Public option declarations, structurally placed under options rather than config.
+    pub options: Config,
+    /// Deferred modules returned by Nix helpers, such as option migration modules.
+    pub generated_imports: Vec<(NixValue, Origin)>,
     /// Pinned-tree imports, each retaining its introducing Rust operation.
     pub imports: Vec<Import>,
     /// Assertion contributions, merged into NixOS's ordinary assertion list.
@@ -217,6 +226,8 @@ impl NixosModule {
     pub fn new(config: Config) -> Self {
         Self {
             config,
+            options: Config::new(),
+            generated_imports: vec![],
             imports: vec![],
             assertions: vec![],
             modules: vec![],
@@ -277,6 +288,47 @@ impl NixosModule {
             origin: Origin::caller(format!("import {path}")),
             path,
         });
+        self
+    }
+
+    /// Add a structural public option schema as an independent module contribution.
+    /// Leaves should be OptionDecl values. NixOS validates declarations and controls
+    /// their type/merge behavior; ordinary Rust field types do not replace that schema.
+    ///
+    /// ```
+    /// use rusnix_ir::{self as rusnix, nixos::{NixosModule, OptionDecl, OptionType}};
+    ///
+    /// #[rusnix::config]
+    /// mod schema {
+    ///     use rusnix_ir::nixos::OptionDecl;
+    ///
+    ///     #[rusnix(root)]
+    ///     pub struct Root { pub services: Services }
+    ///
+    ///     pub struct Services { pub example: OptionDecl }
+    /// }
+    /// let module = NixosModule::empty().declare(schema::Root {
+    ///     services: schema::Services {
+    ///         example: OptionDecl::new(OptionType::named("bool"))
+    ///             .default(false).description("Enable the example service."),
+    ///     },
+    /// });
+    /// ```
+    #[track_caller]
+    pub fn declare<T: IntoConfig>(mut self, schema: T) -> Self {
+        let mut child = Self::empty();
+        child.options = schema.into_config();
+        self.modules.push(child);
+        self
+    }
+
+    /// Import an opaque module returned by a Nix function, without a source file handle.
+    /// Values remain deferred; NixOS checks module structure. Import provenance is
+    /// distinct from any ordinary Nix definitions that use the declared interface.
+    #[track_caller]
+    pub fn import_value(mut self, module: NixValue) -> Self {
+        let origin = Origin::caller("import generated NixOS module");
+        self.generated_imports.push((module, origin));
         self
     }
 

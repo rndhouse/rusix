@@ -8,7 +8,7 @@ use crate::{
     lower_value, render,
     render::quote,
 };
-use rusnix_ir::{Origin, nixos::NixosModule};
+use rusnix_ir::{ConfigValue, Origin, nixos::NixosModule};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{fs, path::Path, sync::OnceLock};
@@ -55,6 +55,9 @@ pub struct NixosArtifact {
     pub module: Generated,
     /// Independent definitions, retaining separate origins for multi-definition diagnostics.
     pub definitions: Vec<Boundary>,
+    /// Declaration origins, kept separate so invalid foreign definitions are not blamed on schema Rust.
+    #[serde(default)]
+    pub declarations: Vec<Boundary>,
     /// Assertion markers used to recover Rust operations from failed messages.
     pub assertions: Vec<Boundary>,
     /// Boundaries for external module failures that cannot identify an inner Rust expression.
@@ -86,6 +89,11 @@ pub fn compile_module(module: &NixosModule) -> Result<NixosArtifact, Box<Diagnos
 fn lower_module(module: &NixosModule) -> Result<(NixExpr, NixosArtifact), Box<Diagnostic>> {
     module
         .config
+        .validate()
+        .map_err(|error| Diagnostic::validation(error.origin, error.message))?;
+
+    module
+        .options
         .validate()
         .map_err(|error| Diagnostic::validation(error.origin, error.message))?;
 
@@ -123,6 +131,40 @@ fn lower_module(module: &NixosModule) -> Result<(NixExpr, NixosArtifact), Box<Di
             .validate()
             .map_err(|e| Diagnostic::validation(e.origin, e.message))?;
         imports.push(crate::interop::module(module_ref.reference(), origin));
+    }
+
+    let generated_imports: Vec<_> = module
+        .generated_imports
+        .iter()
+        .map(|(value, origin)| (value.clone().into_node(origin.clone()), origin))
+        .collect();
+
+    for ((value, origin), (handle, _)) in generated_imports.iter().zip(&module.generated_imports) {
+        rusnix_ir::Config::new()
+            .set("module", handle.clone())
+            .validate()
+            .map_err(|error| Diagnostic::validation(error.origin, error.message))?;
+        imports.push(NixExpr::attributed(
+            NixKind::Group(Box::new(lower_value(value))),
+            (*origin).clone(),
+        ));
+    }
+
+    for declaration in &module.options.assignments {
+        let body = attrs(vec![
+            (
+                "_file",
+                string(format!("rusnix-schema:{}", declaration.origin.id)),
+            ),
+            (
+                "options",
+                NixExpr::plain(NixKind::AttrSet(vec![(
+                    declaration.path_segments().to_vec(),
+                    lower_value(&declaration.value),
+                )])),
+            ),
+        ]);
+        imports.push(NixExpr::attributed(body.kind, declaration.origin.clone()));
     }
 
     for assignment in &module.config.assignments {
@@ -200,26 +242,23 @@ fn lower_module(module: &NixosModule) -> Result<(NixExpr, NixosArtifact), Box<Di
     }
 
     let body = attrs(vec![("imports", NixExpr::plain(NixKind::List(imports)))]);
-    let needs_config = module
+    let scoped_values: Vec<_> = module
         .config
         .assignments
         .iter()
-        .any(|a| crate::option_reference(&a.value).is_some())
-        || module
-            .assertions
-            .iter()
-            .any(|a| crate::option_reference(&a.condition).is_some());
+        .map(|a| &a.value)
+        .chain(module.options.assignments.iter().map(|a| &a.value))
+        .chain(generated_imports.iter().map(|(v, _)| v))
+        .chain(module.assertions.iter().map(|a| &a.condition))
+        .collect();
+    let needs_config = scoped_values
+        .iter()
+        .any(|v| crate::option_reference(v).is_some());
     let kind = if needs_config {
         let mut arguments = vec!["config".into()];
-        if module
-            .config
-            .assignments
+        if scoped_values
             .iter()
-            .any(|a| crate::module_package_reference(&a.value).is_some())
-            || module
-                .assertions
-                .iter()
-                .any(|a| crate::module_package_reference(&a.condition).is_some())
+            .any(|v| crate::module_package_reference(v).is_some())
         {
             arguments.push("pkgs".into());
         }
@@ -233,6 +272,16 @@ fn lower_module(module: &NixosModule) -> Result<(NixExpr, NixosArtifact), Box<Di
         module: Generated::default(),
         definitions: module
             .config
+            .assignments
+            .iter()
+            .map(|a| Boundary {
+                path: a.path.clone(),
+                origin: a.origin.clone(),
+                file: None,
+            })
+            .collect(),
+        declarations: module
+            .options
             .assignments
             .iter()
             .map(|a| Boundary {
@@ -286,6 +335,7 @@ fn lower_module(module: &NixosModule) -> Result<(NixExpr, NixosArtifact), Box<Di
     }
     for child in children {
         artifact.definitions.extend(child.definitions);
+        artifact.declarations.extend(child.declarations);
         artifact.assertions.extend(child.assertions);
         artifact.imports.extend(child.imports);
     }
@@ -524,9 +574,17 @@ fn translate(mut diagnostic: Diagnostic, artifact: &NixosArtifact, pin_root: &Pa
         let mut origins = Vec::new();
 
         for file in &failure.files {
-            let source = if let Some(id) = file.strip_prefix("rusnix-definition:") {
-                artifact
-                    .definitions
+            // A schema default is a definition only when Nix explicitly reports
+            // our declaration identity. Never blame it for a foreign bad value.
+            let generated = file
+                .strip_prefix("rusnix-definition:")
+                .map(|id| (&artifact.definitions, id))
+                .or_else(|| {
+                    file.strip_prefix("rusnix-schema:")
+                        .map(|id| (&artifact.declarations, id))
+                });
+            let source = if let Some((boundaries, id)) = generated {
+                boundaries
                     .iter()
                     .find(|b| b.origin.id == id)
                     .map(|boundary| {
