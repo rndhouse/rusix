@@ -1,0 +1,22 @@
+error[nixos-merge]: conflicting definitions for a NixOS option
+
+  --> crates/rusnix-cli/src/merge_fixtures.rs:39:14
+   |
+ 39 |             .import(ExistingModule::NixosLabel)
+   |              ^
+   = origin: import nixos/modules/misc/label.nix
+   = imported module boundary
+   = Nix definition: nixos/modules/misc/label.nix
+
+  --> crates/rusnix-cli/src/merge_fixtures.rs:41:48
+   |
+ 41 |                 NixosModule::new(Config::new().set("system.nixos.label", "rusnix-label"))
+   |                                                ^
+   = origin: set system.nixos.label
+   = conflicting definition
+
+   = option: system.nixos.label
+   = Nix: The option `system.nixos.label' has conflicting definition values:
+     - In `nixos/modules/misc/label.nix': "24.11"
+     - In `Rust crates/rusnix-cli/src/merge_fixtures.rs:41:48': "rusnix-label"
+     Use `lib.mkForce value` or `lib.mkDefault value` to change the priority on any of these definitions.

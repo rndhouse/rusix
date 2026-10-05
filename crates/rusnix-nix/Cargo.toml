@@ -1,0 +1,51 @@
+[package]
+name = "rusnix-nix"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+rusnix-ir.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tempfile.workspace = true
+sha2.workspace = true
+flate2.workspace = true
+tar.workspace = true
+
+[[example]]
+name = "enum-option"
+path = "../../examples/enum-option.rs"
+
+[[example]]
+name = "typed-submodule"
+path = "../../examples/typed-submodule.rs"
+
+[[example]]
+name = "invalid-states"
+path = "../../examples/invalid-states.rs"
+
+[[example]]
+name = "function-contracts"
+path = "../../examples/function-contracts.rs"
+
+[[example]]
+name = "exhaustive-match"
+path = "../../examples/exhaustive-match.rs"
+
+[[example]]
+name = "typed-values"
+path = "../../examples/typed-values.rs"
+
+[[example]]
+name = "layered-validation"
+path = "../../examples/layered-validation.rs"
+
+[[example]]
+name = "nix-interop"
+path = "../../examples/nix-interop.rs"
+
+[[example]]
+name = "symbolic-option"
+path = "../../examples/symbolic-option.rs"

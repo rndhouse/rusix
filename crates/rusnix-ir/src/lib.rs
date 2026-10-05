@@ -1,0 +1,499 @@
+//! Ordinary Rust constructs semantic configuration; no Nix syntax enters this API.
+use serde::{Deserialize, Serialize};
+use std::{marker::PhantomData, panic::Location};
+
+pub mod interop;
+
+pub mod nixos;
+
+mod value;
+
+/// Local inline authoring: structs get the existing conversion derives, with
+/// `#[rusnix(root)]` selecting rooted contributions. External types keep their
+/// own traits; no source files or imported type definitions are inspected.
+///
+/// ```
+/// use rusnix_ir::{self as rusnix, nixos::NixosModule};
+///
+/// #[rusnix::config]
+/// mod configuration {
+///     #[rusnix(root)]
+///     pub struct Machine { services: Services }
+///
+///     struct Services { example: Example }
+///
+///     struct Example { enable: bool, listen_port: u16 }
+///
+///     pub fn model() -> Machine {
+///         Machine { services: Services {
+///             example: Example { enable: true, listen_port: 8080 },
+///         } }
+///     }
+/// }
+/// let module = NixosModule::empty().add(configuration::model());
+/// ```
+///
+/// Enums still require explicit `IntoRusnixValue` mappings, just as with the
+/// fine-grained API. The module attribute does not infer an enum encoding:
+///
+/// ```compile_fail,E0277
+/// use rusnix_ir as rusnix;
+///
+/// #[rusnix::config]
+/// mod configuration {
+///     enum Mode { Server, Client }
+///
+///     #[rusnix(root)]
+///     struct Machine { mode: Mode }
+/// }
+/// ```
+pub use rusnix_derive::config;
+
+pub use rusnix_derive::{IntoConfig, IntoRusnixValue};
+pub use value::{IntoRusnixValue, RusnixValue};
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Origin {
+    pub id: String,
+    pub file: String,
+    pub line: u32,
+    pub column: u32,
+    pub purpose: String,
+}
+
+impl Origin {
+    #[track_caller]
+    pub fn caller(purpose: impl Into<String>) -> Self {
+        let location = Location::caller();
+        Self::new(location.file(), location.line(), location.column(), purpose)
+    }
+
+    pub fn new(file: &str, line: u32, column: u32, purpose: impl Into<String>) -> Self {
+        let purpose = purpose.into();
+        // Specified FNV-1a, rather than Rust's implementation-dependent DefaultHasher.
+        let key = format!("{file}\0{line}\0{column}\0{purpose}");
+        let hash = key.bytes().fold(0xcbf29ce484222325_u64, |h, b| {
+            (h ^ u64::from(b)).wrapping_mul(0x100000001b3)
+        });
+        Self {
+            id: format!("rn-{hash:016x}"),
+            file: file.into(),
+            line,
+            column,
+            purpose,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Node {
+    pub origin: Origin,
+    pub kind: ValueKind,
+}
+
+#[derive(Clone, Debug)]
+pub enum ValueKind {
+    Bool(bool),
+    Int(i64),
+    String(String),
+    List(Vec<Node>),
+    AttrSet(Vec<(String, Node)>),
+    Reference(interop::Reference),
+    Apply(Box<Node>, Box<Node>),
+    Select(Box<Node>, interop::AttrPath),
+    /// A NixOS-scoped dependency, never a concrete Rust value.
+    OptionReference(interop::AttrPath),
+    ToText(Box<Node>),
+    StringPrefix {
+        prefix: String,
+        value: Box<Node>,
+    },
+    Divide(Box<Node>, Box<Node>),
+    InRange {
+        value: Box<Node>,
+        min: i64,
+        max: i64,
+        message: String,
+    },
+}
+
+/// A typed deferred expression, not a Nix AST.
+///
+/// The broken fixture must fail with a Rust type mismatch:
+#[doc = concat!("```compile_fail,E0308\n", include_str!("../../../tests/fixtures/rust-type-failure.rs"), "\n```")]
+#[derive(Clone, Debug)]
+pub struct Expr<T> {
+    node: Node,
+    ty: PhantomData<T>,
+}
+
+impl<T> Expr<T> {
+    fn new(kind: ValueKind, origin: Origin) -> Self {
+        Self {
+            node: Node { origin, kind },
+            ty: PhantomData,
+        }
+    }
+}
+
+impl Expr<i64> {
+    /// Format a deferred integer without resolving it in Rust.
+    #[track_caller]
+    pub fn to_text(self) -> Expr<String> {
+        Expr::new(
+            ValueKind::ToText(Box::new(self.node)),
+            Origin::caller("integer to text"),
+        )
+    }
+
+    #[track_caller]
+    pub fn int(value: i64) -> Self {
+        Self::new(ValueKind::Int(value), Origin::caller("integer literal"))
+    }
+
+    #[track_caller]
+    pub fn divide(self, denominator: Self) -> Self {
+        Self::new(
+            ValueKind::Divide(Box::new(self.node), Box::new(denominator.node)),
+            Origin::caller("integer division"),
+        )
+    }
+
+    /// Defer a domain constraint to the backend, to exercise evaluator diagnostics.
+    #[track_caller]
+    pub fn in_range(self, min: i64, max: i64, message: impl Into<String>) -> Self {
+        Self::new(
+            ValueKind::InRange {
+                value: Box::new(self.node),
+                min,
+                max,
+                message: message.into(),
+            },
+            Origin::caller("integer range constraint"),
+        )
+    }
+}
+
+impl Expr<String> {
+    /// Prepend concrete text to a deferred string. Nix preserves string context.
+    #[track_caller]
+    pub fn with_prefix(self, prefix: impl Into<String>) -> Self {
+        Self::new(
+            ValueKind::StringPrefix {
+                prefix: prefix.into(),
+                value: Box::new(self.node),
+            },
+            Origin::caller("symbolic string prefix"),
+        )
+    }
+}
+
+impl Expr<bool> {
+    #[track_caller]
+    pub fn boolean(value: bool) -> Self {
+        Self::new(ValueKind::Bool(value), Origin::caller("boolean literal"))
+    }
+}
+
+// A sealed conversion keeps arbitrary syntax and incorrectly typed Expr<T> out.
+mod sealed {
+    pub trait Sealed {}
+}
+
+pub trait ConfigValue: sealed::Sealed {
+    fn into_node(self, origin: Origin) -> Node;
+}
+
+macro_rules! primitive {
+    ($ty:ty, $variant:ident) => {
+        impl sealed::Sealed for $ty {}
+
+        impl ConfigValue for $ty {
+            fn into_node(self, origin: Origin) -> Node {
+                Node {
+                    origin,
+                    kind: ValueKind::$variant(self.into()),
+                }
+            }
+        }
+    };
+}
+
+primitive!(bool, Bool);
+
+primitive!(i32, Int);
+
+primitive!(i64, Int);
+
+primitive!(u16, Int);
+
+primitive!(String, String);
+
+primitive!(&str, String);
+
+impl<T: ConfigValue> sealed::Sealed for Vec<T> {}
+
+impl<T: ConfigValue> ConfigValue for Vec<T> {
+    fn into_node(self, origin: Origin) -> Node {
+        let children = self
+            .into_iter()
+            .enumerate()
+            .map(|(i, value)| {
+                let child = Origin::new(
+                    &origin.file,
+                    origin.line,
+                    origin.column,
+                    format!("{}[{i}]", origin.purpose),
+                );
+                value.into_node(child)
+            })
+            .collect();
+        Node {
+            origin,
+            kind: ValueKind::List(children),
+        }
+    }
+}
+
+macro_rules! expression_value {
+    ($ty:ty) => {
+        impl sealed::Sealed for Expr<$ty> {}
+
+        impl ConfigValue for Expr<$ty> {
+            fn into_node(self, _: Origin) -> Node {
+                self.node
+            }
+        }
+    };
+}
+
+expression_value!(i64);
+
+expression_value!(bool);
+
+expression_value!(String);
+
+#[derive(Clone, Debug)]
+pub struct Assignment {
+    pub origin: Origin,
+    pub path: String,
+    pub value: Node,
+    segments: Vec<String>,
+}
+
+impl Assignment {
+    /// Attribute segments are data; a renamed field may contain a literal dot.
+    pub fn path_segments(&self) -> &[String] {
+        &self.segments
+    }
+}
+
+/// A contribution of bindings. Independent contributions are composed by the
+/// backend (for NixOS, with `NixosModule::add`), not flattened into this value.
+#[derive(Clone, Debug)]
+pub struct Config {
+    pub origin: Origin,
+    pub assignments: Vec<Assignment>,
+    error: Option<ValidationError>,
+}
+
+/// Lower a complete component whose placement in configuration is defined.
+/// Reusable domain values should remain values inside such components.
+///
+/// The caller location propagates to implementations and tracked lowering
+/// helpers, so bindings created during conversion point to the authoring call.
+/// Already-captured expression origins are retained. Untracked intermediate
+/// helpers stop that propagation; mark lowering helpers `#[track_caller]` too.
+pub trait IntoConfig {
+    #[track_caller]
+    fn into_config(self) -> Config;
+}
+
+/// Allow an explicit generic escape-hatch contribution alongside typed models.
+impl IntoConfig for Config {
+    fn into_config(self) -> Config {
+        self
+    }
+}
+
+impl Config {
+    #[track_caller]
+    pub fn new() -> Self {
+        Self {
+            origin: Origin::caller("configuration"),
+            assignments: Vec::new(),
+            error: None,
+        }
+    }
+
+    #[track_caller]
+    pub fn set(mut self, path: impl Into<String>, value: impl ConfigValue) -> Self {
+        let path = path.into();
+        let origin = Origin::caller(format!("set {path}"));
+        let value_origin = Origin::caller(format!("value of {path}"));
+        self.assignments.push(Assignment {
+            origin,
+            segments: path.split('.').map(str::to_owned).collect(),
+            path,
+            value: value.into_node(value_origin),
+        });
+        self
+    }
+
+    /// Reject ambiguous attribute construction before reaching the Nix backend.
+    pub fn validate(&self) -> Result<(), ValidationError> {
+        if let Some(error) = &self.error {
+            return Err(error.clone());
+        }
+        let mut seen: Vec<&[String]> = Vec::new();
+        for assignment in &self.assignments {
+            let path = &assignment.path;
+            reject_nul(path, &assignment.origin)?;
+            let parts = assignment.path_segments();
+            if parts.is_empty()
+                || parts
+                    .iter()
+                    .any(|part| part.is_empty() || part.contains('\0'))
+            {
+                return Err(ValidationError {
+                    origin: assignment.origin.clone(),
+                    message: "option paths must have nonempty dot-separated segments".into(),
+                });
+            }
+            if seen
+                .iter()
+                .any(|old| parts.starts_with(old) || old.starts_with(parts))
+            {
+                return Err(ValidationError {
+                    origin: assignment.origin.clone(),
+                    message: format!("duplicate or conflicting option path: {path}"),
+                });
+            }
+            seen.push(parts);
+            validate_value(&assignment.value)?;
+        }
+        Ok(())
+    }
+}
+
+fn reject_nul(text: &str, origin: &Origin) -> Result<(), ValidationError> {
+    if text.contains('\0') {
+        return Err(ValidationError {
+            origin: origin.clone(),
+            message: "NUL bytes are not supported in configuration strings".into(),
+        });
+    }
+    Ok(())
+}
+
+fn validate_value(node: &Node) -> Result<(), ValidationError> {
+    match &node.kind {
+        ValueKind::String(text) => reject_nul(text, &node.origin)?,
+        ValueKind::List(items) => {
+            for item in items {
+                validate_value(item)?;
+            }
+        }
+        ValueKind::AttrSet(fields) => {
+            let mut seen = std::collections::BTreeSet::new();
+            for (name, value) in fields {
+                reject_nul(name, &value.origin)?;
+                if name.is_empty() || !seen.insert(name) {
+                    return Err(ValidationError {
+                        origin: value.origin.clone(),
+                        message: format!("invalid or duplicate record field: {name}"),
+                    });
+                }
+                validate_value(value)?;
+            }
+        }
+        ValueKind::Divide(left, right) | ValueKind::Apply(left, right) => {
+            validate_value(left)?;
+            validate_value(right)?;
+        }
+        ValueKind::InRange { value, message, .. } => {
+            reject_nul(message, &node.origin)?;
+            validate_value(value)?;
+        }
+        ValueKind::Bool(_) | ValueKind::Int(_) => {}
+        ValueKind::Reference(reference) => reference.validate()?,
+        ValueKind::Select(value, path) => {
+            validate_value(value)?;
+            path.validate(&node.origin)?;
+        }
+        ValueKind::OptionReference(path) => path.validate(&node.origin)?,
+        ValueKind::ToText(value) => validate_value(value)?,
+        ValueKind::StringPrefix { prefix, value } => {
+            reject_nul(prefix, &node.origin)?;
+            validate_value(value)?;
+        }
+    }
+    Ok(())
+}
+
+impl Default for Config {
+    #[track_caller]
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ValidationError {
+    pub origin: Origin,
+    pub message: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn caller_and_ids_are_deterministic() {
+        fn make() -> Config {
+            Config::new().set("a", true)
+        }
+        let first = make();
+        let second = make();
+        assert_eq!(first.assignments[0].origin, second.assignments[0].origin);
+        assert_eq!(first.assignments[0].origin.file, file!());
+        assert_ne!(first.origin.id, first.assignments[0].origin.id);
+    }
+
+    #[test]
+    fn paths_are_validated_in_both_prefix_directions() {
+        for paths in [["a", "a"], ["a", "a.b"], ["a.b", "a"], ["a..b", "x"]] {
+            assert!(
+                Config::new()
+                    .set(paths[0], true)
+                    .set(paths[1], 1)
+                    .validate()
+                    .is_err()
+            );
+        }
+        assert!(
+            Config::new()
+                .set("a.b", true)
+                .set("a.c", vec![22])
+                .validate()
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn unsupported_nul_is_rejected_at_its_origin() {
+        let config = Config::new().set("strings", vec!["valid", "bad\0string"]);
+        let error = config.validate().unwrap_err();
+        let ValueKind::List(items) = &config.assignments[0].value.kind else {
+            panic!()
+        };
+        assert_eq!(error.origin, items[1].origin);
+        assert!(Config::new().set("bad\0path", true).validate().is_err());
+        assert!(
+            Config::new()
+                .set("number", Expr::int(1).in_range(0, 2, "bad\0message"))
+                .validate()
+                .is_err()
+        );
+    }
+}

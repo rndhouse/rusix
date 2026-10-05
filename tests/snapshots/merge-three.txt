@@ -1,0 +1,21 @@
+error[nixos-merge]: conflicting definitions for a NixOS option
+
+  --> crates/rusnix-cli/src/merge_fixtures.rs:17:36
+   |
+ 17 |     NixosModule::new(Config::new().set("services.openssh.authorizedKeysCommandUser", "sshd"))
+   |                                    ^
+   = origin: set services.openssh.authorizedKeysCommandUser
+   = conflicting definition
+
+  --> crates/rusnix-cli/src/merge_fixtures.rs:13:36
+   |
+ 13 |     NixosModule::new(Config::new().set("services.openssh.authorizedKeysCommandUser", "nobody"))
+   |                                    ^
+   = origin: set services.openssh.authorizedKeysCommandUser
+   = conflicting definition
+
+   = option: services.openssh.authorizedKeysCommandUser
+   = Nix: The option `services.openssh.authorizedKeysCommandUser' has conflicting definition values:
+     - In `Rust crates/rusnix-cli/src/merge_fixtures.rs:17:36': "sshd"
+     - In `Rust crates/rusnix-cli/src/merge_fixtures.rs:13:36': "nobody"
+     Use `lib.mkForce value` or `lib.mkDefault value` to change the priority on any of these definitions.

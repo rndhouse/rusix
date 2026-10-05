@@ -1,0 +1,241 @@
+[
+  {
+    "file": "symbolic-integer-as-boolean.rs",
+    "code": "E0308",
+    "count": 1,
+    "source": "port.into_expr()",
+    "reason_tokens": [
+      "Expr<bool>",
+      "Expr<i64>"
+    ]
+  },
+  {
+    "file": "invalid-enum.rs",
+    "code": "E0599",
+    "count": 1,
+    "source": "Mode::Proxy",
+    "reason_tokens": [
+      "Mode"
+    ]
+  },
+  {
+    "file": "enum-string.rs",
+    "code": "E0308",
+    "count": 1,
+    "source": "accepts_connections(\"server\")",
+    "reason_tokens": [
+      "Mode",
+      "str"
+    ]
+  },
+  {
+    "file": "wrong-domain-type.rs",
+    "code": "E0308",
+    "count": 2,
+    "source": "UserId(1000)",
+    "reason_tokens": [
+      "Port",
+      "UserId"
+    ]
+  },
+  {
+    "file": "wrong-host-type.rs",
+    "code": "E0308",
+    "count": 1,
+    "source": "UserName(\"admin\".into())",
+    "reason_tokens": [
+      "Hostname",
+      "UserName"
+    ]
+  },
+  {
+    "file": "invalid-state.rs",
+    "code": "E0559",
+    "count": 1,
+    "source": "certificate:",
+    "reason_tokens": [
+      "field"
+    ]
+  },
+  {
+    "file": "function-contract.rs",
+    "code": "E0308",
+    "count": 1,
+    "source": "configure_service(endpoint, true)",
+    "reason_tokens": [
+      "Transport",
+      "bool"
+    ]
+  },
+  {
+    "file": "non-exhaustive-match.rs",
+    "code": "E0004",
+    "count": 2,
+    "source": "match mode",
+    "reason_tokens": [
+      "Mode::Peer"
+    ]
+  },
+  {
+    "file": "module-as-package.rs",
+    "code": "E0308",
+    "count": 1,
+    "source": "system_packages(vec![module])",
+    "reason_tokens": [
+      "PackageRef",
+      "ModuleRef"
+    ]
+  },
+  {
+    "file": "missing-private-key.rs",
+    "code": "E0063",
+    "count": 1,
+    "source": "Transport::Tls {",
+    "reason_tokens": [
+      "private_key"
+    ]
+  },
+  {
+    "file": "openssh-ports.rs",
+    "code": "E0308",
+    "count": 1,
+    "source": "vec![\"twenty-two\"]",
+    "reason_tokens": [
+      "u16",
+      "str"
+    ]
+  },
+  {
+    "file": "derive-prefix.rs",
+    "code": null,
+    "count": 1,
+    "source": "prefix",
+    "reason_tokens": [
+      "nesting defines placement"
+    ]
+  },
+  {
+    "file": "derive-enum.rs",
+    "code": null,
+    "count": 1,
+    "source": "enum Mode",
+    "reason_tokens": [
+      "map enums explicitly",
+      "IntoRusnixValue"
+    ]
+  },
+  {
+    "file": "derive-conflicting-attributes.rs",
+    "code": null,
+    "count": 1,
+    "source": "skip, rename",
+    "reason_tokens": [
+      "cannot be combined"
+    ]
+  },
+  {
+    "file": "derive-category.rs",
+    "code": "E0308",
+    "count": 1,
+    "source": "vec![module]",
+    "reason_tokens": [
+      "PackageRef",
+      "ModuleRef"
+    ]
+  },
+  {
+    "file": "derive-invalid-rename-all.rs",
+    "code": null,
+    "count": 1,
+    "source": "\"kebab-case\"",
+    "reason_tokens": [
+      "rename_all",
+      "lowerCamelCase",
+      "PascalCase"
+    ]
+  },
+  {
+    "file": "derive-duplicate-rename-all.rs",
+    "code": null,
+    "count": 1,
+    "source": "rename_all = \"lowerCamelCase\"",
+    "reason_tokens": [
+      "duplicate rename_all"
+    ]
+  },
+  {
+    "file": "derive-newtype-rename-all.rs",
+    "code": null,
+    "count": 1,
+    "source": "\"PascalCase\"",
+    "reason_tokens": [
+      "requires named fields",
+      "transparent"
+    ]
+  },
+  {
+    "file": "derive-field-rename-all.rs",
+    "code": null,
+    "count": 1,
+    "source": "rename_all",
+    "reason_tokens": [
+      "supported field mappings"
+    ]
+  },
+  {
+    "file": "config-no-root.rs",
+    "code": null,
+    "count": 1,
+    "source": "mod config",
+    "reason_tokens": [
+      "at least one",
+      "#[rusnix(root)]"
+    ]
+  },
+  {
+    "file": "config-duplicate-root.rs",
+    "code": null,
+    "count": 1,
+    "source": "root, root",
+    "reason_tokens": [
+      "duplicate rusnix root"
+    ]
+  },
+  {
+    "file": "config-root-enum.rs",
+    "code": null,
+    "count": 1,
+    "source": "enum Machine",
+    "reason_tokens": [
+      "root requires a named struct"
+    ]
+  },
+  {
+    "file": "config-root-tuple.rs",
+    "code": null,
+    "count": 1,
+    "source": "struct Machine",
+    "reason_tokens": [
+      "root requires a named struct"
+    ]
+  },
+  {
+    "file": "config-arguments.rs",
+    "code": null,
+    "count": 1,
+    "source": "prefix",
+    "reason_tokens": [
+      "config takes no arguments"
+    ]
+  },
+  {
+    "file": "config-category.rs",
+    "code": "E0308",
+    "count": 1,
+    "source": "vec![module]",
+    "reason_tokens": [
+      "PackageRef",
+      "ModuleRef"
+    ]
+  }
+]

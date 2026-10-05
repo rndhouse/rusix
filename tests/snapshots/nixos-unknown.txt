@@ -1,0 +1,7 @@
+error[nixos-module]: NixOS rejected the generated module
+  --> crates/rusnix-cli/src/nixos_fixtures.rs:20:18
+   = origin: set services.openssh.rusnixMissing
+   = option: services.openssh.rusnixMissing
+   = Nix: The option `services.openssh.rusnixMissing' does not exist. Definition values:
+- In `Rust crates/rusnix-cli/src/nixos_fixtures.rs:20:18': true
+   = provenance: ModuleDefinition
