@@ -7,7 +7,7 @@ use std::{
 };
 
 #[allow(dead_code)]
-#[path = "../../../examples/postgresql.rs"]
+#[path = "../../../examples/postgresql/main.rs"]
 mod example;
 
 fn root() -> PathBuf {
@@ -25,9 +25,9 @@ fn compare(case: &str) {
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     let module = if case == "rust_model" {
-        example::model()
+        example::lowering::implementation().add(example::model::model())
     } else {
-        example::implementation()
+        example::lowering::implementation()
     };
 
     let artifact = compile_module(&module).unwrap();
@@ -89,7 +89,7 @@ fn recovery_link_formatting_keeps_shell_arguments_and_nix_context() {
     let session = session()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let artifact = compile_module(&example::implementation()).unwrap();
+    let artifact = compile_module(&example::lowering::implementation()).unwrap();
     fs::copy(
         root().join("tests/fixtures/postgresql-equivalence.nix"),
         session.root().join("postgresql-driver.nix"),
@@ -224,7 +224,7 @@ fn ordinary_nix_overrides_change_six_output_classes_without_rust_relowering() {
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
 
-    let artifact = compile_module(&example::implementation()).unwrap();
+    let artifact = compile_module(&example::lowering::implementation()).unwrap();
     let original_source = artifact.module.source.clone();
     fs::write(session.root().join("downstream.nix"), "{}\n").unwrap();
 
@@ -295,7 +295,7 @@ macro_rules! rejected {
         #[test]
         fn $name() {
             let session = session().lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-            let artifact = compile_module(&example::implementation()).unwrap();
+            let artifact = compile_module(&example::lowering::implementation()).unwrap();
             fs::write(session.root().join("downstream.nix"), "{}\n").unwrap();
 
             let upstream = evaluate(&session, &artifact, stringify!($name), false, true).unwrap_err();
@@ -330,7 +330,7 @@ fn foreign_invalid_ownership_retains_the_nixos_assertion_reason() {
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
 
-    let artifact = compile_module(&example::implementation()).unwrap();
+    let artifact = compile_module(&example::lowering::implementation()).unwrap();
     fs::write(session.root().join("downstream.nix"), "{}\n").unwrap();
 
     for rewritten in [false, true] {
@@ -347,7 +347,7 @@ fn foreign_invalid_ownership_retains_the_nixos_assertion_reason() {
 
 #[test]
 fn provisioning_contribution_conflicts_keep_both_rust_origins() {
-    use example::Postgresql;
+    use example::model::Postgresql;
 
     let session = session()
         .lock()
@@ -355,7 +355,7 @@ fn provisioning_contribution_conflicts_keep_both_rust_origins() {
     fs::write(session.root().join("downstream.nix"), "{}\n").unwrap();
 
     let first_line = line!() + 1;
-    let module = example::implementation().add(Postgresql {
+    let module = example::lowering::implementation().add(Postgresql {
         enable: true,
         data_dir: Some("/srv/one".into()),
         ..Postgresql::default()
@@ -387,7 +387,7 @@ fn provisioning_contribution_conflicts_keep_both_rust_origins() {
 
 #[test]
 fn symbolic_generated_file_errors_keep_the_rust_operation_origin() {
-    use example::Postgresql;
+    use example::model::Postgresql;
     use rusnix_ir::Expr;
 
     let session = session()
@@ -396,7 +396,7 @@ fn symbolic_generated_file_errors_keep_the_rust_operation_origin() {
     fs::write(session.root().join("downstream.nix"), "{}\n").unwrap();
     let operation_line = line!() + 1;
     let failure = Expr::int(44).divide(Expr::int(0));
-    let module = example::implementation().add(Postgresql {
+    let module = example::lowering::implementation().add(Postgresql {
         enable: true,
         settings: std::collections::BTreeMap::from([("max_connections".into(), failure.into())]),
         ..Postgresql::default()
@@ -416,10 +416,10 @@ fn extension_lookup_failures_retain_a_rust_boundary_origin() {
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     fs::write(session.root().join("downstream.nix"), "{}\n").unwrap();
-    let module = example::implementation().add(example::Postgresql {
+    let module = example::lowering::implementation().add(example::model::Postgresql {
         enable: true,
         extensions: vec!["rusnixMissingExtension".into()],
-        ..example::Postgresql::default()
+        ..example::model::Postgresql::default()
     });
 
     let artifact = compile_module(&module).unwrap();
@@ -431,14 +431,20 @@ fn extension_lookup_failures_retain_a_rust_boundary_origin() {
             .as_ref()
             .unwrap()
             .file
-            .ends_with("examples/postgresql.rs")
+            .ends_with("examples/postgresql/lowering.rs")
     );
+    let lookup_line = include_str!("../../../examples/postgresql/lowering.rs")
+        .lines()
+        .position(|line| line.contains("packages.clone().select(&name)"))
+        .unwrap() as u32
+        + 1;
+    assert_eq!(error.primary.as_ref().unwrap().line, lookup_line);
     assert!(!error.raw_nix.is_empty());
 }
 
 #[test]
 fn typed_role_clauses_match_all_upstream_three_state_cases() {
-    use example::{Clause, Postgresql, Role, RoleClauses};
+    use example::model::{Clause, Postgresql, Role, RoleClauses};
 
     let session = session()
         .lock()
@@ -454,7 +460,7 @@ fn typed_role_clauses_match_all_upstream_three_state_cases() {
             })
         };
 
-        let module = example::implementation().add(Postgresql {
+        let module = example::lowering::implementation().add(Postgresql {
             enable: true,
             roles: vec![Role {
                 name: "alice".into(),
@@ -485,7 +491,7 @@ fn typed_role_clauses_match_all_upstream_three_state_cases() {
 
 #[test]
 fn unset_role_clauses_and_explicit_preserve_keep_distinct_definitions() {
-    use example::{Clause, Postgresql, Role, RoleClauses};
+    use example::model::{Clause, Postgresql, Role, RoleClauses};
     use rusnix_ir::IntoConfig;
 
     let input = Postgresql {

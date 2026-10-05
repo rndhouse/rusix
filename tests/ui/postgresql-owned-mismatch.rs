@@ -1,8 +1,8 @@
-#[path = "../../examples/postgresql.rs"]
-mod example;
+#[path = "../../examples/postgresql/model.rs"]
+mod model;
 
 fn main() {
-    let _database = example::Database::Owned {
+    let _database = model::Database::Owned {
         name: "app".into(),
         owner_name: "other".into(),
         clauses: Default::default(),

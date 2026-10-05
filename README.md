@@ -27,9 +27,10 @@ fixtures remain; the separate NixOS harness uses real OpenSSH option declaration
 
 The [typed configuration showcase](examples/README.md) now demonstrates static
 semantic types, unrepresentable field combinations, caller contracts, and
-exhaustive model consumers. Ten single-file examples define their own domain types
-and distinguish user models, opaque Nix objects and the generic escape hatch.
-Seven tested Nix comparisons and thirty UI fixtures
+exhaustive model consumers. Nine single-file showcases and the multi-file
+PostgreSQL example define their own domain types and distinguish user models,
+opaque Nix objects and the generic escape hatch.
+Seven tested Nix comparisons and forty-six UI fixtures
 (including interop category safety and missing TLS keys) back their claims. The examples explain
 which guarantees are static, which require IR checks, and which remain NixOS
 checks; generic configuration/IR escape hatches remain explicit.
@@ -1100,9 +1101,11 @@ configuration and overlays; these references require NixosModule lowering.
 
 ## PostgreSQL implementation rewrite
 
-The substantial [PostgreSQL example](examples/postgresql.rs) presents a user-defined
-Rust model first, then a private compatibility-lowering module. It rewrites the pinned
-module's configuration generation while reusing its public NixOS option schema.
+The substantial [PostgreSQL example](examples/postgresql/main.rs) separates its
+user-defined Rust model (`model.rs`), finite symbolic dependencies (`options.rs`),
+and configuration implementation / lowering (`lowering.rs`). It rewrites the pinned
+module's configuration implementation while reusing upstream option declarations /
+public schema.
 Typed owned-database provisioning and three-state role clauses coexist with
 finite final-option dependencies and opaque package/build-helper calls.
 The [equivalence suite](crates/rusnix-nix/tests/postgresql.rs) compares full NixOS

@@ -40,11 +40,13 @@ configuration, while keeping Nix's ecosystem and final checks underneath.
 | [Layered validation](layered-validation.rs) | Clear division of validation responsibility |
 | [Nix interop](nix-interop.rs) | Existing ecosystem works without generated bindings |
 | [Symbolic option](symbolic-option.rs) | Explicit typed dependencies follow ordinary Nix overrides |
-| [PostgreSQL](postgresql.rs) | Real module implementation with typed provisioning and NixOS compatibility |
+| [PostgreSQL](postgresql/model.rs) | Real module implementation with typed provisioning and NixOS compatibility |
 
-Each example is **one Rust file**: user models, structural placement and lightweight
-source generation. Examples invoke no Nix evaluator and write no artifacts;
-integration tests prove the behavioral claims. There is no separate Rust support/config/main tree and
+The nine small showcases each use **one Rust file** for user models, structural
+placement and lightweight source generation. PostgreSQL is the exception: its
+substantial compatibility implementation uses four files, separating the model,
+symbolic dependencies, lowering and entry point. Examples invoke no Nix evaluator
+and write no artifacts; integration tests prove the behavioral claims. There is
 no handwritten mechanical lowering in the nine small examples. PostgreSQL adds
 one semantic IntoConfig adapter for optional inputs and ownership-derived roles.
 The first six use a fictional `demo` schema, not bindings for actual NixOS
@@ -430,15 +432,22 @@ option type. No service is built or run.
 
 ## PostgreSQL compatibility rewrite
 
-[postgresql.rs](postgresql.rs) replaces the configuration-generation side of the
-679-line PostgreSQL module at `8b27c1239e5c421a2bbc2c65d52e4a6fbf2ff296` (about
-210 implementation lines). The equivalence harness pairs the generated module
-with upstream public option declarations and migration imports; the Rust
-implementation supplies replacement definitions, not the NixOS option schema.
-The top of the file shows a Rust-native PostgreSQL model and ordinary Rusnix
-usage. A private `lowering` module implements compatibility using typed symbolic
-option references and opaque nixpkgs functions; the complete rewrite stays in
-one file. Generic currying (`.apply`),
+[postgresql/lowering.rs](postgresql/lowering.rs) rewrites the configuration
+implementation / lowering of the 679-line PostgreSQL module at
+`8b27c1239e5c421a2bbc2c65d52e4a6fbf2ff296` (about 210 implementation lines). The equivalence harness pairs the generated module
+with upstream option declarations / public schema and migration imports. The Rust
+rewrite supplies the configuration implementation / lowering; it does not rewrite
+the public schema.
+
+- [model.rs](postgresql/model.rs) contains ordinary Rust domain types and `model()`,
+  which returns a PostgreSQL component without depending on lowering.
+- [options.rs](postgresql/options.rs) lists finite dependencies on final merged
+  NixOS values, including state version and Unix IDs.
+- [lowering.rs](postgresql/lowering.rs) implements PostgreSQL compatibility policy.
+- [main.rs](postgresql/main.rs) composes the implementation and model as independent
+  contributions and prints generated Nix.
+
+Generic currying (`.apply`),
 text/record construction (`nix_text!`/`nix_record!`), and NixOS definition helpers
 (`nixos::assertion`, `.when`, `.priority`, `.before`/`.after`, `nixos::merge`)
 come from Rusnix. Assertions accept deferred conditions and messages without
@@ -457,8 +466,8 @@ The adapter's `#[rusnix::options]` module replaces all 18 manual PostgreSQL
 accessors. For example, `pg.settings.port()` is typed and
 `pg.settings.as_value()` refers to the complete open settings attrset. Accessor
 calls retain their Rust origin; ordinary Nix overrides still affect the same
-artifact. The three one-off references to state version and Unix IDs remain
-explicit OptionRef calls.
+artifact. State version and Unix IDs are declared in the same symbolic view; all final-option
+paths are collected in `options.rs`.
 
 
 `Postgresql` supplies ordinary Rust inputs. `Database::Owned { name, clauses }`
@@ -485,7 +494,7 @@ let postgres = Postgresql {
     }],
     ..Postgresql::default()
 };
-let module = implementation().add(postgres);
+let module = lowering::implementation().add(postgres);
 ```
 
 The two local roots automatically lower input and implementation trees.
@@ -575,7 +584,7 @@ Tests retain reviewable generated Nix/results under `target/typed-examples/` and
 `target/symbolic-options/`; compiler JSON goes under `target/typed-examples/ui/`.
 
 Seven important Nix comparisons live in `tests/comparisons/` as executable test
-data. Backend tests import the actual single-file Rust examples and compare
+data. Backend tests import the actual Rust examples and compare
 their evaluated outputs with these modules, including native enum/assertion
 rejections. Forty-six UI fixtures back the documented invalid Rust cases through the
 code/span/type-label checker. They import actual example-local types and functions

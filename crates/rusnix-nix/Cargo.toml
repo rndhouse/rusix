@@ -52,4 +52,4 @@ path = "../../examples/symbolic-option.rs"
 
 [[example]]
 name = "postgresql"
-path = "../../examples/postgresql.rs"
+path = "../../examples/postgresql/main.rs"

@@ -1,9 +1,9 @@
-#[path = "../../examples/postgresql.rs"]
-mod example;
+#[path = "../../examples/postgresql/model.rs"]
+mod model;
 
 fn main() {
-    let _clauses = example::RoleClauses {
-        nonexistent_privilege: Some(example::Clause::Enable),
+    let _clauses = model::RoleClauses {
+        nonexistent_privilege: Some(model::Clause::Enable),
         ..Default::default()
     };
 }
