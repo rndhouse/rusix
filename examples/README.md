@@ -40,7 +40,7 @@ configuration, while keeping Nix's ecosystem and final checks underneath.
 | [Layered validation](layered-validation.rs) | Clear division of validation responsibility |
 | [Nix interop](nix-interop.rs) | Existing ecosystem works without generated bindings |
 | [Symbolic option](symbolic-option.rs) | Explicit typed dependencies follow ordinary Nix overrides |
-| [PostgreSQL](postgresql/model.rs) | Real module implementation with typed provisioning and NixOS compatibility |
+| [PostgreSQL NixOS module](postgresql-nixos-module/README.md) | Real module implementation with typed provisioning and NixOS compatibility |
 
 The nine small showcases each use **one Rust file** for user models, structural
 placement and lightweight source generation. PostgreSQL is the exception: its
@@ -443,21 +443,21 @@ option type. No service is built or run.
 
 ## PostgreSQL compatibility rewrite
 
-[The PostgreSQL example](postgresql/main.rs) replaces the complete 679-line module
-at `8b27c1239e5c421a2bbc2c65d52e4a6fbf2ff296`: both **option declarations / public
+[The PostgreSQL NixOS module](postgresql-nixos-module/README.md) replaces the complete 679-line module
+at nixpkgs Git commit `8b27c1239e5c421a2bbc2c65d52e4a6fbf2ff296`: both **option declarations / public
 schema** and **configuration implementation / lowering** are authored in Rust.
 The candidate imports no original PostgreSQL module; tests retain it only as the
 reference. The Rust-native model remains an optional surface: ordinary Nix modules
 can configure the same `services.postgresql.*` interface.
 
-- [model.rs](postgresql/model.rs) contains ordinary Rust domain types and `model()`,
+- [model.rs](postgresql-nixos-module/model.rs) contains ordinary Rust domain types and `model()`,
   which returns a PostgreSQL component without depending on lowering.
-- [schema.rs](postgresql/schema.rs) supplies public declarations, documentation,
+- [schema.rs](postgresql-nixos-module/schema.rs) supplies public declarations, documentation,
   nested/freeform types and migration helpers using real NixOS machinery.
-- [options.rs](postgresql/options.rs) lists finite dependencies on final merged
+- [options.rs](postgresql-nixos-module/options.rs) lists finite dependencies on final merged
   NixOS values, including state version and Unix IDs.
-- [lowering.rs](postgresql/lowering.rs) implements PostgreSQL compatibility policy.
-- [main.rs](postgresql/main.rs) composes schema, implementation and model as independent
+- [lowering.rs](postgresql-nixos-module/lowering.rs) implements PostgreSQL compatibility policy.
+- [main.rs](postgresql-nixos-module/main.rs) composes schema, implementation and model as independent
   contributions and prints generated Nix.
 
 Generic currying (`.apply`),
@@ -606,7 +606,7 @@ perform evaluation, always through the isolated-store helper.
 | layered-validation | Valid upstream contribution | typed_examples.rs; invalid assemblies and schema errors |
 | nix-interop | Opaque handles, composition, explicit escape | interop.rs; real lookups, boundaries and assertions |
 | symbolic-option | Typed dependency and automatic local unit structure | symbolic_options.rs; artifact reuse, override, priority and provenance |
-| postgresql | Domain provisioning, symbolic derivation and real nixpkgs builders | postgresql.rs; full NixOS equivalence, overrides and failures |
+| postgresql-nixos-module | Domain provisioning, symbolic derivation and real nixpkgs builders | postgresql.rs; full NixOS equivalence, overrides and failures |
 
 DOCUMENTATION stays here: comparisons, expected outcomes, test links and limitations.
 Tests retain reviewable generated Nix/results under `target/typed-examples/` and

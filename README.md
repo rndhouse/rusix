@@ -1106,7 +1106,7 @@ local and are not inherited by nested structs. Empty collections are unchanged.
 
 ## Complete PostgreSQL module rewrite
 
-The substantial [PostgreSQL example](examples/postgresql/main.rs) separates its
+The substantial [PostgreSQL NixOS module](examples/postgresql-nixos-module/README.md) separates its
 user-defined Rust model (`model.rs`), public option schema (`schema.rs`), finite
 symbolic dependencies (`options.rs`), and configuration implementation / lowering
 (`lowering.rs`). Both sides of the pinned module are authored in Rust. The candidate

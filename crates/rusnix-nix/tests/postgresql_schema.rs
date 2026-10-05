@@ -7,7 +7,7 @@ use std::{
 };
 
 #[allow(dead_code)]
-#[path = "../../../examples/postgresql/main.rs"]
+#[path = "../../../examples/postgresql-nixos-module/main.rs"]
 mod example;
 
 fn root() -> PathBuf {

@@ -7,7 +7,7 @@ use std::{
 };
 
 #[allow(dead_code)]
-#[path = "../../../examples/postgresql/main.rs"]
+#[path = "../../../examples/postgresql-nixos-module/main.rs"]
 mod example;
 
 fn candidate() -> rusnix_ir::nixos::NixosModule {
@@ -435,9 +435,9 @@ fn extension_lookup_failures_retain_a_rust_boundary_origin() {
             .as_ref()
             .unwrap()
             .file
-            .ends_with("examples/postgresql/lowering.rs")
+            .ends_with("examples/postgresql-nixos-module/lowering.rs")
     );
-    let lookup_line = include_str!("../../../examples/postgresql/lowering.rs")
+    let lookup_line = include_str!("../../../examples/postgresql-nixos-module/lowering.rs")
         .lines()
         .position(|line| line.contains("packages.clone().select(&name)"))
         .unwrap() as u32

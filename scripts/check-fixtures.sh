@@ -19,7 +19,7 @@ cargo test --locked -p rusnix-nix --test symbolic_text
 cargo test --locked -p rusnix-nix --test structured_interop
 cargo test --locked -p rusnix-nix --test typed_examples --test ui --test interop
 
-for example in enum-option typed-submodule invalid-states function-contracts exhaustive-match typed-values layered-validation nix-interop symbolic-option postgresql; do
+for example in enum-option typed-submodule invalid-states function-contracts exhaustive-match typed-values layered-validation nix-interop symbolic-option postgresql-nixos-module; do
     cargo run --locked --quiet -p rusnix-nix --example "$example"
 done
 

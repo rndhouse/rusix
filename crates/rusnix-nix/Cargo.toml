@@ -51,5 +51,5 @@ name = "symbolic-option"
 path = "../../examples/symbolic-option.rs"
 
 [[example]]
-name = "postgresql"
-path = "../../examples/postgresql/main.rs"
+name = "postgresql-nixos-module"
+path = "../../examples/postgresql-nixos-module/main.rs"

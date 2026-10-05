@@ -1,4 +1,4 @@
-#[path = "../../examples/postgresql/model.rs"]
+#[path = "../../examples/postgresql-nixos-module/model.rs"]
 mod model;
 
 fn main() {
