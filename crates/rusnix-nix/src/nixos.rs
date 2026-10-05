@@ -1,4 +1,6 @@
-//! Minimal actual NixOS module evaluation, with definition-file provenance.
+//! Compile NixOS contributions and evaluate selected options with definition provenance.
+//! The pinned schemas and ordinary NixOS merge/priority rules remain authoritative.
+//! Evaluation uses [`NixSession`]'s disposable store and never builds or activates a system.
 use crate::{
     Diagnostic, DiagnosticKind, DiagnosticOrigin, Evaluation, Generated, NixSession, OriginRole,
     Provenance,
@@ -11,10 +13,17 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{fs, path::Path, sync::OnceLock};
 
+/// Revision shared by the vendored minimal schemas and full offline nixpkgs archive.
 pub const NIXPKGS_REVISION: &str = "8b27c1239e5c421a2bbc2c65d52e4a6fbf2ff296";
 
+/// Minimal module-evaluation driver for staged artifacts, not a full system evaluation.
+/// Accepts `nixpkgs`, `module`, literal `selection` segments and `checkAssertions`.
+/// Exposed for backend/CLI artifact inspection; ordinary evaluation uses [`NixSession`].
 pub const DRIVER: &str = include_str!("nixos-driver.nix");
 
+/// Render a wrapper using `nixos-driver.nix`, `module.nix` and the staged minimal tree.
+/// `selection` contains escaped literal attribute segments. This produces backend
+/// compiler output for inspection, not an authoring escape hatch for raw Nix syntax.
 pub fn evaluation_source(selection: &[&str], check_assertions: bool) -> String {
     let selection = selection
         .iter()
@@ -26,19 +35,29 @@ pub fn evaluation_source(selection: &[&str], check_assertions: bool) -> String {
     )
 }
 
+/// A generated definition, assertion or import boundary with Rust attribution.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Boundary {
+    /// Semantic option/assertion/import path used to explain this boundary.
     pub path: String,
+    /// Rust operation that introduced the definition or crossed into imported code.
     pub origin: Origin,
+    /// NixOS `_file` identity or upstream source file when available.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file: Option<String>,
 }
 
+/// Compiled NixOS module plus provenance needed after module processing.
+/// Definition boundaries supplement expression spans when NixOS reports merge or type errors.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NixosArtifact {
+    /// Generated module source and Rust source map.
     pub module: Generated,
+    /// Independent definitions, retaining separate origins for multi-definition diagnostics.
     pub definitions: Vec<Boundary>,
+    /// Assertion markers used to recover Rust operations from failed messages.
     pub assertions: Vec<Boundary>,
+    /// Boundaries for external module failures that cannot identify an inner Rust expression.
     pub imports: Vec<Boundary>,
 }
 
@@ -55,6 +74,9 @@ fn attrs(bindings: Vec<(&str, NixExpr)>) -> NixExpr {
     ))
 }
 
+/// Validate and lower a composition, preserving independent contribution boundaries.
+/// Generated definitions use ordinary NixOS imports, priorities and symbolic
+/// `config.*` dependencies. Does not evaluate Nix or check the upstream option schema.
 pub fn compile_module(module: &NixosModule) -> Result<NixosArtifact, Box<Diagnostic>> {
     let (ast, mut artifact) = lower_module(module)?;
     artifact.module = render(&ast);
@@ -331,6 +353,8 @@ impl NixSession {
     /// Run a caller-owned evaluation/projection driver against module.nix.
     /// Drivers are backend/test infrastructure, not Rust authoring expressions.
     /// The generated module is separately parsed and diagnostics use its origins.
+    /// Both minimal and full pinned inputs are staged under the isolated session;
+    /// the driver must select JSON-serializable output and is not sandboxed author code.
     pub fn evaluate_nixos_with_driver(
         &self,
         artifact: &NixosArtifact,
@@ -356,6 +380,12 @@ impl NixSession {
         })
     }
 
+    /// Evaluate literal option segments using the minimal pinned module harness.
+    /// An empty selection returns its whole `config`; serialization demands the
+    /// selected value. `check_assertions` additionally demands the assertion list.
+    /// Only imported option schemas are checked; unrelated namespaces such as
+    /// `systemd` and `environment` are freeform in this evaluation-only harness.
+    /// Use [`Self::evaluate_nixos_interop`] for the full package set/module file tree.
     pub fn evaluate_nixos(
         &self,
         artifact: &NixosArtifact,
@@ -365,6 +395,10 @@ impl NixSession {
         self.evaluate_nixos_mode(artifact, selection, check_assertions, false, false)
     }
 
+    /// Evaluate a selection with full pinned nixpkgs packages in the minimal module harness.
+    /// Stages existing module files and package inputs offline, but does not load
+    /// every NixOS module. Selection/assertion behavior matches [`Self::evaluate_nixos`].
+    /// Use [`Self::evaluate_nixos_with_driver`] for a full NixOS compatibility projection.
     pub fn evaluate_nixos_interop(
         &self,
         artifact: &NixosArtifact,

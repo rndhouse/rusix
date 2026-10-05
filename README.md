@@ -195,13 +195,19 @@ The sealed value conversion trait deliberately keeps the API small.
 | Component | Responsibility |
 | --- | --- |
 | `rusnix-ir` | Structural conversion, semantic nodes, origin capture, validation |
-| `rusnix-derive` | Small compile-time IntoConfig/IntoRusnixValue derives |
+| `rusnix-derive` | Structural authoring/reference macros, conversion derives, text interpolation |
 | `rusnix-nix/ast.rs` | Backend expression syntax, separate from semantic values |
 | `rusnix-nix/lib.rs` | Semantic lowering into the AST |
 | `rusnix-nix/render.rs` | Escaped Nix source, comments, contexts, byte source map |
 | `rusnix-nix/isolated.rs` | Sole Nix subprocess boundary and disposable store owner |
 | `rusnix-nix/diagnostic.rs` | JSON/text adaptation into owned Rusnix diagnostics |
 | `rusnix-cli` | Reviewable fixture artifacts and exit status |
+
+Build the public API documentation with `cargo doc --workspace --no-deps`;
+start at `target/doc/rusnix_ir/index.html` for authoring or
+`target/doc/rusnix_nix/index.html` for compilation and isolated evaluation.
+The library crates warn on missing public docs. Documentation verification uses
+`RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps`.
 
 Every semantic node, assignment, and configuration root has an origin. Public
 constructors and operations propagate `#[track_caller]`; primitives supplied to

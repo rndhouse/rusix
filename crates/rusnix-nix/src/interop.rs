@@ -88,7 +88,7 @@ pub(crate) fn lower_reference(reference: &Reference) -> NixExpr {
 // store/eval-store. Weak caching lets the last session remove the expanded tree.
 pub(crate) struct FullSource {
     _temporary: TempDir,
-    pub path: PathBuf,
+    pub(crate) path: PathBuf,
 }
 
 pub(crate) fn full_source() -> Result<Arc<FullSource>, Box<Diagnostic>> {
@@ -154,6 +154,9 @@ impl NixSession {
         Ok(())
     }
 
+    /// Stage pinned library/package inputs offline, then evaluate a generic JSON result.
+    /// Native objects remain in Nix; select serializable attributes when functions
+    /// or packages cannot cross JSON directly. No package outputs are built.
     pub fn evaluate_interop(&self, generated: &Generated) -> Result<Evaluation, Box<Diagnostic>> {
         self.stage_interop()?;
         self.evaluate(generated)

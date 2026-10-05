@@ -1,4 +1,6 @@
 //! Structural Rusnix lowering, not general-purpose serialization.
+#![warn(missing_docs)]
+
 use proc_macro::TokenStream;
 use quote::{quote, quote_spanned};
 use syn::{Data, DeriveInput, Fields, LitStr, parse_macro_input, parse_quote, spanned::Spanned};
@@ -10,6 +12,7 @@ mod options;
 mod text;
 
 /// Internal expansion used by the hygienic public nix_text wrapper.
+#[doc(hidden)]
 #[proc_macro]
 pub fn symbolic_text(input: TokenStream) -> TokenStream {
     text::expand(parse_macro_input!(input as text::Input))
@@ -18,6 +21,11 @@ pub fn symbolic_text(input: TokenStream) -> TokenStream {
 }
 
 /// Automatically lower local structs and unit enums in an inline config module.
+///
+/// Mark rooted contributions with `#[rusnix(root)]`; unmarked local types receive
+/// nested value conversions. External types must supply their own conversion
+/// traits. Multiple roots are allowed; external module files are not inspected.
+/// See `rusnix_ir::config` for an authoring example and supported mapping attributes.
 #[proc_macro_attribute]
 pub fn config(args: TokenStream, input: TokenStream) -> TokenStream {
     if !args.is_empty() {
@@ -35,6 +43,11 @@ pub fn config(args: TokenStream, input: TokenStream) -> TokenStream {
 }
 
 /// Declare a finite view of symbolic final NixOS option dependencies.
+///
+/// Requires an inline module with exactly one `#[rusnix(root)]` struct. Generated
+/// navigation fields build paths, and tracked leaf methods create existing
+/// `OptionRef` expressions. Values are not read into Rust; NixOS still validates
+/// option existence and actual types. See `rusnix_ir::options` for usage.
 #[proc_macro_attribute]
 pub fn options(args: TokenStream, input: TokenStream) -> TokenStream {
     if !args.is_empty() {
@@ -51,6 +64,14 @@ pub fn options(args: TokenStream, input: TokenStream) -> TokenStream {
         .into()
 }
 
+/// Lower a named-field struct into a rooted configuration contribution.
+///
+/// Also implements `IntoRusnixValue`, so the same type can be nested by a parent.
+/// Struct nesting determines attribute nesting; fields must implement
+/// `IntoRusnixValue`. Names default to lowerCamelCase. Container `rename_all`
+/// accepts `lowerCamelCase` or `PascalCase`; field `rename` overrides it.
+/// Field `skip` omits a value, and `flatten` inserts a nested record at its
+/// parent's level. This conversion neither evaluates Nix nor declares a schema.
 #[proc_macro_derive(IntoConfig, attributes(rusnix))]
 pub fn into_config(input: TokenStream) -> TokenStream {
     expand(parse_macro_input!(input as DeriveInput), true)
@@ -58,6 +79,13 @@ pub fn into_config(input: TokenStream) -> TokenStream {
         .into()
 }
 
+/// Lower a reusable nested struct, single-field newtype or unit enum.
+///
+/// Named-field structs use the same structural mapping attributes as `IntoConfig`.
+/// Newtypes delegate to their inner value. Unit enums become lowerCamelCase
+/// strings with optional variant `rename` or container `rename_all` overrides.
+/// Data-carrying enums require explicit domain conversions. Symbolic expressions
+/// and opaque Nix handles retain their Nix-side semantics inside derived values.
 #[proc_macro_derive(IntoRusnixValue, attributes(rusnix))]
 pub fn into_value(input: TokenStream) -> TokenStream {
     expand(parse_macro_input!(input as DeriveInput), false)

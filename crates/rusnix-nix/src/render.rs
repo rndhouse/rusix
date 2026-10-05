@@ -2,23 +2,34 @@ use crate::ast::{BinaryOp, Builtin, NixExpr, NixKind};
 use rusnix_ir::Origin;
 use serde::{Deserialize, Serialize};
 
+/// A half-open byte range in generated source attributed to a Rust operation.
+/// Nested ranges allow the most specific span to identify the failed expression.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SourceSpan {
+    /// Inclusive UTF-8 byte offset from the start of [`Generated::source`].
     pub start: usize,
+    /// Exclusive byte offset; the byte at `end` belongs outside this span.
     pub end: usize,
+    /// Rust origin of the expression occupying this range.
     pub origin: Origin,
     /// Static semantic ancestry, independent of which Nix contexts remain active.
     #[serde(default)]
     pub enclosing: Vec<Origin>,
 }
 
+/// Compiler output: generated Nix source plus Rust-source attribution.
+/// Persist both together to translate evaluator positions; generated source is
+/// output to inspect, not the normal configuration authoring surface.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Generated {
+    /// Complete rendered expression, with compiler-owned comments and error contexts.
     pub source: String,
+    /// Possibly overlapping expression ranges with semantic ancestry.
     pub spans: Vec<SourceSpan>,
 }
 
 impl Generated {
+    /// Find the first source-map origin with this ID; reused expressions may have several spans.
     pub fn origin(&self, id: &str) -> Option<&Origin> {
         self.spans
             .iter()
@@ -26,10 +37,14 @@ impl Generated {
             .map(|span| &span.origin)
     }
 
+    /// Find the narrowest origin at a one-based generated line and byte column.
+    /// Returns `None` for invalid positions or compiler syntax with no attribution.
     pub fn at_position(&self, line: usize, column: usize) -> Option<&Origin> {
         self.span_at_position(line, column).map(|span| &span.origin)
     }
 
+    /// Find the narrowest half-open span containing a one-based line and byte column.
+    /// This preserves ancestry when runtime error contexts have disappeared.
     pub fn span_at_position(&self, line: usize, column: usize) -> Option<&SourceSpan> {
         if line == 0 || column == 0 {
             return None;
@@ -55,6 +70,9 @@ impl Generated {
     }
 }
 
+/// Render advanced backend syntax into escaped Nix source and attribution ranges.
+/// Does not validate or evaluate the AST; ordinary callers should use [`crate::compile`]
+/// or [`crate::nixos::compile_module`] to validate semantic IR first.
 pub fn render(ast: &NixExpr) -> Generated {
     let mut generated = Generated::default();
     generated
@@ -227,7 +245,7 @@ fn emit_kind(kind: &NixKind, out: &mut Generated, depth: usize, enclosing: &[Ori
 
 /// Nix string literals, including escaping interpolation; JSON escaping alone
 /// would wrongly leave `${...}` executable and use unsupported `\u` escapes.
-pub fn quote(value: &str) -> String {
+pub(crate) fn quote(value: &str) -> String {
     let mut out = String::from("\"");
     let mut chars = value.chars().peekable();
 

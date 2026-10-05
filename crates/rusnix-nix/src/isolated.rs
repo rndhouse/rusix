@@ -1,4 +1,5 @@
-//! The ONLY Nix subprocess boundary. The caller cannot select a store or flags.
+//! Evaluation in an owned disposable store, with fixed offline subprocess options.
+//! All evaluator methods use this boundary; callers cannot select stores or flags.
 use crate::{Diagnostic, DiagnosticKind, Generated, render::quote};
 use std::{
     fs, io,
@@ -7,18 +8,28 @@ use std::{
 };
 use tempfile::TempDir;
 
+/// An evaluation workspace whose store/config/cache directories are disposable.
+/// Every Nix subprocess explicitly selects this store and strips host-selection
+/// environment settings. Evaluation is offline and import-from-derivation is
+/// disabled; no builds or activation are performed. Dropping the session removes
+/// its workspace, so persist returned diagnostics/artifacts elsewhere if needed.
 pub struct NixSession {
     disposable: TempDir,
     pub(crate) full_source: std::sync::OnceLock<std::sync::Arc<crate::interop::FullSource>>,
 }
 
+/// A successful JSON projection and its original evaluator stderr.
 #[derive(Debug)]
 pub struct Evaluation {
+    /// Selected Nix result serialized as JSON; unsupported Nix values may fail serialization.
     pub value: serde_json::Value,
+    /// Original parser/evaluator stderr, including warnings and structured trace events.
     pub raw_nix: String,
 }
 
 impl NixSession {
+    /// Create a fresh workspace and isolated directories without launching Nix.
+    /// Fails if temporary filesystem setup cannot be completed.
     pub fn new() -> io::Result<Self> {
         let disposable = tempfile::Builder::new().prefix("rusnix-").tempdir()?;
 
@@ -32,6 +43,7 @@ impl NixSession {
         })
     }
 
+    /// Directory for staging local fixtures/drivers; it is deleted when this session drops.
     pub fn root(&self) -> &Path {
         self.disposable.path()
     }
@@ -87,6 +99,7 @@ impl NixSession {
         command
     }
 
+    /// Query the installed Nix version through the same explicit disposable-store boundary.
     pub fn version(&self) -> io::Result<String> {
         let output = self.command(false).arg("--version").output()?;
         if !output.status.success() {
@@ -98,11 +111,17 @@ impl NixSession {
         Ok(String::from_utf8_lossy(&output.stdout).trim().into())
     }
 
+    /// Parse generated source, then evaluate its whole result as JSON in the isolated store.
+    /// JSON conversion demands the returned value; choose [`Self::evaluate_attribute`]
+    /// for selective evaluation or [`Self::evaluate_interop`] to stage pinned inputs.
+    /// Invalid generated syntax/static bindings are classified as compiler failures.
     pub fn evaluate(&self, generated: &Generated) -> Result<Evaluation, Box<Diagnostic>> {
         self.evaluate_selection(generated, None)
     }
 
-    /// Select one top-level attribute without demanding its siblings.
+    /// Select one literal top-level attribute without demanding its siblings.
+    /// Dots and CLI-looking names are escaped as attribute data, not path traversal
+    /// or subprocess flags. The selected value must be JSON-serializable.
     pub fn evaluate_attribute(
         &self,
         generated: &Generated,

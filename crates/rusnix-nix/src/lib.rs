@@ -1,9 +1,16 @@
 //! Lowering, code generation, isolated evaluation, and diagnostic translation.
+//!
+//! [`compile`] renders generic contributions; [`nixos::compile_module`] renders
+//! NixOS composition. [`NixSession`] evaluates artifacts using disposable stores
+//! and returns Rusnix-owned [`Diagnostic`] values. [`ast`] is an advanced backend
+//! API; Rust configuration authors normally use `rusnix-ir` instead.
+#![warn(missing_docs)]
+
 pub mod ast;
 
 pub mod diagnostic;
 
-pub mod interop;
+mod interop;
 
 pub mod isolated;
 
@@ -17,6 +24,9 @@ pub use isolated::{Evaluation, NixSession};
 pub use render::{Generated, SourceSpan, render};
 use rusnix_ir::{Config, Node, ValueKind};
 
+/// Validate and lower a generic contribution into Nix source and a source map.
+/// Does not evaluate Nix. NixOS option references and module-supplied package
+/// references require [`nixos::compile_module`] and are rejected here.
 pub fn compile(config: &Config) -> Result<Generated, Box<Diagnostic>> {
     config
         .validate()

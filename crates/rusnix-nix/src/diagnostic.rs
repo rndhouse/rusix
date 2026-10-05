@@ -1,70 +1,113 @@
+//! Rusnix-owned failure categories, causal origins and Rust-facing rendering.
+//! Consumers use these structured diagnostics rather than parsing Nix error text.
 use crate::{Generated, SourceSpan};
 use rusnix_ir::Origin;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
+/// The layer that rejected a configuration or prevented its evaluation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DiagnosticKind {
+    /// Rust compilation failure category; not produced by Nix evaluation itself.
     Rust,
+    /// A generic IR invariant failed before code generation or evaluation.
     Validation,
+    /// A deferred expression failed during ordinary Nix evaluation.
     NixEval,
+    /// NixOS module processing rejected a definition, such as an unknown option.
     NixosModule,
+    /// A value disagreed with its authoritative NixOS option type.
     NixosType,
+    /// Independent option definitions could not be merged by NixOS.
     NixosMerge,
+    /// A demanded NixOS assertion evaluated to false.
     NixosAssertion,
+    /// A failure crossed into an imported existing module or external Nix code.
     ExternalNix,
+    /// Generated syntax/static bindings are invalid; a compiler bug, without user blame.
     Compiler,
+    /// Tool execution, input staging, filesystem or JSON-output infrastructure failed.
     Tooling,
 }
 
+/// Evidence used to recover a Rust origin, distinct from the failure category.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Provenance {
+    /// A Rust-side IR check retained its introducing operation directly.
     RustValidation,
+    /// An origin marker survived in Nix runtime error context.
     ErrorContext,
+    /// A generated source position mapped back to a Rust expression span.
     SourceMap,
+    /// NixOS definition-file metadata identified one or more contributing operations.
     ModuleDefinition,
+    /// An assertion message retained its Rust-origin marker.
     AssertionMessage,
+    /// An external failure could be attributed to its Rust import boundary.
     ImportBoundary,
+    /// No useful Rust origin could be recovered; inspect the original Nix diagnostic.
     Unavailable,
 }
 
+/// The causal role of one source in a potentially multi-origin failure.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OriginRole {
+    /// The initiating operation for a single-expression failure.
     Primary,
+    /// One of several definitions participating in a NixOS merge conflict.
     ConflictingDefinition,
+    /// A definition reported by NixOS while validating combined option values.
     ContributingDefinition,
+    /// The Rust operation that introduced external Nix code.
     ImportedBoundary,
 }
 
 /// A causal source, distinct from the semantic ancestry in `related`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DiagnosticOrigin {
+    /// Recovered Rust location, or `None` for a source known only in Nix.
     pub origin: Option<Origin>,
+    /// Why this source belongs to the causal set, rather than merely the surrounding trace.
     pub role: OriginRole,
+    /// Evidence that recovered this particular source.
     pub provenance: Provenance,
+    /// Upstream definition/import location when useful alongside or instead of Rust.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub nix_file: Option<String>,
 }
 
-/// Rusnix's own diagnostic contract. Nix's wire/text formats stop at this module.
+/// A structured failure independent of Nix's JSON or textual diagnostic format.
+/// [`Self::origins`] preserves causal sets for multi-definition failures;
+/// [`Self::related`] records semantic ancestry instead. Retain [`Self::raw_nix`]
+/// for debugging details that Rust-facing rendering intentionally omits.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Diagnostic {
+    /// Layer that rejected the configuration or failed to run.
     pub kind: DiagnosticKind,
+    /// Useful underlying reason, with display-oriented provenance/path translation applied.
     pub reason: String,
+    /// Single-origin convenience; consult [`Self::origins`] to avoid discarding other causes.
     pub primary: Option<Origin>,
     /// Authoritative causal set. `primary` remains a compatibility convenience.
     #[serde(default)]
     pub origins: Vec<DiagnosticOrigin>,
+    /// Enclosing configuration operations, not additional conflicting definitions.
     pub related: Vec<Origin>,
+    /// Recovery mechanism for the primary Rust location, if any.
     pub provenance: Provenance,
+    /// Unmodified Nix stderr, including JSON events, full traces and temporary paths.
+    /// Empty for failures that occur before invoking Nix.
     pub raw_nix: String,
+    /// Affected NixOS/semantic option path recovered from definitions or ancestry.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub option_path: Option<String>,
+    /// Imported Nix location useful when Rust attribution stops at the boundary.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub external_file: Option<String>,
 }
 
 impl Diagnostic {
+    /// Construct an IR validation failure with direct Rust provenance and no Nix trace.
     pub fn validation(origin: Origin, reason: String) -> Self {
         Self {
             kind: DiagnosticKind::Validation,
@@ -80,6 +123,7 @@ impl Diagnostic {
         .with_origin_set()
     }
 
+    /// Construct an infrastructure failure without attributing it to user configuration.
     pub fn tooling(reason: impl Into<String>) -> Self {
         Self {
             kind: DiagnosticKind::Tooling,
@@ -94,6 +138,10 @@ impl Diagnostic {
         }
     }
 
+    /// Translate evaluator stderr using structured events and a textual fallback.
+    /// `file` identifies the generated source whose positions match `generated`.
+    /// Compiler/tooling failures intentionally receive no Rust blame; NixOS-specific
+    /// translation is applied by [`crate::NixSession`] module evaluation methods.
     pub fn from_nix(kind: DiagnosticKind, raw: &str, generated: &Generated, file: &Path) -> Self {
         if let Some(event) = structured_error(raw) {
             return Self::from_structured(kind, raw, &event, generated, file);
@@ -282,7 +330,8 @@ impl Diagnostic {
         self
     }
 
-    /// Stable snapshot surface: no Nix stack layout, temporary paths, or IDs.
+    /// Produce a compact snapshot-oriented diagnostic without the original Nix stack.
+    /// Includes causal origins and the useful reason; use [`Self::render`] for source excerpts.
     pub fn summary(&self) -> String {
         let mut out = format!("error[{}]: {}\n", self.code(), self.message());
 
@@ -333,6 +382,9 @@ impl Diagnostic {
         out
     }
 
+    /// Render causal sources, Rust excerpts when available, option paths and the reason.
+    /// Relative Rust source files are opened under `source_root`; missing files
+    /// leave useful locations intact. The full Nix trace remains in [`Self::raw_nix`].
     pub fn render(&self, source_root: &Path) -> String {
         let mut out = format!("error[{}]: {}\n", self.code(), self.message());
 
@@ -448,9 +500,9 @@ fn render_location(out: &mut String, origin: &Origin, source_root: &Path) {
 /// NixOS exposes definition lists only inside raw_msg, not as JSON fields.
 /// Keep the pinned showDefs/mergeEqualOption message adapter at the wire boundary.
 pub(crate) struct ModuleFailure {
-    pub kind: DiagnosticKind,
-    pub option: String,
-    pub files: Vec<String>,
+    pub(crate) kind: DiagnosticKind,
+    pub(crate) option: String,
+    pub(crate) files: Vec<String>,
 }
 
 pub(crate) fn module_failure(reason: &str) -> Option<ModuleFailure> {

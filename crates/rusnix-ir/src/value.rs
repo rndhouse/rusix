@@ -2,12 +2,19 @@
 use crate::{Assignment, Config, ConfigValue, Node, Origin, ValidationError, ValueKind};
 
 /// Convert a reusable value without deciding its global configuration placement.
+/// Prefer the derive for mechanical struct/unit-enum mapping; implement this
+/// trait when conversion carries domain meaning. The parent supplies placement.
 pub trait IntoRusnixValue {
+    /// Consume this value into structural data or a native deferred leaf.
+    /// Caller tracking propagates through tracked helpers and preserves child origins.
     #[track_caller]
     fn into_value(self) -> RusnixValue;
 }
 
-/// Structured lowering data. Nodes and backend syntax stay behind this boundary.
+/// Structural lowering data used by derives and custom domain conversions.
+/// Records nest into configuration paths; lists keep ordered values. Native
+/// expressions and opaque objects remain deferred leaves, retaining their origins.
+/// This is not a Nix source string or an evaluated value.
 #[derive(Clone, Debug)]
 pub struct RusnixValue {
     origin: Origin,
@@ -32,6 +39,9 @@ impl RusnixValue {
         }
     }
 
+    /// Build named structural fields whose parent determines their configuration path.
+    /// Unlike [`crate::interop::NixValue::record`], these records are flattened
+    /// into rooted bindings by [`Config::from_value`]; keys remain literal segments.
     #[track_caller]
     pub fn record(fields: impl IntoIterator<Item = (impl Into<String>, Self)>) -> Self {
         Self {
@@ -47,6 +57,7 @@ impl RusnixValue {
 
     // None represents flatten. Normal extensions use record; derive emits this.
     #[doc(hidden)]
+    /// Derive implementation hook; `None` flattens a nested record into its parent.
     #[track_caller]
     pub fn __record(fields: Vec<(Option<&str>, Self)>) -> Self {
         Self {
@@ -131,7 +142,9 @@ fn display_path(path: &[String]) -> String {
 }
 
 impl Config {
-    /// Lower a rooted record. Shape errors are reported by normal IR validation.
+    /// Lower a rooted structural record into this contribution's bindings.
+    /// Shape errors are retained and returned by [`Self::validate`]. Native
+    /// opaque records remain atomic values rather than additional option paths.
     #[track_caller]
     pub fn from_value(value: RusnixValue) -> Self {
         let mut config = Self::new();

@@ -4,7 +4,7 @@ use quote::{format_ident, quote, quote_spanned};
 use std::collections::{BTreeMap, BTreeSet};
 use syn::{Expr, Ident, LitStr, Path, Token, parse::Parse, spanned::Spanned};
 
-pub struct Input {
+pub(super) struct Input {
     value_type: Path,
     template: LitStr,
     arguments: Vec<(Ident, Expr)>,
@@ -86,7 +86,7 @@ fn dedent(text: &str) -> String {
     output
 }
 
-pub fn expand(input: Input) -> syn::Result<TokenStream> {
+pub(super) fn expand(input: Input) -> syn::Result<TokenStream> {
     let Input {
         value_type,
         template,

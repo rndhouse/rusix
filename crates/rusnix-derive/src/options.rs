@@ -323,6 +323,9 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<TokenStream> {
     for view in views {
         let name = &view.item.ident;
         let attrs = &view.item.attrs;
+        let type_docs = (!attrs.iter().any(|attr| attr.path().is_ident("doc"))).then(|| {
+            quote!(#[doc = "Navigation over declared final NixOS option dependencies; values remain symbolic."])
+        });
         let mut branches = Vec::new();
         let mut initialize = Vec::new();
         let mut methods = Vec::new();
@@ -331,11 +334,27 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<TokenStream> {
             let field_name = field.ident.as_ref().unwrap();
             let ty = &field.ty;
             let literal = key(field, view.naming)?;
-            let docs: Vec<_> = field
+            let mut docs: Vec<syn::Attribute> = field
                 .attrs
                 .iter()
                 .filter(|attr| attr.path().is_ident("doc"))
+                .cloned()
                 .collect();
+
+            if docs.is_empty() {
+                let description = match classify(ty, &locals)? {
+                    Leaf::Branch(_) => {
+                        "Navigate to this declared option subtree without reading or evaluating it."
+                    }
+                    Leaf::Scalar => {
+                        "Create a typed symbolic dependency; NixOS resolves and validates the final value after merging."
+                    }
+                    _ => {
+                        "Create an opaque symbolic dependency; this does not materialize a Rust collection or value."
+                    }
+                };
+                docs.push(syn::parse_quote!(#[doc = #description]));
+            }
 
             match classify(ty, &locals)? {
                 Leaf::Branch(child) => {
@@ -367,6 +386,7 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<TokenStream> {
 
         let as_value = view.value.then(|| {
             quote!(
+                /// Reference the whole declared subtree as a deferred opaque Nix value.
                 #[track_caller]
                 pub fn as_value(&self) -> ::rusnix_ir::interop::NixValue {
                     ::rusnix_ir::nixos::OptionRef::<::rusnix_ir::interop::NixValue>::from_segments(
@@ -379,6 +399,7 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<TokenStream> {
 
         generated.push(quote!(
             #(#attrs)*
+            #type_docs
             pub struct #name {
                 __rusnix_path: ::std::vec::Vec<::std::string::String>,
                 #(#branches)*
@@ -407,6 +428,7 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<TokenStream> {
 
             #(#generated)*
 
+            /// Begin navigation; leaf accessor calls capture their own Rust caller origins.
             pub fn root() -> #root {
                 #root::__rusnix_at(::std::vec::Vec::new())
             }
@@ -417,6 +439,78 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<TokenStream> {
 #[cfg(test)]
 mod tests {
     use super::expand;
+
+    #[test]
+    fn public_views_are_documented_and_preserve_authored_docs() {
+        let output = expand(syn::parse_quote! {
+            mod options {
+                #[rusnix(root)]
+                struct Root {
+                    settings: Settings,
+                }
+
+                /// Settings explicitly used by this adapter.
+                #[rusnix(value)]
+                struct Settings {
+                    /// Port selected by ordinary NixOS merging.
+                    port: i64,
+                    enabled: bool,
+                }
+            }
+        })
+        .unwrap();
+        let module: syn::ItemMod = syn::parse2(output).unwrap();
+        let mut documented = 0;
+        let mut authored = Vec::new();
+        let mut check = |attrs: &[syn::Attribute]| {
+            let docs: Vec<_> = attrs
+                .iter()
+                .filter(|attr| attr.path().is_ident("doc"))
+                .collect();
+            assert!(!docs.is_empty());
+            documented += 1;
+            authored.extend(
+                docs.into_iter()
+                    .map(|attr| quote::quote!(#attr).to_string()),
+            );
+        };
+
+        for item in module.content.unwrap().1 {
+            match item {
+                syn::Item::Struct(item) => {
+                    check(&item.attrs);
+                    for field in item.fields {
+                        if matches!(field.vis, syn::Visibility::Public(_)) {
+                            check(&field.attrs);
+                        }
+                    }
+                }
+                syn::Item::Impl(item) => {
+                    for member in item.items {
+                        if let syn::ImplItem::Fn(method) = member
+                            && matches!(method.vis, syn::Visibility::Public(_))
+                        {
+                            check(&method.attrs);
+                        }
+                    }
+                }
+                syn::Item::Fn(item) => check(&item.attrs),
+                _ => {}
+            }
+        }
+
+        assert_eq!(documented, 7);
+        assert!(
+            authored
+                .iter()
+                .any(|doc| doc.contains("Settings explicitly used by this adapter."))
+        );
+        assert!(
+            authored
+                .iter()
+                .any(|doc| doc.contains("Port selected by ordinary NixOS merging."))
+        );
+    }
 
     fn rejection(source: &str) -> String {
         expand(syn::parse_str(source).unwrap())
