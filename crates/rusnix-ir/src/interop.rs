@@ -352,7 +352,8 @@ impl NixFunction {
 }
 
 /// Deferred named interpolation, using Nix toString rather than Rust formatting.
-/// Templates preserve whitespace verbatim and accept `{name}`, `{{` and `}}`.
+/// Leading-newline templates strip common indentation; other templates are verbatim.
+/// Accepts `{name}`, `{{` and `}}`; interpolation never reindents supplied values.
 /// Each named argument is constructed once; repeated holes reuse its graph.
 ///
 /// ```

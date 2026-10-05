@@ -51,6 +51,51 @@ fn literals_braces_and_multiline_whitespace_are_preserved_verbatim() {
 }
 
 #[test]
+fn indented_blocks_preserve_text_and_interpolate_without_reindenting_values() {
+    let text = nix_text!(
+        r#"
+            if {enabled}; then
+              {{shell}} {word}:{word}
+
+              {multiline}
+            fi
+        "#,
+        enabled = true,
+        word = "café",
+        multiline = "first\n  second",
+    );
+    let result = NixValue::record([
+        ("block", text),
+        ("noNewline", nix_text!("\n    end")),
+        ("newline", nix_text!("\n    end\n    ")),
+        ("empty", nix_text!("\n    ")),
+        ("escapedBraces", nix_text!("\n    ${{PATH}}\n    ")),
+        ("tabs", nix_text!("\n\tfirst\n\t\tnested\n\t")),
+        ("mixed", nix_text!("\n\tfirst\n    second\n    ")),
+        ("shortIndent", nix_text!("\n    first\n  second\n    ")),
+    ]);
+
+    let value = NixSession::new()
+        .unwrap()
+        .evaluate_interop(&generated(result))
+        .unwrap()
+        .value;
+    assert_eq!(
+        value["result"],
+        serde_json::json!({
+            "block": "if 1; then\n  {shell} café:café\n\n  first\n  second\nfi\n",
+            "noNewline": "end",
+            "newline": "end\n",
+            "empty": "",
+            "escapedBraces": "${PATH}\n",
+            "tabs": "first\n\tnested\n",
+            "mixed": "\tfirst\n    second\n",
+            "shortIndent": "  first\nsecond\n",
+        }),
+    );
+}
+
+#[test]
 fn repeated_named_arguments_are_constructed_once_and_use_nix_coercion() {
     let constructions = Cell::new(0);
     let text = nix_text!(
@@ -84,7 +129,8 @@ fn package_and_derivation_interpolation_preserves_exact_string_contexts() {
         .package_function("writeText")
         .apply(["example.conf".into(), "workers=4\n".into()]);
     let formatted = nix_text!(
-        "{package}/bin/hello {file} {package}",
+        r#"
+            {package}/bin/hello {file} {package}"#,
         package = package.clone(),
         file = file.clone(),
     );
@@ -122,7 +168,8 @@ fn same_artifact_interpolation_follows_ordinary_and_force_overrides() {
     let downstream = scratch.path().join("downstream.nix");
     fs::write(&downstream, "{ module = {}; }").unwrap();
     let text = nix_text!(
-        "postgres --port={port}",
+        r#"
+            postgres --port={port}"#,
         port = OptionRef::<i64>::new("services.example.port").into_expr(),
     );
 
@@ -171,7 +218,14 @@ fn unused_interpolated_failure_stays_lazy_and_selected_failure_keeps_child_origi
     let failure = Expr::int(44).divide(Expr::int(0));
     let result = NixValue::record([
         ("good", 42.into()),
-        ("bad", nix_text!("answer={failure}", failure = failure)),
+        (
+            "bad",
+            nix_text!(
+                r#"
+                    answer={failure}"#,
+                failure = failure,
+            ),
+        ),
     ]);
 
     let session = NixSession::new().unwrap();
@@ -211,7 +265,14 @@ fn unused_interpolation_does_not_force_a_throwing_final_option() {
                 "environment.result",
                 NixValue::record([
                     ("safe", true.into()),
-                    ("command", nix_text!("port={port}", port = port)),
+                    (
+                        "command",
+                        nix_text!(
+                            r#"
+                                port={port}"#,
+                            port = port,
+                        ),
+                    ),
                 ]),
             )),
     )

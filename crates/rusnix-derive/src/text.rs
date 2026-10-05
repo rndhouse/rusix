@@ -41,6 +41,51 @@ enum Part {
     Argument(usize),
 }
 
+fn dedent(text: &str) -> String {
+    let Some(body) = text.strip_prefix('\n') else {
+        return text.to_owned();
+    };
+    let indentation_only = |line: &str| line.bytes().all(|byte| matches!(byte, b' ' | b'\t'));
+    let body = match body.rsplit_once('\n') {
+        Some((_, last)) if indentation_only(last) => &body[..body.len() - last.len()],
+        None if indentation_only(body) => return String::new(),
+        _ => body,
+    };
+
+    // Compare literal prefixes, not visual columns: a tab never equals spaces.
+    let mut common: Option<&str> = None;
+
+    for line in body.split('\n').filter(|line| !indentation_only(line)) {
+        let prefix = &line[..line.len() - line.trim_start_matches([' ', '\t']).len()];
+        common = Some(match common {
+            None => prefix,
+            Some(old) => {
+                let length = old
+                    .bytes()
+                    .zip(prefix.bytes())
+                    .take_while(|(a, b)| a == b)
+                    .count();
+                &old[..length]
+            }
+        });
+    }
+
+    let common = common.unwrap_or("");
+    let mut output = String::with_capacity(body.len());
+
+    for line in body.split_inclusive('\n') {
+        // Short whitespace-only lines retain their newline and any extra spacing.
+        let length = line
+            .bytes()
+            .zip(common.bytes())
+            .take_while(|(a, b)| a == b)
+            .count();
+        output.push_str(&line[length..]);
+    }
+
+    output
+}
+
 pub fn expand(input: Input) -> syn::Result<TokenStream> {
     let Input {
         value_type,
@@ -57,7 +102,7 @@ pub fn expand(input: Input) -> syn::Result<TokenStream> {
     }
 
     let fail = |message| syn::Error::new(template.span(), message);
-    let text = template.value();
+    let text = dedent(&template.value());
     let mut chars = text.chars().peekable();
     let mut literal = String::new();
     let mut parts = Vec::new();
@@ -140,4 +185,61 @@ pub fn expand(input: Input) -> syn::Result<TokenStream> {
         #(#declarations)*
         #value_type::concat_text([#(#values),*])
     }})
+}
+
+#[cfg(test)]
+mod tests {
+    use super::dedent;
+
+    #[test]
+    fn content_first_templates_remain_verbatim() {
+        for text in ["single line", "    first\n  second\n", "", " \n  body\n"] {
+            assert_eq!(dedent(text), text);
+        }
+    }
+
+    #[test]
+    fn block_templates_keep_relative_indentation_and_blank_lines() {
+        assert_eq!(
+            dedent("\n    first\n      nested\n\n    last\n    "),
+            "first\n  nested\n\nlast\n",
+        );
+        assert_eq!(dedent("\n    first\n  \n    last\n    "), "first\n\nlast\n");
+        assert_eq!(
+            dedent("\n    first\n      \n    last\n    "),
+            "first\n  \nlast\n"
+        );
+    }
+
+    #[test]
+    fn least_indented_content_line_limits_dedent() {
+        assert_eq!(dedent("\n    first\n  second\n    "), "  first\nsecond\n");
+        assert_eq!(dedent("\n    first\nsecond\n    "), "    first\nsecond\n");
+    }
+
+    #[test]
+    fn tabs_and_spaces_use_an_exact_common_prefix() {
+        assert_eq!(dedent("\n\tfirst\n\t\tnested\n\t"), "first\n\tnested\n");
+        assert_eq!(dedent("\n\t first\n\t   nested\n\t "), "first\n  nested\n");
+        assert_eq!(
+            dedent("\n\tfirst\n    second\n    "),
+            "\tfirst\n    second\n"
+        );
+    }
+
+    #[test]
+    fn trailing_newlines_are_neither_added_nor_lost() {
+        assert_eq!(dedent("\n    first"), "first");
+        assert_eq!(dedent("\n    first\n    "), "first\n");
+        assert_eq!(dedent("\n    first\n\n    "), "first\n\n");
+        assert_eq!(dedent("\n    first  "), "first  ");
+    }
+
+    #[test]
+    fn empty_blocks_and_leading_blank_lines_are_preserved() {
+        assert_eq!(dedent("\n    "), "");
+        assert_eq!(dedent("\n"), "");
+        assert_eq!(dedent("\n\n"), "\n");
+        assert_eq!(dedent("\n\n    first\n    "), "\nfirst\n");
+    }
 }

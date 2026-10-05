@@ -788,8 +788,25 @@ and coerced with Nix `builtins.toString`; repeated holes reuse its graph. This i
 symbolic interpolation, not Rust `format!`. Nix string dependency contexts and
 child origins survive through the existing IR and text concatenation operations.
 
-Templates are string literals, including multiline raw strings. Whitespace is
-preserved verbatim: no implicit dedent. Escape literal braces with `{{` and `}}`
+Templates beginning with a newline use block dedenting: remove that first newline,
+discard the indentation-only closing line, and strip the exact common space/tab
+prefix of nonblank lines. Relative indentation, blank lines and content newlines
+remain; tabs are not expanded. Other templates stay verbatim. Interpolated values
+are never dedented or reindented.
+
+```rust
+let command = rusnix_ir::nix_text!(
+    r#"
+        if test -d {data}; then
+          echo ready
+        fi
+    "#,
+    data = data,
+);
+```
+
+Keep the closing delimiter on the last content line to omit a trailing newline.
+Escape literal braces with `{{` and `}}`
 (for example, `${{PATH}}` produces literal shell `${PATH}`). Only explicit named
 arguments are supported; unknown holes, malformed braces, duplicate/unused
 arguments and formatting syntax produce compile-time errors. Width, precision,

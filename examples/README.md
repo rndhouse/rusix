@@ -605,8 +605,24 @@ let port = pg.settings.port();
 let command = rusnix_ir::nix_text!("postgres --port={port}", port = port);
 ```
 
-Named holes stay symbolic; NixOS resolves the final option after merging. Raw
-multiline templates preserve whitespace exactly, with `{{` / `}}` for literal
-braces. [symbolic_text.rs](../crates/rusnix-nix/tests/symbolic_text.rs) verifies
+For multiline text, use an indented leading-newline block:
+
+```rust
+let command = rusnix_ir::nix_text!(
+    r#"
+        postgres --port={port}
+    "#,
+    port = pg.settings.port(),
+);
+```
+
+This produces `postgres --port=…\n`: the first newline and indentation-only
+closing line are removed, then the common space/tab prefix of nonblank lines is
+stripped. Relative indentation and blank lines remain; tabs are not expanded.
+Put the closing delimiter on the last content line to omit the final newline.
+Content-first templates stay verbatim, and interpolated values are never reindented.
+Named holes stay symbolic; NixOS resolves the final option after merging. Use
+`{{` / `}}` for literal braces.
+[symbolic_text.rs](../crates/rusnix-nix/tests/symbolic_text.rs) verifies
 string dependency contexts, caller provenance, lazy evaluation and artifact reuse;
 the full PostgreSQL suite verifies unchanged scripts, SQL and derivation inputs.

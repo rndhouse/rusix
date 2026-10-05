@@ -361,9 +361,10 @@ mod lowering {
         let recovery = optional_file_script(
             pg.recovery_config(),
             nix_text!(
-                r#"ln -sfn "{file}" \
-  "{data}/recovery.conf"
-"#,
+                r#"
+                    ln -sfn "{file}" \
+                      "{data}/recovery.conf"
+                "#,
                 file = Nixpkgs::from_module()
                     .package_function("writeText")
                     .apply(["recovery.conf".into(), pg.recovery_config()]),
@@ -371,22 +372,23 @@ mod lowering {
             ),
         );
 
-        // Raw templates keep their whitespace; the holes remain deferred Nix values.
+        // Leading-newline blocks dedent the shell text; holes remain deferred Nix values.
         nix_text!(
-            r#"if ! test -e {data}/PG_VERSION; then
-  # Cleanup the data directory.
-  rm -f {data}/*.conf
+            r#"
+                if ! test -e {data}/PG_VERSION; then
+                  # Cleanup the data directory.
+                  rm -f {data}/*.conf
 
-  # Initialise the database.
-  initdb -U {super_user} {initdb_args}
+                  # Initialise the database.
+                  initdb -U {super_user} {initdb_args}
 
-  # See postStart!
-  touch "{data}/.first_startup"
-fi
+                  # See postStart!
+                  touch "{data}/.first_startup"
+                fi
 
-ln -sfn "{config_file}/postgresql.conf" "{data}/postgresql.conf"
-{recovery}
-"#,
+                ln -sfn "{config_file}/postgresql.conf" "{data}/postgresql.conf"
+                {recovery}
+            "#,
             data = data,
             super_user = pg.super_user(),
             initdb_args = Nixpkgs::new()
@@ -404,8 +406,9 @@ ln -sfn "{config_file}/postgresql.conf" "{data}/postgresql.conf"
         let initial = optional_file_script(
             pg.initial_script(),
             nix_text!(
-                r#"$PSQL -f "{script}" -d postgres
-"#,
+                r#"
+                    $PSQL -f "{script}" -d postgres
+                "#,
                 script = pg.initial_script(),
             ),
         );
@@ -413,8 +416,9 @@ ln -sfn "{config_file}/postgresql.conf" "{data}/postgresql.conf"
         let databases = Nixpkgs::new().function("concatMapStrings").apply([
             NixValue::function(|database| {
                 nix_text!(
-                    r#"$PSQL -tAc "SELECT 1 FROM pg_database WHERE datname = '{database}'" | grep -q 1 || $PSQL -tAc 'CREATE DATABASE "{database}"'
-"#,
+                    r#"
+                        $PSQL -tAc "SELECT 1 FROM pg_database WHERE datname = '{database}'" | grep -q 1 || $PSQL -tAc 'CREATE DATABASE "{database}"'
+                    "#,
                     database = database,
                 )
             }),
@@ -455,11 +459,12 @@ ln -sfn "{config_file}/postgresql.conf" "{data}/postgresql.conf"
                 );
 
                 nix_text!(
-                    r#"$PSQL -tAc "SELECT 1 FROM pg_roles WHERE rolname='{name}'" | grep -q 1 || $PSQL -tAc 'CREATE USER "{name}"'
-$PSQL -tAc 'ALTER ROLE "{name}" {clauses}'{trailing_space}
+                    r#"
+                        $PSQL -tAc "SELECT 1 FROM pg_roles WHERE rolname='{name}'" | grep -q 1 || $PSQL -tAc 'CREATE USER "{name}"'
+                        $PSQL -tAc 'ALTER ROLE "{name}" {clauses}'{trailing_space}
 
-{ownership}
-"#,
+                        {ownership}
+                    "#,
                     name = name,
                     clauses = NixValue::join_text(" ", clauses),
                     // Preserve the upstream command's trailing space explicitly.
@@ -471,19 +476,20 @@ $PSQL -tAc 'ALTER ROLE "{name}" {clauses}'{trailing_space}
         ]);
 
         nix_text!(
-            r#"PSQL="psql --port={port}"
+            r#"
+                PSQL="psql --port={port}"
 
-while ! $PSQL -d postgres -c "" 2> /dev/null; do
-    if ! kill -0 "$MAINPID"; then exit 1; fi
-    sleep 0.1
-done
+                while ! $PSQL -d postgres -c "" 2> /dev/null; do
+                    if ! kill -0 "$MAINPID"; then exit 1; fi
+                    sleep 0.1
+                done
 
-if test -e "{data}/.first_startup"; then
-  {initial}
-  rm -f "{data}/.first_startup"
-fi
-{databases}{users}
-"#,
+                if test -e "{data}/.first_startup"; then
+                  {initial}
+                  rm -f "{data}/.first_startup"
+                fi
+                {databases}{users}
+            "#,
             port = pg.settings.port(),
             data = data,
             initial = initial,
@@ -506,12 +512,13 @@ fi
                 record! {
                     "assertion": NixValue::if_else(user.select("ensureDBOwnership"), Nixpkgs::new().function("elem").apply([name.clone(), pg.ensure_databases()]), true),
                     "message": nix_text!(
-                        r#"For each database user defined with `services.postgresql.ensureUsers` and
-`ensureDBOwnership = true;`, a database with the same name must be defined
-in `services.postgresql.ensureDatabases`.
+                        r#"
+                            For each database user defined with `services.postgresql.ensureUsers` and
+                            `ensureDBOwnership = true;`, a database with the same name must be defined
+                            in `services.postgresql.ensureDatabases`.
 
-Offender: {name} has not been found among databases.
-"#,
+                            Offender: {name} has not been found among databases.
+                        "#,
                         name = name,
                     ),
                 }
@@ -600,9 +607,10 @@ Offender: {name} has not been found among databases.
                 "postgresql-configfile-check".into(),
                 record! {},
                 nix_text!(
-                    r#"{package}/bin/postgres -D{config_file} -C config_file >/dev/null
-touch $out
-"#,
+                    r#"
+                        {package}/bin/postgres -D{config_file} -C config_file >/dev/null
+                        touch $out
+                    "#,
                     package = pg.package(),
                     config_file = configuration_file(),
                 ),
