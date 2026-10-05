@@ -25,6 +25,7 @@ pub(crate) fn select(mut root: NixExpr, path: &AttrPath) -> NixExpr {
 
 pub(crate) fn source(source: &Source) -> NixExpr {
     let imported = |path| NixExpr::plain(NixKind::Call(Builtin::Import, vec![path]));
+
     match source {
         Source::Packages { overlays } => NixExpr::plain(NixKind::Apply(
             Box::new(imported(NixExpr::plain(NixKind::Path(
@@ -79,6 +80,7 @@ pub(crate) fn lower_reference(reference: &Reference) -> NixExpr {
         Some(path) => select(root, path),
         None => root,
     };
+
     NixExpr::contextual(value.kind, reference.origin.clone())
 }
 
@@ -91,13 +93,16 @@ pub(crate) struct FullSource {
 
 pub(crate) fn full_source() -> Result<Arc<FullSource>, Box<Diagnostic>> {
     static CACHE: OnceLock<Mutex<Weak<FullSource>>> = OnceLock::new();
+
     let mut cache = CACHE
         .get_or_init(|| Mutex::new(Weak::new()))
         .lock()
         .map_err(|e| Diagnostic::tooling(e.to_string()))?;
+
     if let Some(source) = cache.upgrade() {
         return Ok(source);
     }
+
     let archive = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../vendor/nixpkgs-source.tar.gz");
     let bytes = fs::read(archive).map_err(|e| Diagnostic::tooling(e.to_string()))?;
     if format!("{:x}", Sha256::digest(&bytes))
@@ -105,6 +110,7 @@ pub(crate) fn full_source() -> Result<Arc<FullSource>, Box<Diagnostic>> {
     {
         return Err(Diagnostic::tooling("full nixpkgs archive hash mismatch").into());
     }
+
     let temporary = tempfile::Builder::new()
         .prefix("rusnix-source-")
         .tempdir()
@@ -118,10 +124,12 @@ pub(crate) fn full_source() -> Result<Arc<FullSource>, Box<Diagnostic>> {
     if !path.join("default.nix").is_file() {
         return Err(Diagnostic::tooling("full nixpkgs archive revision/root mismatch").into());
     }
+
     let source = Arc::new(FullSource {
         _temporary: temporary,
         path,
     });
+
     *cache = Arc::downgrade(&source);
     Ok(source)
 }
@@ -136,11 +144,13 @@ impl NixSession {
             let _ = self.full_source.set(source.clone());
             source
         };
+
         let link = self.root().join("nixpkgs-full");
         if !link.exists() {
             std::os::unix::fs::symlink(&source.path, link)
                 .map_err(|e| Diagnostic::tooling(e.to_string()))?;
         }
+
         Ok(())
     }
 
@@ -158,6 +168,7 @@ pub(crate) fn module(reference: &Reference, origin: &rusnix_ir::Origin) -> NixEx
         source(&Source::Library),
         &AttrPath::dotted("types.deferredModule.check"),
     );
+
     let checked = NixExpr::contextual(
         NixKind::Let(
             "__rusnix_module".into(),
@@ -178,6 +189,7 @@ pub(crate) fn module(reference: &Reference, origin: &rusnix_ir::Origin) -> NixEx
         ),
         origin.clone(),
     );
+
     let file = match &reference.source {
         Source::ModuleFile { path } => NixExpr::plain(NixKind::Call(
             Builtin::ToString,
@@ -194,6 +206,7 @@ pub(crate) fn module(reference: &Reference, origin: &rusnix_ir::Origin) -> NixEx
         ),
         _ => unreachable!("module handle constructors identify file or local input"),
     };
+
     NixExpr::attributed(
         NixKind::AttrSet(vec![
             (vec!["_file".into()], file),

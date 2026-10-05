@@ -69,6 +69,7 @@ impl RusnixValue {
                 format!("{purpose} {}", display_path(path)),
             )
         };
+
         let (origin, kind) = match self.kind {
             Kind::Leaf(mut node) => {
                 if node.origin == self.origin {
@@ -78,15 +79,18 @@ impl RusnixValue {
             }
             Kind::List(items) => {
                 let mut nodes = Vec::new();
+
                 for (index, item) in items.into_iter().enumerate() {
                     let mut item_path = path.to_vec();
                     item_path.push(format!("[{index}]"));
                     nodes.push(item.resolve(&item_path)?);
                 }
+
                 (placed("list at"), ValueKind::List(nodes))
             }
             Kind::Record(fields) => {
                 let mut nodes = Vec::new();
+
                 for (name, value) in fields {
                     if let Some(name) = name {
                         let mut child_path = path.to_vec();
@@ -100,12 +104,15 @@ impl RusnixValue {
                                 message: "rusnix flatten requires a record value".into(),
                             });
                         };
+
                         nodes.extend(fields);
                     }
                 }
+
                 (placed("record at"), ValueKind::AttrSet(nodes))
             }
         };
+
         Ok(Node { origin, kind })
     }
 }
@@ -128,6 +135,7 @@ impl Config {
     #[track_caller]
     pub fn from_value(value: RusnixValue) -> Self {
         let mut config = Self::new();
+
         match value.resolve(&[]) {
             Ok(node) if matches!(node.kind, ValueKind::AttrSet(_)) => {
                 flatten(&mut config, node, Vec::new());
@@ -140,6 +148,7 @@ impl Config {
             }
             Err(error) => config.error = Some(error),
         }
+
         config
     }
 }
@@ -149,6 +158,7 @@ fn flatten(config: &mut Config, node: Node, path: Vec<String>) {
         let ValueKind::AttrSet(fields) = node.kind else {
             unreachable!()
         };
+
         for (name, child) in fields {
             let mut child_path = path.clone();
             child_path.push(name);
@@ -199,9 +209,11 @@ impl<T: IntoRusnixValue> IntoRusnixValue for Vec<T> {
     fn into_value(self) -> RusnixValue {
         // A function-pointer/closure adapter would stop tracked caller forwarding.
         let mut items = Vec::new();
+
         for value in self {
             items.push(value.into_value());
         }
+
         RusnixValue {
             origin: Origin::caller("configuration list"),
             kind: Kind::List(items),

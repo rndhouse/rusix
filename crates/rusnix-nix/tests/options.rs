@@ -77,6 +77,7 @@ fn one_root_generates_expected_scalar_and_opaque_types() {
     let _: NixValue = pg.hash_values();
     let _: Expr<i64> = pg.settings.port();
     let _: Expr<String> = pg.settings.jit();
+
     let call_line = line!() + 1;
     let all_settings = pg.settings.as_value();
     let config = Config::new().set("environment.result", all_settings);
@@ -87,6 +88,7 @@ fn one_root_generates_expected_scalar_and_opaque_types() {
 #[test]
 fn nested_paths_are_bound_to_placement_without_capturing_navigation_origins() {
     let views = options::root();
+
     for (view, namespace) in [
         (views.services.example, "example"),
         (views.services.second, "second"),
@@ -114,6 +116,7 @@ fn scalar_collection_and_nullable_values_evaluate_in_nixos() {
         "settings": pg.settings.as_value(), "jit": pg.settings.jit(),
         "nestedPort": pg.settings.port(),
     };
+
     let evaluated = NixSession::new()
         .unwrap()
         .evaluate_nixos(
@@ -140,6 +143,7 @@ fn naming_and_literal_segments_are_applied_independently() {
     let flags = options::root().services.literal;
     let value =
         rusnix_ir::nix_record! { "exact": flags.special_flag(), "pascal": flags.other_flag() };
+
     let artifact = compile_module(&module(value)).unwrap();
     assert_eq!(
         NixSession::new()
@@ -156,6 +160,7 @@ fn direct_segment_constructor_preserves_the_existing_option_reference_ir() {
     let reference =
         OptionRef::<bool>::from_segments(["services", "literal.node ${key}\"", "with space"])
             .into_expr();
+
     let artifact = compile_module(&module(reference)).unwrap();
     assert_eq!(
         NixSession::new()
@@ -170,9 +175,12 @@ fn direct_segment_constructor_preserves_the_existing_option_reference_ir() {
 #[test]
 fn accessor_failure_maps_to_its_call_site_and_retains_the_raw_diagnostic() {
     let pg = options::root().services.example;
+
     let call_line = line!() + 1;
     let reference = pg.missing();
+
     let artifact = compile_module(&module(reference)).unwrap();
+
     let diagnostic = NixSession::new()
         .unwrap()
         .evaluate_nixos(&artifact, &["environment", "result"], false)
@@ -189,7 +197,9 @@ fn consuming_operation_provenance_remains_more_precise_than_navigation() {
     let port = options::root().services.example.port();
     let division_line = line!() + 1;
     let quotient = Expr::int(44).divide(port);
+
     let artifact = compile_module(&module(quotient).import_ref(input().module("zero"))).unwrap();
+
     let diagnostic = NixSession::new()
         .unwrap()
         .evaluate_nixos(&artifact, &["environment", "result"], false)
@@ -210,6 +220,7 @@ fn same_artifact_follows_ordinary_nix_overrides_and_priorities() {
         .port()
         .to_text()
         .with_prefix("example --port=");
+
     let artifact = compile_module(
         &module(command)
             .import_ref(InputRef::local("downstream", &downstream).module("module"))
@@ -220,6 +231,7 @@ fn same_artifact_follows_ordinary_nix_overrides_and_priorities() {
     )
     .unwrap();
     let original_source = artifact.module.source.clone();
+
     for (source, expected) in [
         ("{ module = {}; }", "example --port=5432"),
         (
@@ -247,6 +259,7 @@ fn same_artifact_follows_ordinary_nix_overrides_and_priorities() {
 #[test]
 fn unused_accessors_and_deferred_values_do_not_force_referenced_options() {
     let pg = options::root().services.example;
+
     let artifact = compile_module(
         &module(rusnix_ir::nix_record! {
             "good": pg.data_dir(), "bad": pg.port(),
@@ -255,6 +268,7 @@ fn unused_accessors_and_deferred_values_do_not_force_referenced_options() {
     )
     .unwrap();
     assert!(!artifact.module.source.contains("deepSeq"));
+
     let session = NixSession::new().unwrap();
     assert_eq!(
         session

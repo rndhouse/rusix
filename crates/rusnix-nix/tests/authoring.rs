@@ -49,16 +49,20 @@ fn different_typed_components_compose_with_independent_boundaries_and_caller_ori
     let module = module.add(ports(2222));
     assert!(module.config.assignments.is_empty());
     assert_eq!(module.modules.len(), 2);
+
     for (child, line) in module.modules.iter().zip([user_line, ports_line]) {
         let origin = &child.config.assignments[0].origin;
         assert_eq!(origin.file, file!());
         assert_eq!(origin.line, line); // .add call, not the adapter's .set
         assert_eq!(child.config.origin.line, line);
     }
+
     let artifact = compile_module(&module).unwrap();
     assert_eq!(artifact.definitions.len(), 2);
     assert!(!artifact.module.source.contains("deepSeq"));
+
     let session = NixSession::new().unwrap();
+
     for (option, expected) in [
         ("authorizedKeysCommandUser", serde_json::json!("root")),
         ("ports", serde_json::json!([2222])),
@@ -77,10 +81,14 @@ fn different_typed_components_compose_with_independent_boundaries_and_caller_ori
 fn typed_conflict_reports_both_authoring_calls_via_definition_metadata() {
     let first_line = line!() + 1;
     let module = base().add(user("root"));
+
     let second_line = line!() + 1;
     let module = module.add(user("nobody"));
+
     let artifact = compile_module(&module).unwrap();
+
     let session = NixSession::new().unwrap();
+
     for child in &module.modules {
         session
             .evaluate_nixos(
@@ -90,6 +98,7 @@ fn typed_conflict_reports_both_authoring_calls_via_definition_metadata() {
             )
             .unwrap();
     }
+
     let diagnostic = session
         .evaluate_nixos(
             &artifact,
@@ -103,6 +112,7 @@ fn typed_conflict_reports_both_authoring_calls_via_definition_metadata() {
         Some("services.openssh.authorizedKeysCommandUser")
     );
     assert_eq!(diagnostic.origins.len(), 2);
+
     for line in [first_line, second_line] {
         let origin = diagnostic
             .origins
@@ -117,11 +127,13 @@ fn typed_conflict_reports_both_authoring_calls_via_definition_metadata() {
             origin.origin.as_ref().unwrap().id
         )));
     }
+
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let rendered = diagnostic.render(&root);
     assert_eq!(rendered.matches("  --> ").count(), 2);
     let json = serde_json::to_value(&diagnostic).unwrap();
     assert_eq!(json["origins"].as_array().unwrap().len(), 2);
+
     // Reviewable actual output, without a brittle whole-message snapshot.
     let out = root.join("target/authoring/conflict");
     std::fs::create_dir_all(&out).unwrap();
@@ -139,6 +151,7 @@ fn typed_conflict_reports_both_authoring_calls_via_definition_metadata() {
 fn two_typed_lists_merge_under_nixos_semantics() {
     let module = base().add(ports(22)).add(ports(2222));
     assert_eq!(module.modules.len(), 2);
+
     let artifact = compile_module(&module).unwrap();
     assert_eq!(artifact.definitions.len(), 2);
     assert_eq!(
@@ -158,6 +171,7 @@ fn priorities_remain_local_to_contributions_and_discarded_values_stay_lazy() {
             NixosModule::new(user("nobody").into_config()).priority(DefinitionPriority::Default),
         )
         .add(user("root"));
+
     let session = NixSession::new().unwrap();
     let selection = &["services", "openssh", "authorizedKeysCommandUser"];
     assert_eq!(
@@ -209,6 +223,7 @@ fn previously_captured_expression_and_setter_origins_survive_conversion() {
     let expression = Expr::int(44).divide(Expr::int(0));
     let add_line = line!() + 1;
     let module = base().add(CalculatedPorts(expression));
+
     let diagnostic = NixSession::new()
         .unwrap()
         .evaluate_nixos(
@@ -240,6 +255,7 @@ fn direct_conversion_tracks_its_caller_and_one_config_still_validates_duplicates
     assert_eq!(config.assignments[0].origin.line, conversion_line);
     let config = config.set("services.openssh.authorizedKeysCommandUser", "nobody");
     let expected = config.assignments[1].origin.clone();
+
     let diagnostic = compile_module(&base().add(config)).unwrap_err();
     assert_eq!(diagnostic.kind, DiagnosticKind::Validation);
     assert_eq!(diagnostic.primary, Some(expected));
@@ -321,6 +337,7 @@ fn deferred_when_discards_inactive_definitions_without_evaluating_their_values()
     let discarded = NixValue::list([Expr::int(1).divide(Expr::int(0)).into()])
         .when(OptionRef::<bool>::new("services.openssh.enable").into_expr());
     let module = base().add(Config::new().set("services.openssh.ports", discarded));
+
     let artifact = compile_module(&module).unwrap();
     assert!(!artifact.module.source.contains("deepSeq"));
     assert_eq!(
@@ -343,6 +360,7 @@ fn active_deferred_definition_keeps_the_failing_operation_origin() {
         "services.openssh.ports",
         NixValue::list([invalid.into()]).when(true),
     ));
+
     let diagnostic = NixSession::new()
         .unwrap()
         .evaluate_nixos(

@@ -42,6 +42,7 @@ fn normalized(mut d: Diagnostic) -> Diagnostic {
             d.reason = d.reason.replace(&old, &origin.file);
         }
     }
+
     if let Some(origin) = &mut d.primary {
         origin.file = workspace()
             .join(&origin.file)
@@ -52,6 +53,7 @@ fn normalized(mut d: Diagnostic) -> Diagnostic {
             .to_string_lossy()
             .into();
     }
+
     d
 }
 
@@ -85,6 +87,7 @@ fn two_individually_valid_modules_conflict_with_both_rust_origins() {
             )
             .unwrap();
     }
+
     let (artifact, d) = failure("merge-two");
     assert_eq!(d.kind, DiagnosticKind::NixosMerge);
     assert_eq!(
@@ -92,6 +95,7 @@ fn two_individually_valid_modules_conflict_with_both_rust_origins() {
         Some("services.openssh.authorizedKeysCommandUser")
     );
     assert_eq!(d.origins.len(), 2);
+
     for source in &d.origins {
         assert_eq!(source.role, OriginRole::ConflictingDefinition);
         assert_eq!(source.provenance, Provenance::ModuleDefinition);
@@ -102,6 +106,7 @@ fn two_individually_valid_modules_conflict_with_both_rust_origins() {
                 .contains(&format!("rusnix-definition:{}", origin.id))
         );
     }
+
     assert_ne!(d.origins[0].origin, d.origins[1].origin);
 }
 
@@ -145,6 +150,7 @@ fn three_invalid_definitions_retain_all_three_origins_from_nixos() {
     let (artifact, d) = failure("merge-three-type");
     assert_eq!(d.kind, DiagnosticKind::NixosType);
     assert_eq!(d.origins.len(), 3);
+
     for boundary in &artifact.definitions {
         assert!(
             d.origins
@@ -269,6 +275,7 @@ fn unselected_conflicting_option_does_not_break_a_selected_valid_option() {
     let module = fixtures::module("merge-two")
         .unwrap()
         .module(fixtures::ports_a());
+
     let artifact = compile_module(&module).unwrap();
     assert_eq!(
         NixSession::new()

@@ -56,6 +56,7 @@ mod config {
 
     pub fn model() -> Root {
         let mode = Mode::Client;
+
         Root {
             demo: Policies {
                 firewall: firewall_policy(&mode),

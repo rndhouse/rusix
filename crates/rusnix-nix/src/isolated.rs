@@ -21,9 +21,11 @@ pub struct Evaluation {
 impl NixSession {
     pub fn new() -> io::Result<Self> {
         let disposable = tempfile::Builder::new().prefix("rusnix-").tempdir()?;
+
         for directory in ["store", "config", "cache", "state", "home"] {
             fs::create_dir(disposable.path().join(directory))?;
         }
+
         Ok(Self {
             disposable,
             full_source: std::sync::OnceLock::new(),
@@ -38,6 +40,7 @@ impl NixSession {
     fn command(&self, parse: bool) -> Command {
         let store = self.root().join("store");
         assert!(store.is_absolute() && store.starts_with(self.root()));
+
         let mut command = Command::new(if parse { "nix-instantiate" } else { "nix" });
         command.arg("--store").arg(&store).args([
             "--extra-experimental-features",
@@ -58,6 +61,7 @@ impl NixSession {
             "allow-import-from-derivation",
             "false",
         ]);
+
         // Do not inherit host store selection, remote builders, includes, daemon
         // configuration, or the user's Nix cache/state directories.
         command
@@ -79,6 +83,7 @@ impl NixSession {
             .env("HOME", self.root().join("home"))
             .env("NO_COLOR", "1")
             .env("TERM", "dumb");
+
         command
     }
 
@@ -89,6 +94,7 @@ impl NixSession {
                 String::from_utf8_lossy(&output.stderr).into_owned(),
             ));
         }
+
         Ok(String::from_utf8_lossy(&output.stdout).trim().into())
     }
 
@@ -126,11 +132,13 @@ impl NixSession {
             )
             .into());
         }
+
         let value = serde_json::from_slice(&output.stdout).map_err(|e| {
             let mut diagnostic = Diagnostic::tooling(format!("Nix returned invalid JSON: {e}"));
             diagnostic.raw_nix = stderr.clone();
             diagnostic
         })?;
+
         Ok(Evaluation {
             value,
             raw_nix: format!("{parse_stderr}{stderr}"),
@@ -144,10 +152,12 @@ impl NixSession {
     ) -> Result<String, Box<Diagnostic>> {
         let file = self.root().join(name);
         fs::write(&file, &generated.source).map_err(|e| Diagnostic::tooling(e.to_string()))?;
+
         // A true parse-only subprocess. `nix eval --apply 'x: true'` still forces
         // the file in Nix 2.34.8 and cannot distinguish syntax from user errors.
         let parse = self.run(&file, true, None)?;
         let parse_stderr = String::from_utf8_lossy(&parse.stderr);
+
         if !parse.status.success() {
             let diagnostic =
                 Diagnostic::from_nix(DiagnosticKind::Compiler, &parse_stderr, generated, &file);
@@ -163,6 +173,7 @@ impl NixSession {
             };
             return Err(Diagnostic::from_nix(kind, &parse_stderr, generated, &file).into());
         }
+
         Ok(parse_stderr.into_owned())
     }
 
@@ -182,6 +193,7 @@ impl NixSession {
         } else {
             command.arg("--file").arg(file);
         }
+
         command
             .output()
             .map_err(|e| Diagnostic::tooling(format!("cannot execute Nix subprocess: {e}")).into())
@@ -192,6 +204,7 @@ impl NixSession {
         command
             .args(["--offline", "eval", "--json", "--eval-store"])
             .arg(self.root().join("store"));
+
         if let Some(attribute) = attribute {
             // Attribute names are escaped Nix string data, never CLI flags or
             // raw source. Store selection cannot be replaced by a selection.
@@ -200,6 +213,7 @@ impl NixSession {
                 quote(attribute)
             ));
         }
+
         command
     }
 }
@@ -212,6 +226,7 @@ mod tests {
     #[test]
     fn every_command_explicitly_selects_the_owned_disposable_store() {
         let session = NixSession::new().unwrap();
+
         for command in [session.command(true), session.command(false)] {
             let args: Vec<_> = command.get_args().collect();
             assert_eq!(args[0], "--store");
@@ -231,6 +246,7 @@ mod tests {
                 );
             }
         }
+
         let command = session.eval_command(Some("good"));
         let args: Vec<_> = command.get_args().collect();
         for flag in ["--store", "--eval-store"] {
@@ -247,6 +263,7 @@ mod tests {
             assert!(store.is_absolute());
             assert_ne!(store, Path::new("/nix/store"));
         }
+
         assert!(args.windows(2).any(|pair| pair
             == [
                 OsStr::new("--apply"),
@@ -269,6 +286,7 @@ mod tests {
                 .get_envs()
                 .any(|(key, value)| key == "NIX_CONFIG" && value == Some(OsStr::new("")))
         );
+
         let root = session.root().to_owned();
         drop(session);
         assert!(!root.exists());

@@ -15,6 +15,7 @@ struct Case {
 #[test]
 fn documented_compile_fail_cases_fail_for_the_stated_reasons() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+
     // Use the same Cargo target/profile directory as this integration test.
     // Multiple cached artifacts may exist; Cargo's current build is newest.
     let executable = std::env::current_exe().unwrap();
@@ -33,8 +34,10 @@ fn documented_compile_fail_cases_fail_for_the_stated_reasons() {
             .max_by_key(|p| p.metadata().unwrap().modified().unwrap())
             .unwrap_or_else(|| panic!("Cargo-built {name} library"))
     };
+
     let scratch = tempfile::tempdir().unwrap();
     let nix_library = library("rusnix_nix");
+
     // Cargo can cache differently feature-unified IR artifacts. Newest-by-mtime
     // alone can select a different crate identity than the backend actually uses.
     let probe = scratch.path().join("compatible.rs");
@@ -76,11 +79,13 @@ fn documented_compile_fail_cases_fail_for_the_stated_reasons() {
                 .success()
         })
         .expect("Cargo-built IR compatible with the backend");
+
     let libraries = [
         ("rusnix_ir", ir_library),
         ("rusnix_nix", nix_library),
         ("serde_json", library("serde_json")),
     ];
+
     let cases: Vec<Case> =
         serde_json::from_str(include_str!("../../../tests/ui/expected.json")).unwrap();
     let mut registered: Vec<_> = cases.iter().map(|case| case.file.clone()).collect();
@@ -92,19 +97,24 @@ fn documented_compile_fail_cases_fail_for_the_stated_reasons() {
         .map(|path| path.file_name().unwrap().to_string_lossy().into_owned())
         .collect();
     fixtures.sort();
+
     assert_eq!(
         registered, fixtures,
         "every UI fixture must have a diagnostic expectation"
     );
+
     let artifacts = root.join("target/typed-examples/ui");
     fs::create_dir_all(&artifacts).unwrap();
+
     for case in cases {
         let mut command = Command::new(std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into()));
+
         for (name, path) in &libraries {
             command
                 .arg("--extern")
                 .arg(format!("{name}={}", path.display()));
         }
+
         let output = command
             .arg(root.join("tests/ui").join(&case.file))
             .args([
@@ -119,7 +129,9 @@ fn documented_compile_fail_cases_fail_for_the_stated_reasons() {
             .arg(scratch.path())
             .output()
             .unwrap();
+
         assert!(!output.status.success(), "{} compiled", case.file);
+
         let raw = String::from_utf8(output.stderr).unwrap();
         fs::write(artifacts.join(format!("{}.jsonl", case.file)), &raw).unwrap();
         let errors: Vec<serde_json::Value> = raw
@@ -134,6 +146,7 @@ fn documented_compile_fail_cases_fail_for_the_stated_reasons() {
             })
             .collect();
         assert_eq!(errors.len(), case.count, "{}: {raw}", case.file);
+
         for error in errors {
             assert_eq!(
                 error["code"]["code"].as_str(),
@@ -141,6 +154,7 @@ fn documented_compile_fail_cases_fail_for_the_stated_reasons() {
                 "{}: {raw}",
                 case.file
             );
+
             let primary: Vec<_> = error["spans"]
                 .as_array()
                 .unwrap()
@@ -154,12 +168,14 @@ fn documented_compile_fail_cases_fail_for_the_stated_reasons() {
                 .collect::<Vec<_>>()
                 .join("\n");
             assert!(text.contains(&case.source), "{}: {raw}", case.file);
+
             let labels = primary
                 .iter()
                 .filter_map(|s| s["label"].as_str())
                 .collect::<Vec<_>>()
                 .join("\n");
             let labels = format!("{labels}\n{}", error["message"].as_str().unwrap_or(""));
+
             for token in &case.reason_tokens {
                 assert!(labels.contains(token), "{}: {raw}", case.file);
             }

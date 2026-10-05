@@ -73,6 +73,7 @@ impl IntoRusnixValue for Transport {
             certificate: String,
             private_key: String,
         }
+
         match self {
             Self::Plain => Plain { tls: false }.into_value(),
             Self::Tls {

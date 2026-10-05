@@ -16,6 +16,7 @@ fn root() -> PathBuf {
 
 fn session() -> &'static Mutex<NixSession> {
     static SESSION: OnceLock<Mutex<NixSession>> = OnceLock::new();
+
     SESSION.get_or_init(|| Mutex::new(NixSession::new().unwrap()))
 }
 
@@ -28,7 +29,9 @@ fn compare(case: &str) {
     } else {
         example::implementation()
     };
+
     let artifact = compile_module(&module).unwrap();
+
     fs::write(
         session.root().join("postgresql-module.nix"),
         &artifact.module.source,
@@ -39,14 +42,17 @@ fn compare(case: &str) {
         session.root().join("postgresql-driver.nix"),
     )
     .unwrap();
+
     let evaluate = |rewritten| {
         session.evaluate_nixos_with_driver(&artifact, &Generated {
             source: format!("import ./postgresql-driver.nix {{ nixpkgs = ./nixpkgs-full; generated = ./module.nix; caseName = {}; rewritten = {rewritten}; }}", serde_json::to_string(case).unwrap()),
             ..Generated::default()
         }).unwrap_or_else(|error| panic!("{case} rewritten={rewritten}: {}\n{}", error.reason, error.raw_nix)).value
     };
+
     let upstream = evaluate(false);
     let rewritten = evaluate(true);
+
     let out = root().join("target/postgresql").join(case);
     fs::create_dir_all(&out).unwrap();
     fs::write(
@@ -60,6 +66,7 @@ fn compare(case: &str) {
     )
     .unwrap();
     fs::write(out.join("module.nix"), &artifact.module.source).unwrap();
+
     assert!(
         upstream == rewritten,
         "{case}: semantic projection differs; see {}",
@@ -140,6 +147,7 @@ fn evaluate(
         session.root().join("postgresql-driver.nix"),
     )
     .unwrap();
+
     session.evaluate_nixos_with_driver(artifact, &Generated {
         source: format!("import ./postgresql-driver.nix {{ nixpkgs = ./nixpkgs-full; generated = ./module.nix; caseName = {}; rewritten = {rewritten}; checkAssertions = {check_assertions}; downstream = ./downstream.nix; }}", serde_json::to_string(case).unwrap()),
         ..Generated::default()
@@ -151,9 +159,11 @@ fn ordinary_nix_overrides_change_six_output_classes_without_rust_relowering() {
     let session = session()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
+
     let artifact = compile_module(&example::implementation()).unwrap();
     let original_source = artifact.module.source.clone();
     fs::write(session.root().join("downstream.nix"), "{}\n").unwrap();
+
     let upstream = evaluate(&session, &artifact, "downstream_base", false, true)
         .unwrap()
         .value;
@@ -161,17 +171,20 @@ fn ordinary_nix_overrides_change_six_output_classes_without_rust_relowering() {
         .unwrap()
         .value;
     assert_eq!(upstream, base);
+
     fs::copy(
         root().join("tests/fixtures/postgresql-downstream.nix"),
         session.root().join("downstream.nix"),
     )
     .unwrap();
+
     let upstream = evaluate(&session, &artifact, "downstream_base", false, true)
         .unwrap()
         .value;
     let changed = evaluate(&session, &artifact, "downstream_base", true, true)
         .unwrap()
         .value;
+
     assert_eq!(upstream, changed);
     assert_eq!(changed["settings"]["port"], 6432);
     assert_eq!(changed["settings"]["max_connections"], 80);
@@ -198,6 +211,7 @@ fn ordinary_nix_overrides_change_six_output_classes_without_rust_relowering() {
     assert_ne!(base["generatedFiles"], changed["generatedFiles"]);
     assert_eq!(original_source, artifact.module.source);
     fs::write(session.root().join("downstream.nix"), "{}\n").unwrap();
+
     let out = root().join("target/postgresql/downstream");
     fs::create_dir_all(&out).unwrap();
     fs::write(
@@ -219,11 +233,14 @@ macro_rules! rejected {
             let session = session().lock().unwrap_or_else(|poisoned| poisoned.into_inner());
             let artifact = compile_module(&example::implementation()).unwrap();
             fs::write(session.root().join("downstream.nix"), "{}\n").unwrap();
+
             let upstream = evaluate(&session, &artifact, stringify!($name), false, true).unwrap_err();
             let rewritten = evaluate(&session, &artifact, stringify!($name), true, true).unwrap_err();
+
             assert!(upstream.reason.contains($reason), "{}", upstream.reason);
             assert!(rewritten.reason.contains($reason), "{}", rewritten.reason);
             assert!(!rewritten.raw_nix.is_empty());
+
             let out = root().join("target/postgresql").join(stringify!($name));
             fs::create_dir_all(&out).unwrap();
             fs::write(out.join("diagnostic.txt"), rewritten.render(&root())).unwrap();
@@ -248,8 +265,10 @@ fn foreign_invalid_ownership_retains_the_nixos_assertion_reason() {
     let session = session()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
+
     let artifact = compile_module(&example::implementation()).unwrap();
     fs::write(session.root().join("downstream.nix"), "{}\n").unwrap();
+
     for rewritten in [false, true] {
         let error =
             evaluate(&session, &artifact, "invalid_ownership", rewritten, true).unwrap_err();
@@ -265,22 +284,26 @@ fn foreign_invalid_ownership_retains_the_nixos_assertion_reason() {
 #[test]
 fn provisioning_contribution_conflicts_keep_both_rust_origins() {
     use example::Postgresql;
+
     let session = session()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     fs::write(session.root().join("downstream.nix"), "{}\n").unwrap();
+
     let first_line = line!() + 1;
     let module = example::implementation().add(Postgresql {
         enable: true,
         data_dir: Some("/srv/one".into()),
         ..Postgresql::default()
     });
+
     let second_line = line!() + 1;
     let module = module.add(Postgresql {
         enable: true,
         data_dir: Some("/srv/two".into()),
         ..Postgresql::default()
     });
+
     let artifact = compile_module(&module).unwrap();
     let error = evaluate(&session, &artifact, "minimal", true, false).unwrap_err();
     assert_eq!(error.kind, rusnix_nix::DiagnosticKind::NixosMerge);
@@ -302,6 +325,7 @@ fn provisioning_contribution_conflicts_keep_both_rust_origins() {
 fn symbolic_generated_file_errors_keep_the_rust_operation_origin() {
     use example::Postgresql;
     use rusnix_ir::Expr;
+
     let session = session()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -313,6 +337,7 @@ fn symbolic_generated_file_errors_keep_the_rust_operation_origin() {
         settings: std::collections::BTreeMap::from([("max_connections".into(), failure.into())]),
         ..Postgresql::default()
     });
+
     let artifact = compile_module(&module).unwrap();
     let error = evaluate(&session, &artifact, "minimal", true, false).unwrap_err();
     assert_eq!(error.reason, "division by zero");
@@ -332,6 +357,7 @@ fn extension_lookup_failures_retain_a_rust_boundary_origin() {
         extensions: vec!["rusnixMissingExtension".into()],
         ..example::Postgresql::default()
     });
+
     let artifact = compile_module(&module).unwrap();
     let error = evaluate(&session, &artifact, "minimal", true, false).unwrap_err();
     assert!(error.reason.contains("rusnixMissingExtension"));
@@ -349,10 +375,12 @@ fn extension_lookup_failures_retain_a_rust_boundary_origin() {
 #[test]
 fn typed_role_clauses_match_all_upstream_three_state_cases() {
     use example::{Clause, Postgresql, Role, RoleClauses};
+
     let session = session()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     fs::write(session.root().join("downstream.nix"), "{}\n").unwrap();
+
     for case in ["clauses_preserve", "clauses_enable", "clauses_disable"] {
         let clause = || {
             Some(match case {
@@ -361,6 +389,7 @@ fn typed_role_clauses_match_all_upstream_three_state_cases() {
                 _ => Clause::Disable,
             })
         };
+
         let module = example::implementation().add(Postgresql {
             enable: true,
             roles: vec![Role {
@@ -385,6 +414,7 @@ fn typed_role_clauses_match_all_upstream_three_state_cases() {
         let rewritten = evaluate(&session, &artifact, "minimal", true, false)
             .unwrap()
             .value;
+
         assert_eq!(upstream, rewritten, "typed role clauses: {case}");
     }
 }
@@ -393,6 +423,7 @@ fn typed_role_clauses_match_all_upstream_three_state_cases() {
 fn unset_role_clauses_and_explicit_preserve_keep_distinct_definitions() {
     use example::{Clause, Postgresql, Role, RoleClauses};
     use rusnix_ir::IntoConfig;
+
     let input = Postgresql {
         roles: vec![
             Role {
@@ -410,6 +441,7 @@ fn unset_role_clauses_and_explicit_preserve_keep_distinct_definitions() {
         ..Postgresql::default()
     }
     .into_config();
+
     let session = session()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -417,6 +449,7 @@ fn unset_role_clauses_and_explicit_preserve_keep_distinct_definitions() {
         .evaluate(&rusnix_nix::compile(&input).unwrap())
         .unwrap()
         .value;
+
     let users = &evaluated["services"]["postgresql"]["ensureUsers"];
     assert_eq!(users[0]["ensureClauses"], serde_json::json!({}));
     assert_eq!(

@@ -15,7 +15,9 @@ impl Parse for Input {
         let value_type = input.parse()?;
         input.parse::<Token![;]>()?;
         let template = input.parse()?;
+
         let mut arguments = Vec::new();
+
         while !input.is_empty() {
             input.parse::<Token![,]>()?;
             if input.is_empty() {
@@ -25,6 +27,7 @@ impl Parse for Input {
             input.parse::<Token![=]>()?;
             arguments.push((name, input.parse()?));
         }
+
         Ok(Self {
             value_type,
             template,
@@ -44,18 +47,22 @@ pub fn expand(input: Input) -> syn::Result<TokenStream> {
         template,
         arguments,
     } = input;
+
     let mut names = BTreeMap::new();
+
     for (index, (name, _)) in arguments.iter().enumerate() {
         if names.insert(name.to_string(), index).is_some() {
             return Err(syn::Error::new(name.span(), "duplicate nix_text argument"));
         }
     }
+
     let fail = |message| syn::Error::new(template.span(), message);
     let text = template.value();
     let mut chars = text.chars().peekable();
     let mut literal = String::new();
     let mut parts = Vec::new();
     let mut used = BTreeSet::new();
+
     while let Some(ch) = chars.next() {
         match ch {
             '{' if chars.peek() == Some(&'{') => {
@@ -76,14 +83,17 @@ pub fn expand(input: Input) -> syn::Result<TokenStream> {
                         None => return Err(fail("unclosed nix_text placeholder")),
                     }
                 }
+
                 if syn::parse_str::<Ident>(&name).is_err() {
                     return Err(fail(
                         "nix_text supports only named placeholders like {name}; formatting syntax is unsupported",
                     ));
                 }
+
                 let Some(&index) = names.get(&name) else {
                     return Err(fail(&format!("unknown nix_text placeholder {{{name}}}")));
                 };
+
                 used.insert(index);
                 if !literal.is_empty() {
                     parts.push(Part::Literal(std::mem::take(&mut literal)));
@@ -98,14 +108,17 @@ pub fn expand(input: Input) -> syn::Result<TokenStream> {
             ch => literal.push(ch),
         }
     }
+
     if !literal.is_empty() {
         parts.push(Part::Literal(literal));
     }
+
     for (index, (name, _)) in arguments.iter().enumerate() {
         if !used.contains(&index) {
             return Err(syn::Error::new(name.span(), "unused nix_text argument"));
         }
     }
+
     let bindings: Vec<_> = (0..arguments.len())
         .map(|index| format_ident!("__rusnix_text_arg_{index}", span = Span::mixed_site()))
         .collect();
@@ -122,6 +135,7 @@ pub fn expand(input: Input) -> syn::Result<TokenStream> {
             quote! { #binding.clone() }
         }
     });
+
     Ok(quote! {{
         #(#declarations)*
         #value_type::concat_text([#(#values),*])

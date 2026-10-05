@@ -29,6 +29,7 @@ mod config {
 
     pub fn model() -> Root {
         let mode = Mode::Server;
+
         Root {
             demo: ConnectionPolicy {
                 accepts_connections: accepts_connections(&mode),

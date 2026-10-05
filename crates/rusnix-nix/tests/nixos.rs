@@ -51,8 +51,10 @@ fn check_failure(name: &str, kind: DiagnosticKind, provenance: Provenance) -> Di
         "external" => &module.imports[1].origin,
         _ => unreachable!(),
     };
+
     let artifact = compile_module(&module).unwrap();
     assert!(!artifact.module.source.contains("deepSeq"));
+
     let diagnostic = *NixSession::new()
         .unwrap()
         .evaluate_nixos(&artifact, fixtures::selection(name), name == "assertion")
@@ -69,6 +71,7 @@ fn check_failure(name: &str, kind: DiagnosticKind, provenance: Provenance) -> Di
 #[test]
 fn typed_openssh_is_evaluated_by_real_module_system() {
     let module = fixtures::module("good").unwrap();
+
     let artifact = compile_module(&module).unwrap();
     assert_eq!(
         compile_module(&module).unwrap().module.source,
@@ -114,8 +117,10 @@ fn generic_pinned_import_paths_are_validated_and_rendered_as_data() {
         assert_eq!(diagnostic.primary.as_ref(), Some(&module.imports[0].origin));
     }
     let path = "nixos/modules/${not a variable}/module with spaces.nix";
+
     let artifact = compile_module(&NixosModule::empty().import(path)).unwrap();
     assert!(artifact.module.source.contains("\\${not a variable}"));
+
     let diagnostic = NixSession::new()
         .unwrap()
         .evaluate_nixos(&artifact, &["assertions"], false)
@@ -185,7 +190,9 @@ fn module_selection_is_lazy_and_nested_operation_context_survives() {
     let ValueKind::List(items) = &module.config.assignments[1].value.kind else {
         panic!()
     };
+
     let artifact = compile_module(&module).unwrap();
+
     let session = NixSession::new().unwrap();
     assert_eq!(
         session
@@ -226,6 +233,7 @@ fn module_selection_is_lazy_and_nested_operation_context_survives() {
             .unwrap_or("")
             .starts_with("rusnix-origin:")
     });
+
     let fallback = Diagnostic::from_nix(
         DiagnosticKind::NixEval,
         &format!("@nix {event}"),
@@ -245,6 +253,7 @@ fn module_selection_is_lazy_and_nested_operation_context_survives() {
 #[test]
 fn assertion_checking_is_explicit_and_does_not_force_unrelated_options() {
     let artifact = compile_module(&fixtures::module("assertion").unwrap()).unwrap();
+
     let session = NixSession::new().unwrap();
     assert_eq!(
         session

@@ -19,6 +19,7 @@ impl Spacing<'_> {
         let mut depth = 0_usize;
         let mut insertion = end.line;
         let mut trailing_comment = false;
+
         for line in end.line..start.line {
             let text = lines[line - 1];
             if line > end.line && depth == 0 && text.trim().is_empty() {
@@ -51,6 +52,7 @@ impl Spacing<'_> {
                 trailing_comment = false;
             }
         }
+
         // Insert before the following item's comments/attributes, never within
         // its attached prefix. --fix expects rustfmt's one-item-per-line layout.
         self.missing.insert(insertion);
@@ -136,6 +138,7 @@ fn rust_files(root: &Path) -> std::io::Result<Vec<std::path::PathBuf>> {
             files.push(entry.path());
         }
     }
+
     files.sort();
     Ok(files)
 }
@@ -150,9 +153,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if !args.is_empty() && !fix {
         return Err("usage: check-rust-spacing [--fix] (run rustfmt before --fix)".into());
     }
+
     let root = root();
     let files = rust_files(&root)?;
     let mut violations = 0;
+
     for path in &files {
         let source = fs::read_to_string(path)?;
         let gaps = missing(&source).map_err(|error| format!("{}: {error}", path.display()))?;
@@ -165,9 +170,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     output.push('\n');
                 }
             }
+
             if !missing(&output)?.is_empty() {
                 return Err(format!("{}: run rustfmt before --fix", path.display()).into());
             }
+
             fs::write(path, output)?;
         } else {
             for line in gaps {
@@ -178,14 +185,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
+
     if violations > 0 && !fix {
         return Err(format!("{violations} declaration-spacing violations").into());
     }
+
     println!(
         "Rust spacing: {} files checked; {violations} gaps {}",
         files.len(),
         if fix { "inserted" } else { "missing" }
     );
+
     Ok(())
 }
 

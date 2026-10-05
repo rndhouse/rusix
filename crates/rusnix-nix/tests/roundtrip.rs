@@ -20,7 +20,9 @@ fn failure(name: &str) -> (Generated, Diagnostic, Origin) {
         panic!("list fixture")
     };
     let expected = items[if name == "nested" { 1 } else { 0 }].origin.clone();
+
     let generated = compile(&config).unwrap();
+
     let diagnostic = session().evaluate(&generated).unwrap_err();
     assert_eq!(
         diagnostic.kind,
@@ -110,6 +112,7 @@ fn nested_list_failure_maps_to_divide_not_container() {
 fn generated_syntax_failure_is_a_compiler_bug_even_with_a_rust_span() {
     let source = "{ broken = ; }\n".to_string();
     let origin = Origin::new("innocent.rs", 10, 3, "set innocent");
+
     let generated = Generated {
         spans: vec![SourceSpan {
             start: 0,
@@ -119,6 +122,7 @@ fn generated_syntax_failure_is_a_compiler_bug_even_with_a_rust_span() {
         }],
         source,
     };
+
     let diagnostic = session().evaluate(&generated).unwrap_err();
     assert_eq!(diagnostic.kind, DiagnosticKind::Compiler);
     assert!(diagnostic.primary.is_none());
@@ -137,6 +141,7 @@ fn backend_static_binding_failure_is_a_compiler_bug() {
         source: "__rusnix_undefined_variable\n".into(),
         spans: vec![],
     };
+
     let diagnostic = session().evaluate(&generated).unwrap_err();
     assert_eq!(
         diagnostic.kind,
@@ -153,6 +158,7 @@ fn missing_provenance_is_explicit_and_original_is_retained() {
         source: "builtins.throw \"backend failure without metadata\"\n".into(),
         spans: vec![],
     };
+
     let diagnostic = session().evaluate(&generated).unwrap_err();
     assert_eq!(diagnostic.kind, DiagnosticKind::NixEval);
     assert!(diagnostic.primary.is_none());
@@ -225,10 +231,12 @@ fn shallow_error_context_loses_nested_failure_context() {
         "builtins.addErrorContext \"rusnix-origin:{}\" {{ nested = builtins.throw \"lazy child failed\"; }}",
         origin.id
     );
+
     let generated = Generated {
         source,
         spans: vec![],
     };
+
     let diagnostic = session().evaluate(&generated).unwrap_err();
     assert_eq!(diagnostic.kind, DiagnosticKind::NixEval);
     assert_eq!(diagnostic.reason, "lazy child failed");
@@ -257,6 +265,7 @@ fn string_and_attribute_escaping_and_integer_edges_survive_nix() {
     let config = Config::new()
         .set("a\"${injection}.λ", text)
         .set("numbers", vec![i64::MIN, -22, 0, i64::MAX]);
+
     let generated = compile(&config).unwrap();
     let value = session().evaluate(&generated).unwrap().value;
     assert_eq!(value["a\"${injection}"]["λ"], text);
@@ -270,6 +279,7 @@ fn string_and_attribute_escaping_and_integer_edges_survive_nix() {
 fn real_store_write_is_inside_disposable_root_and_is_cleaned_up() {
     let session = session();
     let root = session.root().to_owned();
+
     let generated = Generated {
         source: "builtins.toFile \"rusnix-isolation-check\" \"isolated content\"".into(),
         spans: vec![],
@@ -288,6 +298,7 @@ fn real_store_write_is_inside_disposable_root_and_is_cleaned_up() {
 #[test]
 fn selecting_good_does_not_demand_bad() {
     let config = fixtures::config("selective").unwrap();
+
     let generated = compile(&config).unwrap();
     assert!(!generated.source.contains("builtins.deepSeq"));
     assert!(!generated.source.contains("builtins.seq"));
@@ -315,7 +326,9 @@ fn selecting_good_does_not_demand_bad() {
 #[test]
 fn selecting_bad_maps_to_divide_and_retains_static_path() {
     let config = fixtures::config("selective").unwrap();
+
     let generated = compile(&config).unwrap();
+
     let diagnostic = session().evaluate_attribute(&generated, "bad").unwrap_err();
     assert_eq!(diagnostic.kind, DiagnosticKind::NixEval);
     assert_eq!(
@@ -358,6 +371,7 @@ fn selecting_bad_maps_to_divide_and_retains_static_path() {
 #[test]
 fn selected_list_child_keeps_operation_context_without_container_forcing() {
     use rusnix_ir::Expr;
+
     let config = Config::new().set("good", 42).set(
         "bad",
         vec![Expr::int(22), Expr::int(44).divide(Expr::int(0))],
@@ -365,6 +379,7 @@ fn selected_list_child_keeps_operation_context_without_container_forcing() {
     let ValueKind::List(items) = &config.assignments[1].value.kind else {
         panic!()
     };
+
     let generated = compile(&config).unwrap();
     assert!(!generated.source.contains("deepSeq"));
     assert_eq!(
@@ -374,6 +389,7 @@ fn selected_list_child_keeps_operation_context_without_container_forcing() {
             .value,
         42
     );
+
     let diagnostic = session().evaluate_attribute(&generated, "bad").unwrap_err();
     assert_eq!(diagnostic.primary, Some(items[1].origin.clone()));
     assert_eq!(diagnostic.provenance, Provenance::ErrorContext);
@@ -391,6 +407,7 @@ fn live_source_map_fallback_works_without_any_runtime_context() {
         ast::{Builtin, NixExpr, NixKind},
         render,
     };
+
     let config = fixtures::config("selective").unwrap();
     let assignment = &config.assignments[1];
     // Fault injection at the AST boundary: deliberately omit the runtime context
@@ -418,6 +435,7 @@ fn live_source_map_fallback_works_without_any_runtime_context() {
         ]),
         config.origin.clone(),
     );
+
     let generated = render(&ast);
     assert!(!generated.source.contains("addErrorContext"));
     assert_eq!(
@@ -427,6 +445,7 @@ fn live_source_map_fallback_works_without_any_runtime_context() {
             .value,
         42
     );
+
     let diagnostic = session().evaluate_attribute(&generated, "bad").unwrap_err();
     assert_eq!(diagnostic.kind, DiagnosticKind::NixEval);
     assert_eq!(diagnostic.reason, "division by zero");
@@ -443,15 +462,18 @@ fn live_source_map_fallback_works_without_any_runtime_context() {
 #[test]
 fn reused_operation_origin_recovers_the_selected_occurrence_path() {
     use rusnix_ir::Expr;
+
     let operation = Expr::int(44).divide(Expr::int(0));
     let config = Config::new()
         .set("first", operation.clone())
         .set("second", operation);
+
     let generated = compile(&config).unwrap();
     assert_eq!(
         config.assignments[0].value.origin.id,
         config.assignments[1].value.origin.id
     );
+
     let diagnostic = session()
         .evaluate_attribute(&generated, "second")
         .unwrap_err();
@@ -477,6 +499,7 @@ fn reused_operation_origin_recovers_the_selected_occurrence_path() {
 fn attribute_selection_is_literal_data_not_source_or_cli_flags() {
     let attribute = "--store /nix/store ${throw \"injection\"}";
     let config = Config::new().set(attribute, 42);
+
     let generated = compile(&config).unwrap();
     assert_eq!(
         session()

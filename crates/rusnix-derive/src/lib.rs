@@ -28,6 +28,7 @@ pub fn config(args: TokenStream, input: TokenStream) -> TokenStream {
         .into_compile_error()
         .into();
     }
+
     config::expand(parse_macro_input!(input as syn::ItemMod))
         .unwrap_or_else(syn::Error::into_compile_error)
         .into()
@@ -44,6 +45,7 @@ pub fn options(args: TokenStream, input: TokenStream) -> TokenStream {
         .into_compile_error()
         .into();
     }
+
     options::expand(parse_macro_input!(input as syn::ItemMod))
         .unwrap_or_else(syn::Error::into_compile_error)
         .into()
@@ -91,6 +93,7 @@ impl Naming {
                 "attribute name must be nonempty and NUL-free",
             ));
         }
+
         Ok(name)
     }
 
@@ -98,6 +101,7 @@ impl Naming {
         let name = name.strip_prefix("r#").unwrap_or(name);
         let chars: Vec<_> = name.chars().collect();
         let mut snake = String::new();
+
         for (index, &ch) in chars.iter().enumerate() {
             if ch.is_uppercase()
                 && index > 0
@@ -110,12 +114,14 @@ impl Naming {
             }
             snake.extend(ch.to_lowercase());
         }
+
         self.field(&snake)
     }
 
     fn field(self, name: &str) -> String {
         let name = name.strip_prefix("r#").unwrap_or(name);
         let mut output = String::new();
+
         for (index, word) in name.split('_').filter(|word| !word.is_empty()).enumerate() {
             let mut chars = word.chars();
             if let Some(first) = chars.next() {
@@ -127,12 +133,14 @@ impl Naming {
                 output.extend(chars);
             }
         }
+
         output
     }
 }
 
 fn expand(input: DeriveInput, rooted: bool) -> syn::Result<proc_macro2::TokenStream> {
     let mut rename_all = None;
+
     for attr in &input.attrs {
         if attr.path().is_ident("rusnix") {
             attr.parse_nested_meta(|meta| {
@@ -151,10 +159,12 @@ fn expand(input: DeriveInput, rooted: bool) -> syn::Result<proc_macro2::TokenStr
             })?;
         }
     }
+
     let naming = rename_all
         .as_ref()
         .map(|(naming, _)| *naming)
         .unwrap_or_default();
+
     if let Data::Enum(data) = &input.data {
         if rooted {
             return Err(syn::Error::new_spanned(
@@ -164,12 +174,14 @@ fn expand(input: DeriveInput, rooted: bool) -> syn::Result<proc_macro2::TokenStr
         }
         return enum_value(&input, data, naming);
     }
+
     let Data::Struct(data) = &input.data else {
         return Err(syn::Error::new_spanned(
             &input.ident,
             "derive supports structs and unit enums",
         ));
     };
+
     if let Some((_, name)) = &rename_all
         && !matches!(data.fields, Fields::Named(_))
     {
@@ -178,14 +190,17 @@ fn expand(input: DeriveInput, rooted: bool) -> syn::Result<proc_macro2::TokenStr
             "rename_all requires named fields; newtypes are transparent",
         ));
     }
+
     let mut generics = input.generics.clone();
     let body = match &data.fields {
         Fields::Named(fields) => {
             let mut values = Vec::new();
+
             for field in &fields.named {
                 let mut rename: Option<LitStr> = None;
                 let mut skip = false;
                 let mut flatten = false;
+
                 for attr in &field.attrs {
                     if !attr.path().is_ident("rusnix") {
                         continue;
@@ -217,31 +232,37 @@ fn expand(input: DeriveInput, rooted: bool) -> syn::Result<proc_macro2::TokenStr
                         Ok(())
                     })?;
                 }
+
                 if (skip && (flatten || rename.is_some())) || (flatten && rename.is_some()) {
                     return Err(syn::Error::new_spanned(
                         field,
                         "skip, flatten, and rename cannot be combined on one field",
                     ));
                 }
+
                 if skip {
                     continue;
                 }
+
                 let name = field.ident.as_ref().unwrap();
                 let ty = &field.ty;
                 generics
                     .make_where_clause()
                     .predicates
                     .push(parse_quote!(#ty: ::rusnix_ir::IntoRusnixValue));
+
                 let key = if flatten {
                     quote!(None)
                 } else {
                     let logical = naming.mapped_field(name, rename)?;
                     quote!(Some(#logical))
                 };
+
                 values.push(quote_spanned!(field.span()=>
                     (#key, ::rusnix_ir::IntoRusnixValue::into_value(self.#name))
                 ));
             }
+
             quote!(::rusnix_ir::RusnixValue::__record(vec![#(#values),*]))
         }
         Fields::Unnamed(fields) if !rooted && fields.unnamed.len() == 1 => {
@@ -252,6 +273,7 @@ fn expand(input: DeriveInput, rooted: bool) -> syn::Result<proc_macro2::TokenStr
                     "a newtype is transparent; mapping attributes require named fields",
                 ));
             }
+
             let ty = &field.ty;
             generics
                 .make_where_clause()
@@ -266,9 +288,11 @@ fn expand(input: DeriveInput, rooted: bool) -> syn::Result<proc_macro2::TokenStr
             ));
         }
     };
+
     let name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     let config_impl = rooted.then(|| config_impl(&input.ident, &generics));
+
     Ok(quote!(
         impl #impl_generics ::rusnix_ir::IntoRusnixValue for #name #ty_generics #where_clause {
             #[track_caller]
@@ -286,6 +310,7 @@ fn enum_value(
 ) -> syn::Result<proc_macro2::TokenStream> {
     let mut arms = Vec::new();
     let mut names = std::collections::BTreeSet::new();
+
     for variant in &data.variants {
         if !matches!(variant.fields, Fields::Unit) {
             return Err(syn::Error::new_spanned(
@@ -293,7 +318,9 @@ fn enum_value(
                 "automatic enum lowering supports unit variants only; implement IntoRusnixValue for data-carrying enums",
             ));
         }
+
         let mut rename: Option<LitStr> = None;
+
         for attr in &variant.attrs {
             if !attr.path().is_ident("rusnix") {
                 continue;
@@ -313,6 +340,7 @@ fn enum_value(
                 Ok(())
             })?;
         }
+
         let name = rename.unwrap_or_else(|| {
             LitStr::new(
                 &naming.variant(&variant.ident.to_string()),
@@ -325,21 +353,26 @@ fn enum_value(
                 "enum variants must lower to distinct nonempty names",
             ));
         }
+
         let variant_name = &variant.ident;
         // Conditional variants must also condition their generated match arm.
         let mut gates = Vec::new();
+
         for attr in &variant.attrs {
             if let Some(gate) = config::cfg_gate(&attr.meta)? {
                 gates.push(quote!(#[#gate]));
             }
         }
+
         arms.push(quote_spanned!(variant.span()=>
             #(#gates)*
             Self::#variant_name => ::rusnix_ir::IntoRusnixValue::into_value(#name)
         ));
     }
+
     let name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+
     Ok(quote!(
         impl #impl_generics ::rusnix_ir::IntoRusnixValue for #name #ty_generics #where_clause {
             #[track_caller]

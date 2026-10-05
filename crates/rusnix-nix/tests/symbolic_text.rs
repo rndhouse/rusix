@@ -125,6 +125,7 @@ fn same_artifact_interpolation_follows_ordinary_and_force_overrides() {
         "postgres --port={port}",
         port = OptionRef::<i64>::new("services.example.port").into_expr(),
     );
+
     let artifact = compile_module(
         &NixosModule::empty()
             .import_ref(
@@ -142,6 +143,7 @@ fn same_artifact_interpolation_follows_ordinary_and_force_overrides() {
     let source = artifact.module.source.clone();
     assert!(source.contains("(config).\"services\".\"example\".\"port\""));
     assert!(!source.contains("deepSeq"));
+
     let session = NixSession::new().unwrap();
     for (module, expected) in [
         ("{}", "postgres --port=5432"),
@@ -171,6 +173,7 @@ fn unused_interpolated_failure_stays_lazy_and_selected_failure_keeps_child_origi
         ("good", 42.into()),
         ("bad", nix_text!("answer={failure}", failure = failure)),
     ]);
+
     let session = NixSession::new().unwrap();
     assert_eq!(
         session
@@ -179,6 +182,7 @@ fn unused_interpolated_failure_stays_lazy_and_selected_failure_keeps_child_origi
             .value["result"],
         42,
     );
+
     let diagnostic = session
         .evaluate_interop(&generated(result.select("bad")))
         .unwrap_err();
@@ -198,6 +202,7 @@ fn unused_interpolation_does_not_force_a_throwing_final_option() {
     let reference_line = line!() + 1;
     let port = OptionRef::<i64>::new("services.example.port").into_expr();
     let fixture = InputRef::local("schema", root().join("tests/fixtures/symbolic-options.nix"));
+
     let artifact = compile_module(
         &NixosModule::empty()
             .import_ref(fixture.module("schema"))
@@ -211,6 +216,7 @@ fn unused_interpolation_does_not_force_a_throwing_final_option() {
             )),
     )
     .unwrap();
+
     let session = NixSession::new().unwrap();
     assert_eq!(
         session
@@ -219,6 +225,7 @@ fn unused_interpolation_does_not_force_a_throwing_final_option() {
             .value,
         true,
     );
+
     let diagnostic = session
         .evaluate_nixos(&artifact, &["environment", "result", "command"], false)
         .unwrap_err();

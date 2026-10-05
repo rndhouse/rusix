@@ -68,6 +68,7 @@ fn save_diagnostic(name: &str, diagnostic: &Diagnostic) {
 fn base_value_is_resolved_symbolically_and_contribution_boundaries_remain() {
     let module = base(command());
     assert_eq!(module.modules.len(), 2);
+
     let artifact = compile_module(&module).unwrap();
     assert_eq!(artifact.definitions.len(), 3);
     assert!(artifact.module.source.contains("({ config, ... }:"));
@@ -85,6 +86,7 @@ fn base_value_is_resolved_symbolically_and_contribution_boundaries_remain() {
         .unwrap()
         .value;
     assert_eq!(value, "example --port=5432");
+
     let out = root().join("target/symbolic-options/base");
     fs::create_dir_all(&out).unwrap();
     fs::write(out.join("module.nix"), &artifact.module.source).unwrap();
@@ -102,9 +104,11 @@ fn unchanged_generated_artifact_follows_an_ordinary_nix_override() {
     fs::write(&downstream, "{ module = {}; }\n").unwrap();
     let module =
         base(command()).import_ref(InputRef::local("downstream", &downstream).module("module"));
+
     // Convert/lower once. Only the ordinary Nix contributor changes below.
     let artifact = compile_module(&module).unwrap();
     let source_before = artifact.module.source.clone();
+
     let session = NixSession::new().unwrap();
     assert_eq!(
         session
@@ -121,6 +125,7 @@ fn unchanged_generated_artifact_follows_an_ordinary_nix_override() {
         .value;
     assert_eq!(value, "example --port=6432");
     assert_eq!(artifact.module.source, source_before);
+
     let out = root().join("target/symbolic-options/override");
     fs::create_dir_all(&out).unwrap();
     fs::write(out.join("module.nix"), &artifact.module.source).unwrap();
@@ -177,8 +182,11 @@ fn operation_on_final_port_retains_rust_origin_and_destination_path() {
     let derived = Expr::int(44).divide(reference.into_expr());
     let module = base(derived.to_text().with_prefix("example --quotient="))
         .import_ref(fixtures().module("zero"));
+
     let artifact = compile_module(&module).unwrap();
+
     let session = NixSession::new().unwrap();
+
     let diagnostic = session
         .evaluate_nixos(&artifact, COMMAND, false)
         .unwrap_err();
@@ -213,6 +221,7 @@ fn operation_on_final_port_retains_rust_origin_and_destination_path() {
             .unwrap_or("")
             .starts_with("rusnix-origin:")
     });
+
     let fallback = Diagnostic::from_nix(
         DiagnosticKind::NixEval,
         &format!("@nix {event}"),
@@ -233,6 +242,7 @@ fn operation_on_final_port_retains_rust_origin_and_destination_path() {
 fn missing_option_reports_the_reference_creation_in_rust() {
     let reference_line = line!() + 1;
     let reference = OptionRef::<i64>::new("services.example.missing");
+
     let artifact = compile_module(&base(
         reference
             .into_expr()
@@ -240,6 +250,7 @@ fn missing_option_reports_the_reference_creation_in_rust() {
             .with_prefix("example --port="),
     ))
     .unwrap();
+
     let diagnostic = NixSession::new()
         .unwrap()
         .evaluate_nixos(&artifact, COMMAND, false)
@@ -259,6 +270,7 @@ fn missing_option_reports_the_reference_creation_in_rust() {
 fn unused_symbolic_dependency_does_not_force_a_throwing_option() {
     let artifact =
         compile_module(&base(command()).import_ref(fixtures().module("failing"))).unwrap();
+
     let session = NixSession::new().unwrap();
     assert_eq!(
         session
@@ -267,6 +279,7 @@ fn unused_symbolic_dependency_does_not_force_a_throwing_option() {
             .value,
         true
     );
+
     // A control evaluation proves that the referenced value really does fail.
     let diagnostic = session
         .evaluate_nixos(&artifact, COMMAND, false)

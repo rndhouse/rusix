@@ -78,9 +78,11 @@ fn finite_floats_keep_float_syntax_and_nix_numeric_semantics() {
         f64::MAX,
         f64::MIN_POSITIVE,
     ];
+
     let artifact = generated(NixValue::list(floats.map(NixValue::from)));
     assert!(artifact.source.contains("(1.0)"));
     assert!(artifact.source.contains("(1.0e-100)"));
+
     let value = NixSession::new()
         .unwrap()
         .evaluate(&artifact)
@@ -157,6 +159,7 @@ fn nested_lists_records_and_dynamic_keys_stay_atomic_in_derive() {
         config.assignments[0].value.kind,
         ValueKind::OpaqueRecord(_)
     ));
+
     let artifact = compile(&config).unwrap();
     let actual = NixSession::new()
         .unwrap()
@@ -203,6 +206,7 @@ fn opaque_categories_and_expression_origins_survive_inside_records() {
         ("external", input.value("packages.example")),
         ("expression", expression.into()),
     ]);
+
     let artifact = generated(mixed.clone());
     assert!(
         artifact
@@ -210,6 +214,7 @@ fn opaque_categories_and_expression_origins_survive_inside_records() {
             .iter()
             .any(|span| span.origin == package_origin)
     );
+
     let session = NixSession::new().unwrap();
     // Demand only projections that can be serialized, preserving native objects.
     for (selection, expected) in [
@@ -272,7 +277,9 @@ fn real_curried_write_text_produces_a_derivation_without_building() {
         .call(NixValue::literal(text.clone()));
     let raw_file = generated(file.clone());
     let artifact = generated(file_summary(file));
+
     let session = NixSession::new().unwrap();
+
     let result = session.evaluate_interop(&artifact).unwrap().value["result"].clone();
     assert_eq!(result["name"], "postgresql.conf");
     assert_eq!(result["kind"], "derivation");
@@ -323,14 +330,17 @@ fn real_run_command_accepts_structured_environment_and_remains_unbuilt() {
         .call("rusnix-unbuilt")
         .call(args)
         .call(command);
+
     let summary = NixValue::record([
         ("output", file.clone().select("outPath")),
         ("drvPath", file.clone().select("drvPath")),
         ("command", file.clone().select("buildCommand")),
         ("workers", file.select("workers")),
     ]);
+
     let session = NixSession::new().unwrap();
     let artifact = generated(summary);
+
     let result = session.evaluate_interop(&artifact).unwrap().value["result"].clone();
     assert_eq!(result["command"], command);
     assert_eq!(result["workers"], 4);
@@ -365,12 +375,14 @@ fn real_attrset_builder_accepts_literals_lists_nested_records_and_package_refere
         ),
     ]);
     let file = pkgs.package_function("writeTextFile").call(args);
+
     let summary = NixValue::record([
         ("file", file_summary(file.clone())),
         ("dependency", file.clone().select("dependency.pname")),
         ("labels", file.clone().select("labels")),
         ("settings", file.select("settings")),
     ]);
+
     let artifact = generated(summary);
     let result = NixSession::new()
         .unwrap()
@@ -394,8 +406,10 @@ fn invalid_real_function_argument_maps_to_the_rust_call_and_retains_raw_trace() 
         .package_function("writeText")
         .call("bad.conf");
     let argument = NixValue::record([("wrong", true.into())]);
+
     let call_line = line!() + 1;
     let result = writer.call(argument);
+
     let artifact = generated(result);
     let error = NixSession::new()
         .unwrap()
@@ -411,6 +425,7 @@ fn invalid_real_function_argument_maps_to_the_rust_call_and_retains_raw_trace() 
         error.raw_nix
     );
     assert!(error.raw_nix.contains("trivial-builders"));
+
     let out = root().join("target/structured-interop/invalid-call");
     fs::create_dir_all(&out).unwrap();
     fs::write(out.join("diagnostic.txt"), error.render(&root())).unwrap();
@@ -536,7 +551,9 @@ fn unused_structured_symbolic_calls_stay_lazy_and_reference_failures_keep_origin
         "{ module = { services.postgresql.dataDir = throw \"unused directory was forced\"; }; }\n",
     )
     .unwrap();
+
     let artifact = compile_module(&symbolic_module(&downstream, true)).unwrap();
+
     let session = NixSession::new().unwrap();
     assert_eq!(
         session
@@ -585,6 +602,7 @@ fn lazy_record_merging_keeps_unselected_fallible_values_unforced() {
         .function("recursiveUpdate")
         .call(left)
         .call(NixValue::record([("extra", true.into())]));
+
     let session = NixSession::new().unwrap();
     assert_eq!(
         session
@@ -612,6 +630,7 @@ fn opaque_callbacks_capture_lexical_parameters_and_render_deterministically() {
             })
         })
     }
+
     let artifact = || generated(callback().call("outside").call("inside"));
     let first = artifact();
     let second = artifact();
@@ -682,9 +701,11 @@ fn module_package_handles_are_scoped_and_follow_module_package_arguments() {
     )
     .unwrap_err();
     assert_eq!(error.kind, DiagnosticKind::Validation);
+
     let artifact =
         compile_module(&NixosModule::empty().add(ResultContribution { result: value })).unwrap();
     assert!(artifact.module.source.contains("pkgs"));
+
     // This selection belongs to the existing minimal module harness's namespaces.
     let artifact = compile_module(&NixosModule::empty().add(Config::new().set(
         "environment.result",
@@ -705,6 +726,7 @@ fn session_value(artifact: &rusnix_nix::nixos::NixosArtifact) -> serde_json::Val
 #[test]
 fn curried_apply_preserves_argument_order_and_the_authoring_call_origin() {
     let pkgs = Nixpkgs::new();
+
     let artifact = generated(
         pkgs.package_function("writeText")
             .apply([
@@ -713,6 +735,7 @@ fn curried_apply_preserves_argument_order_and_the_authoring_call_origin() {
             ])
             .select("text"),
     );
+
     let session = NixSession::new().unwrap();
     assert_eq!(
         session.evaluate_interop(&artifact).unwrap().value["result"],
@@ -721,8 +744,10 @@ fn curried_apply_preserves_argument_order_and_the_authoring_call_origin() {
 
     let writer = pkgs.package_function("writeText");
     let arguments = ["bad.conf".into(), rusnix_ir::nix_record! { "wrong": true }];
+
     let call_line = line!() + 1;
     let invalid = writer.apply(arguments);
+
     let diagnostic = session.evaluate_interop(&generated(invalid)).unwrap_err();
     assert_eq!(diagnostic.provenance, Provenance::ErrorContext);
     assert_eq!(diagnostic.primary.as_ref().unwrap().line, call_line);
@@ -739,6 +764,7 @@ fn curried_apply_preserves_argument_order_and_the_authoring_call_origin() {
 fn mixed_record_and_text_macros_preserve_opaque_values_and_literal_keys() {
     let pkgs = Nixpkgs::new();
     let dynamic_key = "literal.dot ${not interpolation}\"";
+
     let value = rusnix_ir::nix_record! {
         (dynamic_key): rusnix_ir::nix_record! {},
         "package": pkgs.get("hello"),
@@ -746,6 +772,7 @@ fn mixed_record_and_text_macros_preserve_opaque_values_and_literal_keys() {
         "emptyText": rusnix_ir::nix_text!(),
         "list": NixValue::list([1.into(), 2.into()]),
     };
+
     let summary = rusnix_ir::nix_record! {
         "key": pkgs.function("getAttr").apply([dynamic_key.into(), value.clone()]),
         "package": value.clone().select("package.pname"),
@@ -771,6 +798,7 @@ fn joined_text_retains_store_dependencies_and_deferred_list_operations() {
     let pkgs = Nixpkgs::new();
     let dependency = pkgs.get("hello").as_value().to_text();
     let text = rusnix_ir::nix_text!("prefix ", dependency.clone(), " suffix");
+
     let contexts_equal = InputRef::local(
         "context",
         root().join("tests/fixtures/structured-interop.nix"),
@@ -785,14 +813,17 @@ fn joined_text_retains_store_dependencies_and_deferred_list_operations() {
         .function("getContext")
         .call(dependency),
     );
+
     let list = Nixpkgs::new().function("map").apply([
         NixValue::function(|item| item.to_text()),
         NixValue::list([1.into(), 2.into()]),
     ]);
+
     let summary = rusnix_ir::nix_record! {
         "contextsEqual": contexts_equal,
         "joined": NixValue::join_text("/", list),
     };
+
     let value = NixSession::new()
         .unwrap()
         .evaluate_interop(&generated(summary))
@@ -814,6 +845,7 @@ fn mixed_macros_retain_symbolic_references_and_unused_fields_stay_lazy() {
         "options",
         root().join("tests/fixtures/symbolic-options.nix"),
     );
+
     let artifact = compile_module(
         &NixosModule::empty()
             .import_ref(schema.module("schema"))
@@ -824,6 +856,7 @@ fn mixed_macros_retain_symbolic_references_and_unused_fields_stay_lazy() {
             ),
     )
     .unwrap();
+
     let session = NixSession::new().unwrap();
     assert!(
         artifact

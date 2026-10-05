@@ -29,6 +29,7 @@ fn nesting_decides_placement_and_reusable_values_have_no_global_paths() {
         first: Reusable,
         second: Reusable,
     }
+
     let line = line!() + 1;
     let config = Placement {
         first: Reusable {
@@ -54,6 +55,7 @@ fn nesting_decides_placement_and_reusable_values_have_no_global_paths() {
         .map(|a| &a.value.origin.id)
         .collect();
     assert_eq!(ids.len(), 4);
+
     for binding in &config.assignments {
         assert_eq!(binding.origin.file, file!());
         assert_eq!(binding.origin.line, conversion_line);
@@ -79,6 +81,7 @@ fn field_names_are_literal_data_and_raw_identifiers_have_logical_names() {
         #[rusnix(rename = "${throw \"injection\"}")]
         escaped: String,
     }
+
     let config = Names {
         r#type: true,
         version: 1,
@@ -113,12 +116,14 @@ fn flatten_skip_generics_and_borrowed_values_have_only_requested_effects() {
         #[rusnix(skip)]
         state: LocalState,
     }
+
     let document = Document {
         metadata: Metadata { label: "demo" },
         value: Port(22),
         state: LocalState,
     };
     let _ = &document.state; // Not converted and needs no IntoRusnixValue implementation.
+
     let generated = compile(&document.into_config()).unwrap();
     assert_eq!(
         NixSession::new()
@@ -142,6 +147,7 @@ fn derived_unit_enums_remain_exhaustive_rust_types() {
     struct ConfigModel {
         modes: Vec<Mode>,
     }
+
     let config = ConfigModel {
         modes: vec![Mode::Server, Mode::Client],
     }
@@ -168,6 +174,7 @@ fn record_lists_are_structured_lazy_and_keep_operation_origins() {
         good: bool,
         items: Vec<Item>,
     }
+
     let division_line = line!() + 1;
     let bad = Expr::int(44).divide(Expr::int(0));
     let model = Model {
@@ -176,7 +183,9 @@ fn record_lists_are_structured_lazy_and_keep_operation_origins() {
     };
     let conversion_line = line!() + 1;
     let config = model.into_config();
+
     let generated = compile(&config).unwrap();
+
     let session = NixSession::new().unwrap();
     assert_eq!(
         session
@@ -185,6 +194,7 @@ fn record_lists_are_structured_lazy_and_keep_operation_origins() {
             .value,
         true
     );
+
     let diagnostic = session.evaluate_attribute(&generated, "items").unwrap_err();
     assert_eq!(diagnostic.reason, "division by zero");
     assert_eq!(diagnostic.primary.as_ref().unwrap().line, division_line);
@@ -195,12 +205,14 @@ fn record_lists_are_structured_lazy_and_keep_operation_origins() {
             .iter()
             .any(|o| o.purpose == "set items" && o.line == conversion_line)
     );
+
     let ValueKind::List(items) = &config.assignments[1].value.kind else {
         panic!()
     };
     assert_eq!(items[0].origin.file, file!());
     assert_eq!(items[0].origin.line, conversion_line);
     assert!(!generated.source.contains("deepSeq"));
+
     let mut event = diagnostic
         .raw_nix
         .lines()
@@ -214,6 +226,7 @@ fn record_lists_are_structured_lazy_and_keep_operation_origins() {
             .unwrap_or("")
             .starts_with("rusnix-origin:")
     });
+
     let fallback = rusnix_nix::Diagnostic::from_nix(
         DiagnosticKind::NixEval,
         &format!("@nix {event}"),
@@ -262,8 +275,10 @@ fn independent_derived_contributions_merge_lists_and_keep_nixos_priorities() {
             },
         });
     assert_eq!(module.modules.len(), 2);
+
     let session = NixSession::new().unwrap();
     let selection = &["services", "openssh", "ports"];
+
     let mut ports = session
         .evaluate_nixos(&compile_module(&module).unwrap(), selection, false)
         .unwrap()
@@ -306,6 +321,7 @@ fn conflicting_derived_contributions_report_both_add_calls() {
             },
         },
     });
+
     let second_line = line!() + 1;
     let module = module.add(Ssh {
         services: Services {
@@ -314,8 +330,10 @@ fn conflicting_derived_contributions_report_both_add_calls() {
             },
         },
     });
+
     let artifact = compile_module(&module).unwrap();
     assert_eq!(artifact.definitions.len(), 2);
+
     let diagnostic = NixSession::new()
         .unwrap()
         .evaluate_nixos(
@@ -349,6 +367,7 @@ fn derive_preserves_opaque_package_module_function_overlay_and_value_identities(
         overlay: OverlayRef,
         value: NixValue,
     }
+
     let pkgs = Nixpkgs::new();
     let package = pkgs.get("hello");
     let package_origin = package.reference().origin.clone();
@@ -361,6 +380,7 @@ fn derive_preserves_opaque_package_module_function_overlay_and_value_identities(
         value: pkgs.function("toUpper").call("rusnix"),
     }
     .into_config();
+
     for binding in &config.assignments[..4] {
         assert!(matches!(binding.value.kind, ValueKind::Reference(_)));
     }
@@ -383,6 +403,7 @@ fn derived_package_lists_resolve_real_nixpkgs_packages() {
     struct Environment {
         system_packages: Vec<PackageRef>,
     }
+
     let pkgs = Nixpkgs::new();
     let module = NixosModule::empty()
         .import_ref(pkgs.module("config/system-path.nix"))
@@ -397,6 +418,7 @@ fn derived_package_lists_resolve_real_nixpkgs_packages() {
             )
             .priority(DefinitionPriority::Force),
         );
+
     let value = NixSession::new()
         .unwrap()
         .evaluate_system_packages(&compile_module(&module).unwrap())
@@ -430,9 +452,11 @@ fn symbolic_fields_follow_ordinary_nix_overrides_without_reconversion() {
         command: Expr<String>,
         expected_ports: Vec<OptionRef<i64>>,
     }
+
     let reference = OptionRef::<i64>::new("services.example.port");
     let reference_line = line!() + 1;
     let missing = OptionRef::<i64>::new("services.example.missing");
+
     let scratch = tempfile::tempdir().unwrap();
     let path = scratch.path().join("downstream.nix");
     std::fs::write(&path, "{ module = {}; }").unwrap();
@@ -465,7 +489,9 @@ fn symbolic_fields_follow_ordinary_nix_overrides_without_reconversion() {
             )
             .priority(DefinitionPriority::Default),
         );
+
     let artifact = compile_module(&module).unwrap();
+
     let session = NixSession::new().unwrap();
     let selection = &["environment", "command"];
     assert_eq!(
@@ -483,6 +509,7 @@ fn symbolic_fields_follow_ordinary_nix_overrides_without_reconversion() {
             .value,
         "example --port=6432"
     );
+
     // The unused missing dependency stayed lazy during both evaluations.
     let diagnostic = session
         .evaluate_nixos(&artifact, &["environment", "expectedPorts"], false)
@@ -498,6 +525,7 @@ fn invalid_flatten_shapes_and_duplicate_fields_are_ir_errors() {
         #[rusnix(flatten)]
         number: i64,
     }
+
     assert!(
         compile(&BadShape { number: 1 }.into_config())
             .unwrap_err()
@@ -510,6 +538,7 @@ fn invalid_flatten_shapes_and_duplicate_fields_are_ir_errors() {
         #[rusnix(rename = "listenPort")]
         second: i64,
     }
+
     let error = compile(
         &Duplicate {
             listen_port: 1,
@@ -520,6 +549,7 @@ fn invalid_flatten_shapes_and_duplicate_fields_are_ir_errors() {
     .unwrap_err();
     assert_eq!(error.kind, DiagnosticKind::Validation);
     assert!(error.reason.contains("duplicate"));
+
     let error = compile(&Config::from_value(1.into_value())).unwrap_err();
     assert!(error.reason.contains("rooted record"));
 }
@@ -534,6 +564,7 @@ fn empty_records_and_empty_lists_are_preserved() {
         empty: Empty,
         list: Vec<Endpoint>,
     }
+
     let config = Model {
         empty: Empty {},
         list: vec![],
@@ -571,6 +602,7 @@ fn default_lower_camel_and_explicit_lower_camel_match() {
         #[rusnix(rename = "literal_name")]
         exceptional_name: String,
     }
+
     let config = Root {
         default_names: DefaultNames {
             enable_feature: true,
@@ -583,6 +615,7 @@ fn default_lower_camel_and_explicit_lower_camel_match() {
         exceptional_name: "preserved".into(),
     }
     .into_config();
+
     let value = NixSession::new()
         .unwrap()
         .evaluate(&compile(&config).unwrap())
@@ -624,6 +657,7 @@ fn naming_conventions_are_local_and_literal_rename_wins() {
     struct LowerCamel {
         listen_port: u16,
     }
+
     let config = Root {
         service_config: ServiceConfig {
             exec_start: "example".into(),
@@ -636,6 +670,7 @@ fn naming_conventions_are_local_and_literal_rename_wins() {
         },
     }
     .into_config();
+
     let value = NixSession::new()
         .unwrap()
         .evaluate(&compile(&config).unwrap())
@@ -675,12 +710,14 @@ fn unit_enum_naming_and_provenance_survive_lowering() {
         modes: Vec<Mode>,
         external: Vec<ExternalMode>,
     }
+
     let model = Root {
         modes: vec![Mode::Server, Mode::ReadOnly, Mode::Client],
         external: vec![ExternalMode::ReadOnly, ExternalMode::ReadWrite],
     };
     let conversion_line = line!() + 1;
     let config = model.into_config();
+
     for binding in &config.assignments {
         assert_eq!(binding.origin.file, file!());
         assert_eq!(binding.origin.line, conversion_line);

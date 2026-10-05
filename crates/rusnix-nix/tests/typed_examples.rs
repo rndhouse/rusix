@@ -53,6 +53,7 @@ macro_rules! roundtrip {
             let conversion_line = line!();
             let config = $example::model().into_config();
             let generated = compile(&config).unwrap();
+
             assert!(!generated.source.contains("deepSeq"));
             assert!(
                 config
@@ -60,8 +61,10 @@ macro_rules! roundtrip {
                     .iter()
                     .all(|a| a.origin.file == file!() && a.origin.line == conversion_line)
             );
+
             let session = NixSession::new().unwrap();
             let evaluated = session.evaluate(&generated).unwrap();
+
             let out = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("../../target/typed-examples")
                 .join($name);
@@ -78,8 +81,10 @@ macro_rules! roundtrip {
             )
             .unwrap();
             std::fs::write(out.join("nix.stderr"), evaluated.raw_nix).unwrap();
+
             let rust = evaluated.value;
             assert_eq!(rust["demo"], serde_json::json!($expected));
+
             let nix = session
                 .evaluate_nixos(
                     &nix_module(include_str!(concat!(
@@ -92,6 +97,7 @@ macro_rules! roundtrip {
                 )
                 .unwrap()
                 .value;
+
             assert_eq!(rust["demo"], nix);
         }
     };
@@ -131,6 +137,7 @@ struct ConflictingPorts {
 
 fn ir_failure() -> Config {
     use layered_validation::{Port, Services, SshContribution};
+
     ConflictingPorts {
         first: SshContribution {
             services: Services {
@@ -166,6 +173,7 @@ fn layered_validation_uses_ir_check_and_real_nixos_schema() {
             .reason
             .contains("duplicate or conflicting option path")
     );
+
     let session = NixSession::new().unwrap();
     let module = layered_validation::module();
     let value = session
@@ -249,6 +257,7 @@ fn newtypes_lower_transparently_without_inspecting_files() {
         certificate: invalid_states::Certificate,
         private_key: invalid_states::PrivateKey,
     }
+
     let config = Values {
         ports: vec![typed_values::Port(0), typed_values::Port(u16::MAX)],
         certificate: invalid_states::Certificate("/run/nonexistent.pem".into()),

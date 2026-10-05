@@ -25,7 +25,8 @@ Rust readability: separate distinct item declarations at the same level with
 one blank line, including items in inline modules, impls, traits, and function
 blocks. Keep comments/docs and attributes attached to their item. Consecutive
 plain `use` declarations may stay together as an import group; separate the
-group from other items. Keep ordinary statement sequences and fields compact.
+group from other items. Keep tightly related statements and fields compact.
+Use blank lines between conceptual blocks in non-trivial Rust functions; keep tightly related statements together.
 Apply the convention to macro templates and documentation examples by review.
 
 Stable rustfmt remains the canonical formatter. It preserves item spacing but

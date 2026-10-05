@@ -56,6 +56,7 @@ fn local_nesting_reuses_external_types_and_existing_mapping_rules() {
     };
     let _ = &model.input;
     let config = model.into_config();
+
     let value = NixSession::new()
         .unwrap()
         .evaluate(&compile(&config).unwrap())
@@ -78,6 +79,7 @@ fn local_nesting_reuses_external_types_and_existing_mapping_rules() {
     struct ExplicitServices<'a> {
         example_service: Endpoint<'a>,
     }
+
     let explicit = Explicit {
         services: ExplicitServices {
             example_service: Endpoint {
@@ -247,6 +249,7 @@ fn module_components_keep_nixos_merge_and_priority_selection() {
         .add(ports(vec![22]))
         .add(ports(vec![2222]));
     assert_eq!(module.modules.len(), 2);
+
     let session = NixSession::new().unwrap();
     let selection = &["services", "openssh", "ports"];
     let value = session
@@ -261,6 +264,7 @@ fn module_components_keep_nixos_merge_and_priority_selection() {
         .collect();
     merged.sort();
     assert_eq!(merged, vec![22, 2222]);
+
     let module = module.module(
         NixosModule::new(ports(vec![3333]).into_config()).priority(DefinitionPriority::Force),
     );
@@ -280,6 +284,7 @@ fn conflicting_module_components_report_both_authoring_calls() {
     let second = line!() + 1;
     let module = module.add(user("nobody"));
     let module = module.import("nixos/modules/services/networking/ssh/sshd.nix");
+
     let diagnostic = NixSession::new()
         .unwrap()
         .evaluate_nixos(
@@ -320,6 +325,7 @@ mod expressions {
 fn unused_values_stay_lazy_and_operation_origins_survive_the_module() {
     let operation_line = line!() + 1;
     let bad = Expr::int(44).divide(Expr::int(0));
+
     let generated = compile(
         &expressions::Root {
             good: 42,
@@ -328,6 +334,7 @@ fn unused_values_stay_lazy_and_operation_origins_survive_the_module() {
         .into_config(),
     )
     .unwrap();
+
     let session = NixSession::new().unwrap();
     assert!(!generated.source.contains("deepSeq"));
     assert_eq!(
@@ -337,6 +344,7 @@ fn unused_values_stay_lazy_and_operation_origins_survive_the_module() {
             .value,
         42
     );
+
     let diagnostic = session.evaluate_attribute(&generated, "bad").unwrap_err();
     assert_eq!(diagnostic.primary.as_ref().unwrap().line, operation_line);
     assert_eq!(diagnostic.primary.as_ref().unwrap().file, file!());
@@ -437,6 +445,7 @@ fn opaque_packages_in_automatic_structs_resolve_through_real_nixpkgs() {
             )
             .priority(DefinitionPriority::Force),
         );
+
     let value = NixSession::new()
         .unwrap()
         .evaluate_system_packages(&compile_module(&module).unwrap())
@@ -485,6 +494,7 @@ fn local_enum_derives_and_semantic_overrides_use_the_same_traits() {
             pub permissions: Vec<Permission>,
         }
     }
+
     let model = config::Root {
         modes: vec![config::Mode::ReadOnly, config::Mode::ReadWrite],
         state: config::State::Ready,

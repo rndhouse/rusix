@@ -25,6 +25,7 @@ fn classify(ty: &Type, locals: &BTreeSet<String>) -> syn::Result<Leaf> {
         let path = &ty.path;
         let names: Vec<_> = path.segments.iter().map(|s| s.ident.to_string()).collect();
         let last = path.segments.last().unwrap();
+
         if names.len() == 1 && locals.contains(&names[0]) {
             if !matches!(last.arguments, PathArguments::None) {
                 return Err(syn::Error::new_spanned(
@@ -34,6 +35,7 @@ fn classify(ty: &Type, locals: &BTreeSet<String>) -> syn::Result<Leaf> {
             }
             return Ok(Leaf::Branch(last.ident.clone()));
         }
+
         let qualified = names[..names.len() - 1].join("::");
         let expected_namespace = match last.ident.to_string().as_str() {
             "bool" | "i64" => "std::primitive",
@@ -45,6 +47,7 @@ fn classify(ty: &Type, locals: &BTreeSet<String>) -> syn::Result<Leaf> {
             _ => "",
         };
         let accepted = qualified.is_empty() || qualified == expected_namespace;
+
         if accepted {
             match last.ident.to_string().as_str() {
                 "bool" | "String" | "i64" if matches!(last.arguments, PathArguments::None) => {
@@ -75,6 +78,7 @@ fn classify(ty: &Type, locals: &BTreeSet<String>) -> syn::Result<Leaf> {
             }
         }
     }
+
     Err(syn::Error::new_spanned(
         ty,
         "unsupported option-view type; use bool, String, i64, NixValue, Option<T>, Vec<T>, BTreeMap<K, V>, HashMap<K, V>, or a local named view; external aliases require explicit OptionRef",
@@ -88,16 +92,19 @@ fn parse_view(mut item: syn::ItemStruct) -> syn::Result<View> {
             "option views do not support generics",
         ));
     }
+
     if !matches!(item.fields, Fields::Named(_)) {
         return Err(syn::Error::new_spanned(
             &item,
             "option views require named structs",
         ));
     }
+
     let mut root = false;
     let mut value = false;
     let mut naming = None;
     let mut attrs = Vec::new();
+
     for attr in item.attrs.drain(..) {
         if !attr.path().is_ident("rusnix") {
             if attr.path().is_ident("cfg") || attr.path().is_ident("cfg_attr") {
@@ -112,9 +119,11 @@ fn parse_view(mut item: syn::ItemStruct) -> syn::Result<View> {
                     "option views are reference declarations; only documentation and rusnix mapping attributes are supported",
                 ));
             }
+
             attrs.push(attr);
             continue;
         }
+
         attr.parse_nested_meta(|meta| {
             if meta.path.is_ident("root") || meta.path.is_ident("value") {
                 let flag = if meta.path.is_ident("root") {
@@ -138,13 +147,16 @@ fn parse_view(mut item: syn::ItemStruct) -> syn::Result<View> {
             }
         })?;
     }
+
     if root && value {
         return Err(syn::Error::new_spanned(
             &item.ident,
             "whole-root access is not supported; mark a specific subtree with #[rusnix(value)]",
         ));
     }
+
     item.attrs = attrs;
+
     Ok(View {
         item,
         root,
@@ -155,6 +167,7 @@ fn parse_view(mut item: syn::ItemStruct) -> syn::Result<View> {
 
 fn key(field: &syn::Field, naming: Naming) -> syn::Result<LitStr> {
     let mut rename = None;
+
     for attr in &field.attrs {
         if attr.path().is_ident("cfg") || attr.path().is_ident("cfg_attr") {
             return Err(syn::Error::new_spanned(
@@ -162,6 +175,7 @@ fn key(field: &syn::Field, naming: Naming) -> syn::Result<LitStr> {
                 "conditional option-view fields are not supported",
             ));
         }
+
         if attr.path().is_ident("rusnix") {
             attr.parse_nested_meta(|meta| {
                 if !meta.path.is_ident("rename") {
@@ -175,6 +189,7 @@ fn key(field: &syn::Field, naming: Naming) -> syn::Result<LitStr> {
             })?;
         }
     }
+
     naming.mapped_field(field.ident.as_ref().unwrap(), rename)
 }
 
@@ -187,7 +202,9 @@ fn check_cycles(
     if done.contains(name) {
         return Ok(());
     }
+
     active.insert(name.into());
+
     for (child, span) in &graph[name] {
         if active.contains(child) {
             return Err(syn::Error::new(
@@ -195,10 +212,13 @@ fn check_cycles(
                 "recursive option views are not supported; declare a finite set of paths",
             ));
         }
+
         check_cycles(child, graph, active, done)?;
     }
+
     active.remove(name);
     done.insert(name.into());
+
     Ok(())
 }
 
@@ -209,7 +229,9 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<TokenStream> {
             "options requires an inline module; external types use explicit OptionRef",
         ));
     };
+
     let mut locals = BTreeSet::new();
+
     for item in &items {
         if let Item::Struct(item) = item {
             let name = item.ident.to_string();
@@ -225,8 +247,10 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<TokenStream> {
             }
         }
     }
+
     let mut views = Vec::new();
     let mut retained = Vec::new();
+
     for item in items {
         match item {
             Item::Struct(item) => views.push(parse_view(item)?),
@@ -239,6 +263,7 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<TokenStream> {
             }
         }
     }
+
     let roots: Vec<_> = views.iter().filter(|v| v.root).collect();
     if roots.len() != 1 {
         return Err(syn::Error::new_spanned(
@@ -246,11 +271,14 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<TokenStream> {
             "options requires exactly one #[rusnix(root)] struct",
         ));
     }
+
     let root = roots[0].item.ident.clone();
     let mut graph = BTreeMap::new();
+
     for view in &views {
         let mut keys = BTreeSet::new();
         let mut children = Vec::new();
+
         for field in &view.item.fields {
             let name = field.ident.as_ref().unwrap();
             if matches!(name.to_string().as_str(), "__rusnix_path" | "__rusnix_at")
@@ -261,6 +289,7 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<TokenStream> {
                     "field collides with a generated option-view member",
                 ));
             }
+
             let path_key = key(field, view.naming)?;
             if !keys.insert(path_key.value()) {
                 return Err(syn::Error::new_spanned(
@@ -268,6 +297,7 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<TokenStream> {
                     "ambiguous option path: fields map to the same attribute",
                 ));
             }
+
             if let Leaf::Branch(child) = classify(&field.ty, &locals)? {
                 if child == root {
                     return Err(syn::Error::new_spanned(
@@ -278,19 +308,25 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<TokenStream> {
                 children.push((child.to_string(), field.ty.span()));
             }
         }
+
         graph.insert(view.item.ident.to_string(), children);
     }
+
     let mut done = BTreeSet::new();
+
     for name in graph.keys() {
         check_cycles(name, &graph, &mut BTreeSet::new(), &mut done)?;
     }
+
     let mut generated = Vec::new();
+
     for view in views {
         let name = &view.item.ident;
         let attrs = &view.item.attrs;
         let mut branches = Vec::new();
         let mut initialize = Vec::new();
         let mut methods = Vec::new();
+
         for field in &view.item.fields {
             let field_name = field.ident.as_ref().unwrap();
             let ty = &field.ty;
@@ -300,6 +336,7 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<TokenStream> {
                 .iter()
                 .filter(|attr| attr.path().is_ident("doc"))
                 .collect();
+
             match classify(ty, &locals)? {
                 Leaf::Branch(child) => {
                     branches
@@ -327,6 +364,7 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<TokenStream> {
                 }
             }
         }
+
         let as_value = view.value.then(|| {
             quote!(
                 #[track_caller]
@@ -338,6 +376,7 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<TokenStream> {
                 }
             )
         });
+
         generated.push(quote!(
             #(#attrs)*
             pub struct #name {
@@ -356,9 +395,11 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<TokenStream> {
             }
         ));
     }
+
     let attrs = &module.attrs;
     let visibility = &module.vis;
     let module_name = &module.ident;
+
     Ok(quote!(
         #(#attrs)*
         #visibility mod #module_name {

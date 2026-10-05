@@ -112,6 +112,7 @@ mod config {
 
 fn package_value(module: NixosModule) -> serde_json::Value {
     let session = NixSession::new().unwrap();
+
     let artifact = compile_module(&module).unwrap();
     assert!(!artifact.module.source.contains("deepSeq"));
     let value = session.evaluate_system_packages(&artifact).unwrap().value;
@@ -233,6 +234,7 @@ fn existing_lib_function_executes_in_nix() {
 #[test]
 fn failed_lib_function_maps_to_rust_call() {
     let config = config::broken_function();
+
     let generated = compile(&config).unwrap();
     let error = NixSession::new()
         .unwrap()
@@ -351,6 +353,7 @@ fn structured_paths_are_validated_and_escaped() {
             .is_err()
     );
     let input = InputRef::local("example", "/nonexistent.nix");
+
     let generated =
         compile(&Config::new().set("value", input.package("packages.odd\"${key}"))).unwrap();
     assert!(generated.source.contains("\\\"\\${"));
@@ -373,6 +376,7 @@ fn missing_input_file_maps_to_rust_lookup() {
     let input = InputRef::local("missing", "/rusnix-definitely-missing-input.nix");
     let package = input.package("packages.example");
     let origin = package.reference().origin.clone();
+
     let generated = compile(&Config::new().set("value", package)).unwrap();
     let error = NixSession::new()
         .unwrap()
@@ -388,6 +392,7 @@ fn unrelated_opaque_values_remain_lazy() {
     let config = Config::new()
         .set("good", pkgs.function("toUpper").call("works"))
         .set("bad", pkgs.get("rusnixMissing"));
+
     let session = NixSession::new().unwrap();
     // Stage sources using the public interop entrypoint, selecting a result
     // explicitly rather than demanding the sibling value.
@@ -430,6 +435,7 @@ fn delayed_function_failure_maps_to_selection_not_original_call() {
         .function("functions.lazy")
         .call(true)
         .select("bad");
+
     let generated = compile(&Config::new().set("result", value)).unwrap();
     let error = NixSession::new()
         .unwrap()
@@ -443,6 +449,7 @@ fn delayed_function_failure_maps_to_selection_not_original_call() {
 #[test]
 fn nixos_checks_actual_package_category() {
     let module = config::packages(vec![config::input().package("nixosModules.example")]);
+
     let artifact = compile_module(&module).unwrap();
     let error = NixSession::new()
         .unwrap()
@@ -470,7 +477,9 @@ fn authoring_example_composes_packages_modules_overlay_and_external_input() {
     module.modules[0] = module.modules[0]
         .clone()
         .priority(rusnix_ir::nixos::DefinitionPriority::Force);
+
     let artifact = compile_module(&module).unwrap();
+
     let session = NixSession::new().unwrap();
     let packages = session.evaluate_system_packages(&artifact).unwrap().value;
     assert_eq!(packages.as_array().unwrap().len(), 4);

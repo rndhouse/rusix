@@ -388,7 +388,9 @@ impl Config {
         if let Some(error) = &self.error {
             return Err(error.clone());
         }
+
         let mut seen: Vec<&[String]> = Vec::new();
+
         for assignment in &self.assignments {
             let path = &assignment.path;
             reject_nul(path, &assignment.origin)?;
@@ -403,6 +405,7 @@ impl Config {
                     message: "option paths must have nonempty dot-separated segments".into(),
                 });
             }
+
             if seen
                 .iter()
                 .any(|old| parts.starts_with(old) || old.starts_with(parts))
@@ -412,9 +415,11 @@ impl Config {
                     message: format!("duplicate or conflicting option path: {path}"),
                 });
             }
+
             seen.push(parts);
             validate_value(&assignment.value)?;
         }
+
         Ok(())
     }
 }
@@ -426,6 +431,7 @@ fn reject_nul(text: &str, origin: &Origin) -> Result<(), ValidationError> {
             message: "NUL bytes are not supported in configuration strings".into(),
         });
     }
+
     Ok(())
 }
 
@@ -435,6 +441,7 @@ fn validate_value(node: &Node) -> Result<(), ValidationError> {
 
 fn validate_scoped(node: &Node, scope: &[u64]) -> Result<(), ValidationError> {
     let validate_value = |node| validate_scoped(node, scope);
+
     match &node.kind {
         ValueKind::String(text) => reject_nul(text, &node.origin)?,
         ValueKind::List(items) => {
@@ -444,16 +451,19 @@ fn validate_scoped(node: &Node, scope: &[u64]) -> Result<(), ValidationError> {
         }
         ValueKind::AttrSet(fields) | ValueKind::OpaqueRecord(fields) => {
             let mut seen = std::collections::BTreeSet::new();
+
             for (name, value) in fields {
                 let opaque = matches!(node.kind, ValueKind::OpaqueRecord(_));
                 let origin = if opaque { &node.origin } else { &value.origin };
                 reject_nul(name, origin)?;
+
                 if (!opaque && name.is_empty()) || !seen.insert(name) {
                     return Err(ValidationError {
                         origin: origin.clone(),
                         message: format!("invalid or duplicate record field: {name}"),
                     });
                 }
+
                 validate_value(value)?;
             }
         }
@@ -504,6 +514,7 @@ fn validate_scoped(node: &Node, scope: &[u64]) -> Result<(), ValidationError> {
             validate_value(value)?;
         }
     }
+
     Ok(())
 }
 
@@ -529,8 +540,10 @@ mod tests {
         fn make() -> Config {
             Config::new().set("a", true)
         }
+
         let first = make();
         let second = make();
+
         assert_eq!(first.assignments[0].origin, second.assignments[0].origin);
         assert_eq!(first.assignments[0].origin.file, file!());
         assert_ne!(first.origin.id, first.assignments[0].origin.id);
@@ -560,9 +573,11 @@ mod tests {
     fn unsupported_nul_is_rejected_at_its_origin() {
         let config = Config::new().set("strings", vec!["valid", "bad\0string"]);
         let error = config.validate().unwrap_err();
+
         let ValueKind::List(items) = &config.assignments[0].value.kind else {
             panic!()
         };
+
         assert_eq!(error.origin, items[1].origin);
         assert!(Config::new().set("bad\0path", true).validate().is_err());
         assert!(

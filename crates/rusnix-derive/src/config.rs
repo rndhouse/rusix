@@ -7,11 +7,13 @@ use syn::{
 
 fn derives(attrs: &[Attribute]) -> syn::Result<BTreeSet<String>> {
     let mut names = BTreeSet::new();
+
     for attr in attrs.iter().filter(|a| a.path().is_ident("derive")) {
         for path in attr.parse_args_with(Punctuated::<Path, Token![,]>::parse_terminated)? {
             names.insert(path.segments.last().unwrap().ident.to_string());
         }
     }
+
     Ok(names)
 }
 
@@ -21,6 +23,7 @@ pub(super) fn cfg_gate(meta: &syn::Meta) -> syn::Result<Option<syn::Meta>> {
     if meta.path().is_ident("cfg") {
         return Ok(Some(meta.clone()));
     }
+
     if let syn::Meta::List(list) = meta
         && list.path.is_ident("cfg_attr")
     {
@@ -34,12 +37,14 @@ pub(super) fn cfg_gate(meta: &syn::Meta) -> syn::Result<Option<syn::Meta>> {
             .into_iter()
             .flatten()
             .collect();
+
         if let Some(condition) = condition
             && !gates.is_empty()
         {
             return Ok(Some(parse_quote!(cfg_attr(#condition, #(#gates),*))));
         }
     }
+
     Ok(None)
 }
 
@@ -47,13 +52,16 @@ pub(super) fn cfg_gate(meta: &syn::Meta) -> syn::Result<Option<syn::Meta>> {
 fn take_root(attrs: &mut Vec<Attribute>) -> syn::Result<bool> {
     let mut root = false;
     let mut retained = Vec::new();
+
     for attr in attrs.drain(..) {
         if !attr.path().is_ident("rusnix") {
             retained.push(attr);
             continue;
         }
+
         let entries = attr.parse_args_with(Punctuated::<syn::Meta, Token![,]>::parse_terminated)?;
         let mut mappings = Vec::new();
+
         for entry in entries {
             if entry.path().is_ident("root") {
                 if root {
@@ -70,13 +78,16 @@ fn take_root(attrs: &mut Vec<Attribute>) -> syn::Result<bool> {
                 mappings.push(entry);
             }
         }
+
         if !mappings.is_empty() {
             retained.push(parse_quote!(#[rusnix(#(#mappings),*)]));
         }
     }
+
     // Existing derives must introduce helper attributes before Rust sees them.
     retained.sort_by_key(|attr| attr.path().is_ident("rusnix"));
     *attrs = retained;
+
     Ok(root)
 }
 
@@ -87,8 +98,10 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<proc_macro2::TokenStrea
             "config requires an inline module; use fine-grained derives in external files",
         ));
     };
+
     // An explicit impl is user control. Do not duplicate it or inspect its body.
     let mut implementations = BTreeSet::new();
+
     for item in items.iter() {
         if let Item::Impl(item) = item
             && let Some((trait_path, _)) = &item.trait_
@@ -103,8 +116,10 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<proc_macro2::TokenStrea
             ));
         }
     }
+
     let mut roots = 0;
     let mut adapters = Vec::new();
+
     for item in items.iter_mut() {
         match item {
             Item::Struct(item) => {
@@ -115,6 +130,7 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<proc_macro2::TokenStrea
                         "root requires a named struct",
                     ));
                 }
+
                 roots += usize::from(root);
                 let derives = derives(&item.attrs)?;
                 let name = item.ident.to_string();
@@ -124,6 +140,7 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<proc_macro2::TokenStrea
                 };
                 let has_config = existing("IntoConfig");
                 let has_value = existing("IntoRusnixValue") || has_config;
+
                 if root && !has_config && has_value {
                     // A custom/explicit nested conversion can also become a root.
                     let adapter = super::config_impl(&item.ident, &item.generics);
@@ -152,9 +169,11 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<proc_macro2::TokenStrea
                         "root requires a named struct",
                     ));
                 }
+
                 let explicit = derives(&item.attrs)?.contains("IntoRusnixValue")
                     || implementations
                         .contains(&(item.ident.to_string(), "IntoRusnixValue".into()));
+
                 if !explicit
                     && item
                         .variants
@@ -169,13 +188,16 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<proc_macro2::TokenStrea
             _ => {}
         }
     }
+
     if roots == 0 {
         return Err(syn::Error::new_spanned(
             &module.ident,
             "config needs at least one named struct marked #[rusnix(root)]",
         ));
     }
+
     items.extend(adapters.into_iter().map(Item::Verbatim));
+
     Ok(quote!(#module))
 }
 

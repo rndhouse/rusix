@@ -34,6 +34,7 @@ impl Generated {
         if line == 0 || column == 0 {
             return None;
         }
+
         let start = if line == 1 {
             0
         } else {
@@ -46,6 +47,7 @@ impl Generated {
         if offset >= line_end {
             return None;
         }
+
         self.spans
             .iter()
             .filter(|span| span.start <= offset && offset < span.end)
@@ -82,10 +84,12 @@ fn emit(expr: &NixExpr, out: &mut Generated, depth: usize, enclosing: &[Origin])
                 .push_str(&quote(&format!("rusnix-origin:{}", origin.id)));
             out.source.push_str(" (");
         }
+
         emit_kind(&expr.kind, out, depth, &children_enclosing);
         if expr.error_context {
             out.source.push_str("))");
         }
+
         let end = out.source.len();
         out.spans.push(SourceSpan {
             start,
@@ -226,6 +230,7 @@ fn emit_kind(kind: &NixKind, out: &mut Generated, depth: usize, enclosing: &[Ori
 pub fn quote(value: &str) -> String {
     let mut out = String::from("\"");
     let mut chars = value.chars().peekable();
+
     while let Some(c) = chars.next() {
         match c {
             '"' => out.push_str("\\\""),
@@ -237,6 +242,7 @@ pub fn quote(value: &str) -> String {
             _ => out.push(c),
         }
     }
+
     out.push('"');
     out
 }

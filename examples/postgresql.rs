@@ -73,6 +73,7 @@ pub fn model() -> NixosModule {
         }],
         ..Postgresql::default()
     };
+
     implementation().add(postgres)
 }
 
@@ -101,6 +102,7 @@ mod lowering {
         #[track_caller]
         fn into_config(self) -> Config {
             let mut fields = BTreeMap::from([("enable", self.enable.into())]);
+
             macro_rules! optional {
                 ($name:literal, $value:expr) => {
                     if let Some(value) = $value {
@@ -108,6 +110,7 @@ mod lowering {
                     }
                 };
             }
+
             optional!("package", self.package);
             optional!("enableJIT", self.enable_jit);
             optional!("enableTCPIP", self.enable_tcpip);
@@ -117,6 +120,7 @@ mod lowering {
             optional!("identMap", self.ident_map);
             optional!("initialScript", self.initial_script);
             optional!("recoveryConfig", self.recovery_config);
+
             if !self.extensions.is_empty() {
                 fields.insert(
                     "extraPlugins",
@@ -129,17 +133,21 @@ mod lowering {
                     }),
                 );
             }
+
             if !self.settings.is_empty() {
                 fields.insert("settings", NixValue::record(self.settings));
             }
+
             if !self.initdb_args.is_empty() {
                 fields.insert(
                     "initdbArgs",
                     NixValue::list(self.initdb_args.into_iter().map(NixValue::from)),
                 );
             }
+
             let mut databases = Vec::new();
             let mut roles = Vec::new();
+
             for database in self.databases {
                 match database {
                     Database::Unowned(name) => databases.push(name.into()),
@@ -149,13 +157,17 @@ mod lowering {
                     }
                 }
             }
+
             roles.extend(self.roles.into_iter().map(|role| role_value(role, false)));
+
             if !databases.is_empty() {
                 fields.insert("ensureDatabases", NixValue::list(databases));
             }
+
             if !roles.is_empty() {
                 fields.insert("ensureUsers", NixValue::list(roles));
             }
+
             config::inputs(NixValue::record(fields)).into_config()
         }
     }
@@ -246,6 +258,7 @@ mod lowering {
             package.clone().select("withJIT"),
             package.select("withoutJIT"),
         );
+
         NixValue::if_else(
             pg.extra_plugins().equals(NixValue::list([])),
             base.clone(),
@@ -265,7 +278,9 @@ mod lowering {
                 NixValue::null(),
             ])
         };
+
         let mut package = removed("9_5");
+
         for (state_version, candidate) in [
             ("17.09", removed("9_6")),
             ("20.03", removed("11")),
@@ -283,6 +298,7 @@ mod lowering {
                 package,
             );
         }
+
         NixValue::if_else(pg.enable_jit(), package.clone().select("withJIT"), package)
     }
 
@@ -296,6 +312,7 @@ mod lowering {
             }),
             pg.settings.as_value(),
         ]);
+
         let lines = Nixpkgs::new().function("mapAttrsToList").apply([
             NixValue::function(|name| {
                 NixValue::function(|value| {
@@ -307,6 +324,7 @@ mod lowering {
                             value.clone()
                         ]),
                     );
+
                     let rendered = NixValue::if_else(
                         value.clone().equals(true),
                         "yes",
@@ -320,11 +338,13 @@ mod lowering {
                             ),
                         ),
                     );
+
                     nix_text!("{name} = {rendered}", name = name, rendered = rendered)
                 })
             }),
             printable,
         ]);
+
         NixValue::join_text("\n", lines)
     }
 
@@ -337,6 +357,7 @@ mod lowering {
     fn pre_start() -> NixValue {
         let pg = options::root().services.postgresql;
         let data = path_text(pg.data_dir());
+
         let recovery = optional_file_script(
             pg.recovery_config(),
             nix_text!(
@@ -349,6 +370,7 @@ mod lowering {
                 data = data.clone(),
             ),
         );
+
         // Raw templates keep their whitespace; the holes remain deferred Nix values.
         nix_text!(
             r#"if ! test -e {data}/PG_VERSION; then
@@ -378,6 +400,7 @@ ln -sfn "{config_file}/postgresql.conf" "{data}/postgresql.conf"
     fn post_start() -> NixValue {
         let pg = options::root().services.postgresql;
         let data = path_text(pg.data_dir());
+
         let initial = optional_file_script(
             pg.initial_script(),
             nix_text!(
@@ -386,6 +409,7 @@ ln -sfn "{config_file}/postgresql.conf" "{data}/postgresql.conf"
                 script = pg.initial_script(),
             ),
         );
+
         let databases = Nixpkgs::new().function("concatMapStrings").apply([
             NixValue::function(|database| {
                 nix_text!(
@@ -396,9 +420,11 @@ ln -sfn "{config_file}/postgresql.conf" "{data}/postgresql.conf"
             }),
             pg.ensure_databases(),
         ]);
+
         let users = Nixpkgs::new().function("concatMapStrings").apply([
             NixValue::function(|user| {
                 let name = user.clone().select("name");
+
                 let clauses = Nixpkgs::new().function("filterAttrs").apply([
                     NixValue::function(|_| {
                         NixValue::function(|value| {
@@ -407,6 +433,7 @@ ln -sfn "{config_file}/postgresql.conf" "{data}/postgresql.conf"
                     }),
                     user.clone().select("ensureClauses"),
                 ]);
+
                 let clauses = Nixpkgs::new().function("attrValues").apply([Nixpkgs::new()
                     .function("mapAttrs")
                     .apply([
@@ -417,6 +444,7 @@ ln -sfn "{config_file}/postgresql.conf" "{data}/postgresql.conf"
                         }),
                         clauses,
                     ])]);
+
                 let ownership = NixValue::if_else(
                     user.select("ensureDBOwnership"),
                     nix_text!(
@@ -425,6 +453,7 @@ ln -sfn "{config_file}/postgresql.conf" "{data}/postgresql.conf"
                     ),
                     "",
                 );
+
                 nix_text!(
                     r#"$PSQL -tAc "SELECT 1 FROM pg_roles WHERE rolname='{name}'" | grep -q 1 || $PSQL -tAc 'CREATE USER "{name}"'
 $PSQL -tAc 'ALTER ROLE "{name}" {clauses}'{trailing_space}
@@ -440,6 +469,7 @@ $PSQL -tAc 'ALTER ROLE "{name}" {clauses}'{trailing_space}
             }),
             pg.ensure_users(),
         ]);
+
         nix_text!(
             r#"PSQL="psql --port={port}"
 
@@ -468,9 +498,11 @@ fi
 
     fn assertions() -> NixValue {
         let pg = options::root().services.postgresql;
+
         Nixpkgs::new().function("map").apply([
             NixValue::function(|user| {
                 let name = user.clone().select("name");
+
                 record! {
                     "assertion": NixValue::if_else(user.select("ensureDBOwnership"), Nixpkgs::new().function("elem").apply([name.clone(), pg.ensure_databases()]), true),
                     "message": nix_text!(
@@ -494,11 +526,13 @@ Offender: {name} has not been found among databases.
         let group_access = Nixpkgs::new()
             .function("versionAtLeast")
             .apply([package.clone().select("version"), "11.0".into()]);
+
         let data = NixValue::from(pg.data_dir());
         let standard_data = nix_text!(
             "/var/lib/postgresql/{schema}",
             schema = pg.package().select("psqlSchema")
         );
+
         let properties = record! {
             "ExecReload": nix_text!("{coreutils}/bin/kill -HUP $MAINPID", coreutils = Nixpkgs::from_module().get("coreutils")),
             "User": "postgres", "Group": "postgres", "RuntimeDirectory": "postgresql",
@@ -518,6 +552,7 @@ Offender: {name} has not been found among databases.
             "SystemCallFilter": NixValue::list(["@system-service".into(), "~@privileged @resources".into()]),
             "UMask": NixValue::if_else(group_access.clone(), "0027", "0077"),
         };
+
         nixos::merge([
             properties,
             record! { "ReadWritePaths": NixValue::list([data.clone()]) }
@@ -531,6 +566,7 @@ Offender: {name} has not been found among databases.
 
     fn service() -> NixValue {
         let pg = options::root().services.postgresql;
+
         record! {
             "description": "PostgreSQL Server",
             "wantedBy": NixValue::list(["multi-user.target".into()]),
@@ -545,6 +581,7 @@ Offender: {name} has not been found among databases.
 
     fn settings() -> NixValue {
         let pg = options::root().services.postgresql;
+
         record! {
             "hba_file": Nixpkgs::from_module().package_function("writeText").apply(["pg_hba.conf".into(), pg.authentication().into()]).to_text(),
             "ident_file": Nixpkgs::from_module().package_function("writeText").apply(["pg_ident.conf".into(), pg.ident_map().into()]).to_text(),
@@ -556,6 +593,7 @@ Offender: {name} has not been found among databases.
 
     fn checks() -> NixValue {
         let pg = options::root().services.postgresql;
+
         let check = Nixpkgs::from_module()
             .package_function("runCommand")
             .apply([
@@ -569,11 +607,13 @@ touch $out
                     config_file = configuration_file(),
                 ),
             ]);
+
         let pkgs = Nixpkgs::from_module();
         let native = pkgs
             .value("stdenv.hostPlatform")
             .equals(pkgs.value("stdenv.buildPlatform"));
         let enabled = NixValue::if_else(pg.check_config(), native, false);
+
         Nixpkgs::new().function("optional").apply([enabled, check])
     }
 
@@ -610,10 +650,12 @@ touch $out
             let pg = options::root().services.postgresql;
             let enabled = pg.enable();
             let guarded = |value: NixValue| value.when(enabled.clone());
+
             let authentication = nixos::merge([
                 NixValue::from("# Generated file; do not edit!").before(),
                 NixValue::from("# default value of services.postgresql.authentication\nlocal all all              peer\nhost  all all 127.0.0.1/32 md5\nhost  all all ::1/128      md5\n").after(),
             ]);
+
             Implementation {
                 assertions: guarded(assertions()),
                 services: Services {

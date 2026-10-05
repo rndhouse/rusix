@@ -21,6 +21,7 @@ pub fn compile(config: &Config) -> Result<Generated, Box<Diagnostic>> {
     config
         .validate()
         .map_err(|error| Box::new(Diagnostic::validation(error.origin, error.message)))?;
+
     for assignment in &config.assignments {
         if let Some(reference) = option_reference(&assignment.value) {
             return Err(Diagnostic::validation(
@@ -30,6 +31,7 @@ pub fn compile(config: &Config) -> Result<Generated, Box<Diagnostic>> {
             .into());
         }
     }
+
     Ok(render(&lower(config)))
 }
 
@@ -99,6 +101,7 @@ fn lower(config: &Config) -> NixExpr {
             (assignment.path_segments().to_vec(), annotated)
         })
         .collect();
+
     NixExpr::attributed(NixKind::AttrSet(assignments), config.origin.clone())
 }
 
@@ -198,6 +201,7 @@ fn lower_scoped(node: &Node, scope: &[u64]) -> NixExpr {
                     integer(*max),
                 ),
             );
+
             let body = NixExpr::plain(NixKind::If(
                 Box::new(condition),
                 Box::new(variable("__rusnix_range")),
@@ -206,6 +210,7 @@ fn lower_scoped(node: &Node, scope: &[u64]) -> NixExpr {
                     vec![NixExpr::plain(NixKind::String(message.clone()))],
                 ))),
             ));
+
             NixKind::Let(
                 "__rusnix_range".into(),
                 Box::new(lower_value(value)),
@@ -213,6 +218,7 @@ fn lower_scoped(node: &Node, scope: &[u64]) -> NixExpr {
             )
         }
     };
+
     if matches!(
         node.kind,
         ValueKind::If(..)

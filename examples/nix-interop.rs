@@ -29,6 +29,7 @@ impl IntoRusnixValue for Transport {
             certificate: String,
             private_key: String,
         }
+
         match self {
             Self::Plain => Plain { tls: false }.into_value(),
             Self::Tls {
@@ -92,6 +93,7 @@ pub fn module(local: InputRef) -> NixosModule {
     // Config::set is the escape hatch for an option path chosen at runtime.
     let arbitrary_path = ["services", "rusnixExternal", "enable"].join(".");
     let arbitrary = Config::new().set(arbitrary_path, true);
+
     NixosModule::empty()
         .add(packages(vec![hello, requests, overlaid, external]))
         .add(arbitrary)

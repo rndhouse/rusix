@@ -66,7 +66,9 @@ fn lower_module(module: &NixosModule) -> Result<(NixExpr, NixosArtifact), Box<Di
         .config
         .validate()
         .map_err(|error| Diagnostic::validation(error.origin, error.message))?;
+
     let mut imports = Vec::new();
+
     for imported in &module.imports {
         if imported.path.is_empty()
             || imported.path.contains('\0')
@@ -80,6 +82,7 @@ fn lower_module(module: &NixosModule) -> Result<(NixExpr, NixosArtifact), Box<Di
             )
             .into());
         }
+
         // Paths are structured data, never injected Nix source. A string suffix
         // also permits spaces and other characters that aren't Nix path tokens.
         imports.push(NixExpr::attributed(
@@ -91,6 +94,7 @@ fn lower_module(module: &NixosModule) -> Result<(NixExpr, NixosArtifact), Box<Di
             imported.origin.clone(),
         ));
     }
+
     for (module_ref, origin) in &module.opaque_imports {
         module_ref
             .reference()
@@ -98,6 +102,7 @@ fn lower_module(module: &NixosModule) -> Result<(NixExpr, NixosArtifact), Box<Di
             .map_err(|e| Diagnostic::validation(e.origin, e.message))?;
         imports.push(crate::interop::module(module_ref.reference(), origin));
     }
+
     for assignment in &module.config.assignments {
         let config = NixExpr::plain(NixKind::AttrSet(vec![(
             assignment.path_segments().to_vec(),
@@ -113,6 +118,7 @@ fn lower_module(module: &NixosModule) -> Result<(NixExpr, NixosArtifact), Box<Di
                 ]),
             },
         )]));
+
         // One module per definition makes even unknown-option diagnostics carry
         // the precise introducing operation, without demanding the option value.
         let body = attrs(vec![
@@ -124,6 +130,7 @@ fn lower_module(module: &NixosModule) -> Result<(NixExpr, NixosArtifact), Box<Di
         ]);
         imports.push(NixExpr::attributed(body.kind, assignment.origin.clone()));
     }
+
     for assertion in &module.assertions {
         if assertion.name.is_empty()
             || assertion.name.contains('\0')
@@ -135,6 +142,7 @@ fn lower_module(module: &NixosModule) -> Result<(NixExpr, NixosArtifact), Box<Di
             )
             .into());
         }
+
         let value = attrs(vec![
             ("assertion", lower_value(&assertion.condition)),
             (
@@ -158,14 +166,17 @@ fn lower_module(module: &NixosModule) -> Result<(NixExpr, NixosArtifact), Box<Di
         ]);
         imports.push(NixExpr::attributed(body.kind, assertion.origin.clone()));
     }
+
     // Each child validates independently. Duplicate paths across modules belong
     // to NixOS's merge semantics, not the single-Config duplicate-path check.
     let mut children = Vec::new();
+
     for child in &module.modules {
         let (ast, artifact) = lower_module(child)?;
         imports.push(ast);
         children.push(artifact);
     }
+
     let body = attrs(vec![("imports", NixExpr::plain(NixKind::List(imports)))]);
     let needs_config = module
         .config
@@ -194,6 +205,7 @@ fn lower_module(module: &NixosModule) -> Result<(NixExpr, NixosArtifact), Box<Di
     } else {
         body.kind
     };
+
     let ast = NixExpr::attributed(kind, module.config.origin.clone());
     let mut artifact = NixosArtifact {
         module: Generated::default(),
@@ -226,8 +238,10 @@ fn lower_module(module: &NixosModule) -> Result<(NixExpr, NixosArtifact), Box<Di
             })
             .collect(),
     };
+
     for (module_ref, origin) in &module.opaque_imports {
         use rusnix_ir::interop::Source;
+
         let (path, file) = match &module_ref.reference().source {
             Source::ModuleFile { path } => (
                 format!("nixos/modules/{path}"),
@@ -266,6 +280,7 @@ type PinnedFiles = Vec<(String, Vec<u8>)>;
 
 fn pinned_files() -> Result<&'static PinnedFiles, String> {
     static SNAPSHOT: OnceLock<Result<PinnedFiles, String>> = OnceLock::new();
+
     SNAPSHOT
         .get_or_init(|| {
             let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../vendor/nixpkgs");
@@ -302,12 +317,14 @@ impl NixSession {
     pub(crate) fn stage_pinned(&self) -> Result<std::path::PathBuf, Box<Diagnostic>> {
         let files = pinned_files().map_err(Diagnostic::tooling)?;
         let pin_root = self.root().join("nixpkgs");
+
         for (name, bytes) in files {
             let path = pin_root.join(name);
             fs::create_dir_all(path.parent().unwrap())
                 .map_err(|e| Diagnostic::tooling(e.to_string()))?;
             fs::write(path, bytes).map_err(|e| Diagnostic::tooling(e.to_string()))?;
         }
+
         Ok(pin_root)
     }
 
@@ -321,11 +338,14 @@ impl NixSession {
     ) -> Result<Evaluation, Box<Diagnostic>> {
         let pin_root = self.stage_pinned()?;
         self.stage_interop()?;
+
         let parse_stderr = self.validate_generated(&artifact.module, "module.nix")?;
+
         self.evaluate(driver).map_err(|error| {
             if error.kind != DiagnosticKind::NixEval {
                 return error;
             }
+
             let diagnostic = Diagnostic::from_nix(
                 DiagnosticKind::NixEval,
                 &format!("{parse_stderr}{}", error.raw_nix),
@@ -381,12 +401,15 @@ impl NixSession {
         if interop {
             self.stage_interop()?;
         }
+
         let parse_stderr = self.validate_generated(&artifact.module, "module.nix")?;
         fs::write(self.root().join("nixos-driver.nix"), DRIVER)
             .map_err(|e| Diagnostic::tooling(e.to_string()))?;
+
         if selection.iter().any(|s| s.contains('\0')) {
             return Err(Diagnostic::tooling("NUL in NixOS selection").into());
         }
+
         let source = if interop {
             let pkgs = crate::render(&crate::interop::source(
                 &rusnix_ir::interop::Source::Packages { overlays: vec![] },
@@ -407,6 +430,7 @@ impl NixSession {
             source,
             ..Generated::default()
         };
+
         self.evaluate(&wrapper)
             .map(|mut evaluation| {
                 evaluation.raw_nix = format!("{parse_stderr}{}", evaluation.raw_nix);
@@ -458,11 +482,13 @@ fn translate(mut diagnostic: Diagnostic, artifact: &NixosArtifact, pin_root: &Pa
             .any(|root| matches_file(file, &root.join("lib/modules.nix")))
         })
     });
+
     if in_module_system && let Some(failure) = crate::diagnostic::module_failure(&diagnostic.reason)
     {
         diagnostic.kind = failure.kind;
         diagnostic.option_path = Some(failure.option.clone());
         let mut origins = Vec::new();
+
         for file in &failure.files {
             let source = if let Some(id) = file.strip_prefix("rusnix-definition:") {
                 artifact
@@ -515,12 +541,14 @@ fn translate(mut diagnostic: Diagnostic, artifact: &NixosArtifact, pin_root: &Pa
                     ),
                 })
             };
+
             if let Some(source) = source
                 && !origins.contains(&source)
             {
                 origins.push(source);
             }
         }
+
         if !origins.is_empty() {
             let first = origins
                 .iter()
@@ -532,6 +560,7 @@ fn translate(mut diagnostic: Diagnostic, artifact: &NixosArtifact, pin_root: &Pa
             diagnostic.origins = origins;
         }
     }
+
     for boundary in &artifact.definitions {
         let marker = format!("rusnix-definition:{}", boundary.origin.id);
         diagnostic.reason = diagnostic.reason.replace(
@@ -542,6 +571,7 @@ fn translate(mut diagnostic: Diagnostic, artifact: &NixosArtifact, pin_root: &Pa
             ),
         );
     }
+
     if evidence
         .iter()
         .any(|(_, message)| message == "rusnix-stage:nixos-assertions")
@@ -565,6 +595,7 @@ fn translate(mut diagnostic: Diagnostic, artifact: &NixosArtifact, pin_root: &Pa
                 diagnostic.reason = diagnostic.reason.replace(&format!("{marker} "), "");
             }
         }
+
         if !origins.is_empty() {
             if origins.len() > 1 {
                 diagnostic.option_path = Some("assertions".into());
@@ -573,6 +604,7 @@ fn translate(mut diagnostic: Diagnostic, artifact: &NixosArtifact, pin_root: &Pa
             diagnostic.origins = origins;
         }
     }
+
     if diagnostic.primary.is_none() {
         for (file, _) in &evidence {
             for boundary in &artifact.imports {
@@ -599,6 +631,7 @@ fn translate(mut diagnostic: Diagnostic, artifact: &NixosArtifact, pin_root: &Pa
             }
         }
     }
+
     if diagnostic.option_path.is_none() {
         diagnostic.option_path = diagnostic
             .related
@@ -606,6 +639,7 @@ fn translate(mut diagnostic: Diagnostic, artifact: &NixosArtifact, pin_root: &Pa
             .rev()
             .find_map(|o| o.purpose.strip_prefix("set ").map(str::to_owned));
     }
+
     if diagnostic.option_path.is_none() {
         diagnostic.option_path = evidence.iter().find_map(|(_, message)| {
             message
@@ -614,6 +648,7 @@ fn translate(mut diagnostic: Diagnostic, artifact: &NixosArtifact, pin_root: &Pa
                 .map(|(path, _)| path.to_owned())
         });
     }
+
     // Remove disposable staging paths from display only. The exact original
     // diagnostic remains in raw_nix, including all external trace positions.
     diagnostic.reason = diagnostic

@@ -25,6 +25,7 @@ impl AttrPath {
                 message: "Nix attribute paths need nonempty, NUL-free segments".into(),
             });
         }
+
         Ok(())
     }
 }
@@ -50,6 +51,7 @@ impl Reference {
         if let Some(path) = &self.path {
             path.validate(&self.origin)?;
         }
+
         match &self.source {
             Source::Packages { overlays } | Source::NixosPackages { overlays } => {
                 for overlay in overlays {
@@ -87,6 +89,7 @@ impl Reference {
             }
             Source::Library => {}
         }
+
         Ok(())
     }
 
@@ -156,12 +159,14 @@ impl NixValue {
         use std::sync::atomic::{AtomicU64, Ordering};
 
         static NEXT: AtomicU64 = AtomicU64::new(0);
+
         let binding = NEXT.fetch_add(1, Ordering::Relaxed);
         let origin = Origin::caller("opaque Nix callback");
         let parameter = Self(Node {
             origin: origin.clone(),
             kind: ValueKind::Parameter(binding),
         });
+
         Self(Node {
             origin,
             kind: ValueKind::Function {

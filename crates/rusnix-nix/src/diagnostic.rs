@@ -98,6 +98,7 @@ impl Diagnostic {
         if let Some(event) = structured_error(raw) {
             return Self::from_structured(kind, raw, &event, generated, file);
         }
+
         let messages = decode_messages(raw);
         let text = strip_ansi(&messages.join("\n"));
         let reason = text
@@ -108,6 +109,7 @@ impl Diagnostic {
             .filter(|s| !s.is_empty())
             .unwrap_or("Nix failed; inspect the retained original diagnostic")
             .to_owned();
+
         let mut related = Vec::new();
         let prefix = format!("at {}:", file.display());
         let local_spans: Vec<_> = text
@@ -119,6 +121,7 @@ impl Diagnostic {
                 generated.span_at_position(parts.next()?.parse().ok()?, parts.next()?.parse().ok()?)
             })
             .collect();
+
         // Match trace-shaped lines, excluding ordinary source excerpts and
         // single-line throws. This legacy fallback is a heuristic, not a parser.
         // Trace order is outermost -> innermost on the tested Nix versions.
@@ -134,6 +137,7 @@ impl Diagnostic {
                 related.push(origin.clone());
             }
         }
+
         let (primary, provenance) =
             if kind == DiagnosticKind::Compiler || kind == DiagnosticKind::Tooling {
                 // Syntax/static backend errors must never accuse a user's Rust line.
@@ -147,6 +151,7 @@ impl Diagnostic {
                     None => (None, Provenance::Unavailable),
                 }
             };
+
         Self {
             kind,
             reason,
@@ -188,7 +193,9 @@ impl Diagnostic {
                 generated.span_at_position(line, column)
             })
             .collect();
+
         let mut related = Vec::new();
+
         // JSON traces are innermost first, unlike the rendered message.
         for frame in frames.iter().rev() {
             if let Some(id) = frame["raw_msg"]
@@ -200,6 +207,7 @@ impl Diagnostic {
                 related.push(origin.clone());
             }
         }
+
         let (primary, provenance) =
             if matches!(kind, DiagnosticKind::Compiler | DiagnosticKind::Tooling) {
                 related.clear();
@@ -216,6 +224,7 @@ impl Diagnostic {
                 };
                 (origin, provenance)
             };
+
         Self {
             kind,
             reason,
@@ -244,6 +253,7 @@ impl Diagnostic {
                         .iter()
                         .find(|span| span.origin.id == primary.id)
                 });
+
             if let Some(span) = span {
                 let mut related = span.enclosing.clone();
                 for origin in self.related.iter().chain(std::iter::once(primary)) {
@@ -254,6 +264,7 @@ impl Diagnostic {
                 self.related = related;
             }
         }
+
         self.with_origin_set()
     }
 
@@ -274,6 +285,7 @@ impl Diagnostic {
     /// Stable snapshot surface: no Nix stack layout, temporary paths, or IDs.
     pub fn summary(&self) -> String {
         let mut out = format!("error[{}]: {}\n", self.code(), self.message());
+
         if self.origins.len() > 1 || (self.primary.is_none() && !self.origins.is_empty()) {
             for source in &self.origins {
                 if let Some(origin) = &source.origin {
@@ -298,12 +310,15 @@ impl Diagnostic {
         } else if self.kind == DiagnosticKind::NixEval {
             out.push_str("   = Rust origin unavailable\n");
         }
+
         if let Some(path) = &self.option_path {
             out.push_str(&format!("   = option: {path}\n"));
         }
+
         if let Some(file) = &self.external_file {
             out.push_str(&format!("   = imported Nix: {file}\n"));
         }
+
         out.push_str(&format!(
             "   = {}: {}\n",
             if self.kind == DiagnosticKind::Validation {
@@ -314,11 +329,13 @@ impl Diagnostic {
             self.reason
         ));
         out.push_str(&format!("   = provenance: {:?}\n", self.provenance));
+
         out
     }
 
     pub fn render(&self, source_root: &Path) -> String {
         let mut out = format!("error[{}]: {}\n", self.code(), self.message());
+
         if self.origins.len() > 1 || (self.primary.is_none() && !self.origins.is_empty()) {
             for source in &self.origins {
                 out.push('\n');
@@ -363,9 +380,11 @@ impl Diagnostic {
                 "   = Rust origin unavailable; inspect generated source and raw Nix diagnostic\n",
             );
         }
+
         if let Some(file) = &self.external_file {
             out.push_str(&format!("   = imported Nix: {file}\n"));
         }
+
         out.push_str(&format!(
             "   = {}: {}\n",
             if self.kind == DiagnosticKind::Validation {
@@ -375,6 +394,7 @@ impl Diagnostic {
             },
             self.reason.trim().replace('\n', "\n     ")
         ));
+
         out
     }
 
@@ -451,6 +471,7 @@ pub(crate) fn module_failure(reason: &str) -> Option<ModuleFailure> {
         };
         (kind, rest)
     };
+
     let option = rest.split_once('\'')?.0.to_owned();
     let files = reason
         .lines()
@@ -460,6 +481,7 @@ pub(crate) fn module_failure(reason: &str) -> Option<ModuleFailure> {
                 .map(|(file, _)| file.to_owned())
         })
         .collect();
+
     Some(ModuleFailure {
         kind,
         option,
@@ -516,6 +538,7 @@ fn decode_messages(raw: &str) -> Vec<String> {
 fn strip_ansi(text: &str) -> String {
     let mut result = String::new();
     let mut chars = text.chars().peekable();
+
     while let Some(c) = chars.next() {
         if c == '\u{1b}' && chars.peek() == Some(&'[') {
             chars.next();
@@ -528,6 +551,7 @@ fn strip_ansi(text: &str) -> String {
             result.push(c);
         }
     }
+
     result
 }
 

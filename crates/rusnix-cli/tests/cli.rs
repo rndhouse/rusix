@@ -10,6 +10,7 @@ fn cli_merge_diagnostic_serializes_both_origins_and_priority_case_succeeds() {
             .output()
             .unwrap()
     };
+
     let failure = run("merge-two");
     assert_eq!(failure.status.code(), Some(1));
     let d: serde_json::Value =
@@ -23,6 +24,7 @@ fn cli_merge_diagnostic_serializes_both_origins_and_priority_case_succeeds() {
             .count(),
         2
     );
+
     assert!(run("merge-priority").status.success());
     assert!(!artifacts.path().join("diagnostic.json").exists());
     assert_eq!(
@@ -44,6 +46,7 @@ fn cli_nixos_fixtures_retain_module_map_and_raw_errors() {
     assert!(run("good").status.success());
     assert_eq!(run("type").status.code(), Some(1));
     assert!(!artifacts.path().join("value.json").exists());
+
     let diagnostic: serde_json::Value =
         serde_json::from_slice(&fs::read(artifacts.path().join("diagnostic.json")).unwrap())
             .unwrap();
@@ -52,6 +55,7 @@ fn cli_nixos_fixtures_retain_module_map_and_raw_errors() {
         diagnostic["raw_nix"],
         fs::read_to_string(artifacts.path().join("nix.stderr")).unwrap()
     );
+
     let artifact: serde_json::Value =
         serde_json::from_slice(&fs::read(artifacts.path().join("module-map.json")).unwrap())
             .unwrap();
@@ -74,6 +78,7 @@ fn cli_retains_artifacts_and_replaces_stale_results() {
             .output()
             .unwrap()
     };
+
     let good = run("good");
     assert!(
         good.status.success(),
@@ -85,6 +90,7 @@ fn cli_retains_artifacts_and_replaces_stale_results() {
     let bad = run("nested");
     assert_eq!(bad.status.code(), Some(1));
     assert!(!artifacts.path().join("value.json").exists());
+
     let diagnostic: serde_json::Value =
         serde_json::from_slice(&fs::read(artifacts.path().join("diagnostic.json")).unwrap())
             .unwrap();
@@ -92,6 +98,7 @@ fn cli_retains_artifacts_and_replaces_stale_results() {
     assert_eq!(diagnostic["primary"]["purpose"], "integer division");
     let stderr = fs::read_to_string(artifacts.path().join("nix.stderr")).unwrap();
     assert_eq!(diagnostic["raw_nix"], stderr);
+
     let generated = fs::read_to_string(artifacts.path().join("generated.nix")).unwrap();
     let map: serde_json::Value =
         serde_json::from_slice(&fs::read(artifacts.path().join("source-map.json")).unwrap())
@@ -115,6 +122,7 @@ fn cli_can_select_good_and_bad_from_the_same_configuration() {
             .output()
             .unwrap()
     };
+
     let good = run("good");
     assert!(
         good.status.success(),
@@ -122,14 +130,17 @@ fn cli_can_select_good_and_bad_from_the_same_configuration() {
         String::from_utf8_lossy(&good.stderr)
     );
     assert_eq!(String::from_utf8_lossy(&good.stdout), "42\n");
+
     let generated = fs::read_to_string(artifacts.path().join("generated.nix")).unwrap();
     assert!(!generated.contains("deepSeq"));
+
     let bad = run("bad");
     assert_eq!(bad.status.code(), Some(1));
     assert_eq!(
         fs::read_to_string(artifacts.path().join("generated.nix")).unwrap(),
         generated
     );
+
     let diagnostic: serde_json::Value =
         serde_json::from_slice(&fs::read(artifacts.path().join("diagnostic.json")).unwrap())
             .unwrap();
