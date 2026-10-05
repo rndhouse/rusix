@@ -1,9 +1,25 @@
 # Compatibility harness only: real NixOS options/modules, no replacement schema.
-{ nixpkgs, generated, caseName, rewritten ? true, downstream ? {}, checkAssertions ? false }:
+{ nixpkgs, generated, caseName, rewritten ? true, downstream ? {}, checkAssertions ? false, normalizeRecovery ? true }:
 let
   lib = import (nixpkgs + "/lib");
   schema = args@{ config, lib, pkgs, ... }: {
     inherit (import (nixpkgs + "/nixos/modules/services/databases/postgresql.nix") args) options imports;
+  };
+  # The Rust example puts the recovery symlink command on one line. Normalize
+  # only this shell-equivalent formatting difference before unit derivation;
+  # all resulting script bytes, store references and contexts still compare.
+  upstream = args@{ config, lib, pkgs, ... }: let
+    path = nixpkgs + "/nixos/modules/services/databases/postgresql.nix";
+    original = import path args;
+    script = original.config.content.systemd.services.postgresql.preStart;
+    continuation = "\" \\\n  \"${config.services.postgresql.dataDir}/recovery.conf\"";
+    singleLine = "\" \"${config.services.postgresql.dataDir}/recovery.conf\"";
+  in original // {
+    _file = toString path;
+    config = lib.recursiveUpdate original.config {
+      content.systemd.services.postgresql.preStart =
+        builtins.replaceStrings [ continuation ] [ singleLine ] script;
+    };
   };
   cases = {
     disabled = {};
@@ -87,8 +103,9 @@ let
     system = "x86_64-linux";
     # Replace exactly the original import slot, retaining list-definition order.
     baseModules = map (module:
-      if rewritten && module == nixpkgs + "/nixos/modules/services/databases/postgresql.nix"
-      then { imports = [ schema generated ]; }
+      if module == nixpkgs + "/nixos/modules/services/databases/postgresql.nix"
+      then if rewritten then { imports = [ schema generated ]; }
+        else if normalizeRecovery then upstream else module
       else module
     ) (import (nixpkgs + "/nixos/modules/module-list.nix"));
     modules = [

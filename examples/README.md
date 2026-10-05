@@ -521,7 +521,10 @@ reason but currently lack a per-user Rust origin after assertion aggregation.
 Evaluation constructs derivations but builds no files or packages and runs no
 SQL/service/check commands. Thus this proves configuration-generation equivalence,
 not database migration or runtime correctness. Upstream remains authoritative for
-its schema: null is allowed for declared nullable settings, not arbitrary freeform
+its schema. The comparison harness normalizes only the recovery symlink's shell
+line continuation before generating units; a separate test checks the original
+and single-line commands produce identical arguments and retain Nix context.
+Null is allowed for declared nullable settings, not arbitrary freeform
 keys. Raw input strings retain upstream quoting behavior. This example must replace
 upstream's implementation, not be imported alongside it; the schema-only adapter
 and comparison machinery belong to tests. There is no PostgreSQL type in core.

@@ -84,6 +84,70 @@ fn disabled_configuration_is_equivalent() {
     compare("disabled");
 }
 
+#[test]
+fn recovery_link_formatting_keeps_shell_arguments_and_nix_context() {
+    let session = session()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let artifact = compile_module(&example::implementation()).unwrap();
+    fs::copy(
+        root().join("tests/fixtures/postgresql-equivalence.nix"),
+        session.root().join("postgresql-driver.nix"),
+    )
+    .unwrap();
+
+    let evaluate = |rewritten| {
+        session.evaluate_nixos_with_driver(&artifact, &Generated {
+            source: format!("import ./postgresql-driver.nix {{ nixpkgs = ./nixpkgs-full; generated = ./module.nix; caseName = \"recovery\"; rewritten = {rewritten}; normalizeRecovery = false; }}"),
+            ..Generated::default()
+        }).unwrap().value
+    };
+    let original = evaluate(false);
+    let rewritten = evaluate(true);
+    let before = &original["service"]["preStart"];
+    let after = &rewritten["service"]["preStart"];
+
+    fn arguments(script: &serde_json::Value) -> Vec<Vec<u8>> {
+        // Execute only the final recovery command, with a shell function that
+        // records argv instead of creating links or touching the filesystem.
+        let (_, command) = script["text"]
+            .as_str()
+            .unwrap()
+            .rsplit_once("\nln -sfn ")
+            .unwrap();
+        let output = std::process::Command::new("bash")
+            .env_clear()
+            .args(["--noprofile", "--norc", "-c"])
+            .arg(format!(
+                "ln() {{ printf '%s\\0' \"$@\"; }}\nln -sfn {command}"
+            ))
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        output
+            .stdout
+            .split(|byte| *byte == 0)
+            .filter(|arg| !arg.is_empty())
+            .map(<[u8]>::to_vec)
+            .collect()
+    }
+
+    assert!(before["text"].as_str().unwrap().contains("\\\n  \""));
+    assert!(!after["text"].as_str().unwrap().contains("\\\n  \""));
+    assert_eq!(arguments(before), arguments(after));
+    let arguments = arguments(after);
+    assert_eq!(arguments.len(), 3);
+    assert_eq!(arguments[0], b"-sfn");
+    assert!(arguments[1].ends_with(b"-recovery.conf"));
+    assert_eq!(arguments[2], b"/var/lib/postgresql/16/recovery.conf");
+    assert_eq!(before["context"], after["context"]);
+}
+
 macro_rules! equivalent {
     ($($case:ident),* $(,)?) => { $(
         #[test]

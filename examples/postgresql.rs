@@ -362,8 +362,7 @@ mod lowering {
             pg.recovery_config(),
             nix_text!(
                 r#"
-                    ln -sfn "{file}" \
-                      "{data}/recovery.conf"
+                    ln -sfn "{file}" "{data}/recovery.conf"
                 "#,
                 file = Nixpkgs::from_module()
                     .package_function("writeText")
