@@ -106,17 +106,6 @@ mod custom {
         Client,
     }
 
-    impl IntoRusnixValue for Mode {
-        #[track_caller]
-        fn into_value(self) -> RusnixValue {
-            match self {
-                Self::Server => "server",
-                Self::Client => "client",
-            }
-            .into_value()
-        }
-    }
-
     // Explicit control must not produce duplicate implementations.
     pub struct Count(pub i64);
 
@@ -167,7 +156,7 @@ mod custom {
 }
 
 #[test]
-fn enums_and_custom_conversions_keep_their_explicit_semantics() {
+fn local_unit_enums_lower_automatically_alongside_custom_conversions() {
     for (mode, expected) in [
         (custom::Mode::Server, "server"),
         (custom::Mode::Client, "client"),
@@ -455,4 +444,58 @@ fn opaque_packages_in_automatic_structs_resolve_through_real_nixpkgs() {
         .value;
     assert_eq!(value[0]["pname"], "hello");
     assert_eq!(value[0]["isDerivation"], true);
+}
+
+#[test]
+fn local_enum_derives_and_semantic_overrides_use_the_same_traits() {
+    #[rusnix::config]
+    mod config {
+        use rusnix_ir::{IntoRusnixValue, RusnixValue};
+
+        #[rusnix(rename_all = "PascalCase")]
+        pub enum Mode {
+            ReadOnly,
+            #[rusnix(rename = "read-write")]
+            ReadWrite,
+        }
+
+        // Explicit reusable derives inside the boundary must not be duplicated.
+        #[derive(IntoRusnixValue)]
+        pub enum State {
+            Ready,
+        }
+
+        pub enum Permission {
+            Deny,
+            Allow,
+        }
+
+        impl IntoRusnixValue for Permission {
+            #[track_caller]
+            fn into_value(self) -> RusnixValue {
+                // This is a boolean policy decision, not an enum label.
+                matches!(self, Self::Allow).into_value()
+            }
+        }
+
+        #[rusnix(root)]
+        pub struct Root {
+            pub modes: Vec<Mode>,
+            pub state: State,
+            pub permissions: Vec<Permission>,
+        }
+    }
+    let model = config::Root {
+        modes: vec![config::Mode::ReadOnly, config::Mode::ReadWrite],
+        state: config::State::Ready,
+        permissions: vec![config::Permission::Deny, config::Permission::Allow],
+    };
+    assert_eq!(
+        NixSession::new()
+            .unwrap()
+            .evaluate(&compile(&model.into_config()).unwrap())
+            .unwrap()
+            .value,
+        serde_json::json!({"modes":["ReadOnly","read-write"],"state":"ready","permissions":[false,true]})
+    );
 }

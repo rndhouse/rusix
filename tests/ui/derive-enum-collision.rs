@@ -3,7 +3,8 @@ use rusnix_ir::IntoRusnixValue;
 #[derive(IntoRusnixValue)]
 enum Mode {
     Server,
-    Client(String),
+    #[rusnix(rename = "server")]
+    Client,
 }
 
 fn main() {}

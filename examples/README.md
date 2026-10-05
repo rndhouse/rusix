@@ -111,8 +111,9 @@ Reusable/library types continue to use `#[derive(IntoRusnixValue)]` or
 a local config module. Explicit conversions using the canonical IntoConfig or
 IntoRusnixValue names are respected. Detection is syntactic: aliased traits or
 macro-generated implementations use the fine-grained path outside this boundary.
-Local enums retain explicit exhaustive IntoRusnixValue mappings;
-neither authoring style invents an automatic enum encoding. InputRef remains
+Local unit enums lower automatically to strings: Server → "server", ReadOnly →
+"readOnly". Reusable unit enums use #[derive(IntoRusnixValue)] with the same rules.
+Data-carrying enums still require explicit conversion semantics. InputRef remains
 lookup context; use field skip if retaining it as local state.
 
 The types are defined by the user, without a global Rust model of NixOS.
@@ -133,16 +134,18 @@ convention. Raw identifiers such as `r#type` become `type`.
 
 | Attribute | Meaning | Used by |
 | --- | --- | --- |
-| Struct `rename_all = "PascalCase"` | Mechanical naming for external schemas | systemd ServiceConfig |
-| Struct `rename_all = "lowerCamelCase"` | Explicitly select the default convention | naming tests |
-| Field `rename = "..."` | One exact attribute name, overriding the convention | Identity's `name` maps to `owner` |
+| Struct/enum `rename_all = "PascalCase"` | Mechanical naming for external schemas | systemd ServiceConfig |
+| Struct/enum `rename_all = "lowerCamelCase"` | Explicitly select the default convention | naming tests |
+| Field/variant `rename = "..."` | One exact name, overriding the convention | Identity's `name` maps to `owner` |
 | `flatten` | Place a record's fields into the containing record | typed-values and the test-only layered-validation collision |
 | `skip` | Exclude local state from conversion and trait bounds | the tested generic derive fixture |
 
-Leaf enums explicitly implement IntoRusnixValue with exhaustive matching;
-structural alternatives match into small derived Plain/Tls records. No enum
-serialization convention, tagged union scheme or option-schema generation is
-implied. Custom value mappings return opaque RusnixValue through `into_value`,
+Unit enums use lowerCamelCase labels by default, with enum-level rename_all
+(PascalCase or lowerCamelCase) and variant-level rename for exceptions. Explicit
+rename takes precedence; snake_case is not a supported convention. Structural
+alternatives still match into small derived Plain/Tls records. No automatic
+representation for data-carrying enums or option-schema generation is implied.
+Custom value mappings return opaque RusnixValue through `into_value`,
 `leaf` or `record`, without raw semantic nodes or Nix AST. Existing Expr,
 OptionRef, PackageRef and NixValue leaves retain their symbolic/opaque semantics.
 Imports and overlays remain explicit NixosModule/Nixpkgs boundary operations.
@@ -174,9 +177,10 @@ bodies. No showcase type explicitly derives IntoConfig; local roots use the modu
 ## Enum option
 
 The example's Rust `Mode` enum has Server and Client variants.
-`accepts_connections(Mode)` accepts that type and handles both variants. The
+`accepts_connections(&Mode)` borrows that type and handles both variants. The
 ConnectionPolicy stores Mode without turning it into a string until lowering.
-The local config module lowers Root and ConnectionPolicy automatically. Root's
+The local config module lowers Mode, Root and ConnectionPolicy automatically;
+there is no handwritten enum-to-string mapping or Clone/Copy requirement. Root's
 `demo` field supplies placement; default naming maps `accepts_connections`
 to `acceptsConnections` without an annotation.
 
@@ -526,20 +530,21 @@ Tests retain reviewable generated Nix/results under `target/typed-examples/` and
 Seven important Nix comparisons live in `tests/comparisons/` as executable test
 data. Backend tests import the actual single-file Rust examples and compare
 their evaluated outputs with these modules, including native enum/assertion
-rejections. Twenty-six UI fixtures back the documented invalid Rust cases through the
+rejections. Twenty-nine UI fixtures back the documented invalid Rust cases through the
 code/span/type-label checker. They import actual example-local types and functions
 or deliberately evolve a test-local enum; the moved fixture-only SSH helper's
 contract is also checked. Two fixtures verify two independent errors each.
 The symbolic-reference fixture rejects an integer expression as a boolean
 assertion condition with E0308. A derived PackageRef field rejects ModuleRef
-with E0308. Derive errors reject container prefixes, automatic enum conversion
-and conflicting attributes. Additional cases reject invalid/duplicate rename_all,
-rename_all on transparent newtypes, and misplaced field rename_all. The twenty-six
-fixtures check twenty-eight errors using codes where available, useful primary spans
+with E0308. Derive errors reject container prefixes, automatic data-carrying enum conversion
+and conflicting attributes. Enum fixtures also reject name collisions, unsupported
+variant mappings and unsupported naming conventions. Additional cases reject invalid/duplicate rename_all,
+rename_all on transparent newtypes, and misplaced field rename_all. The twenty-nine
+fixtures check thirty-one errors using codes where available, useful primary spans
 and relevant messages/type labels.
 The module API also rejects missing/duplicate roots, enum/tuple roots, macro
 arguments and category mistakes. Core has three compile-fail doctests for generic
-Expr, opaque handle categories and unmapped module enums, plus a runnable
+Expr, opaque handle categories and unmapped data-carrying enums, plus a runnable
 module-authoring doctest. No complete compiler-wording snapshots are required.
 
 The guarantees apply to the typed API. Explicit primitive extraction, opaque

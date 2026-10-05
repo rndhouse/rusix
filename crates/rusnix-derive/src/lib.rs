@@ -5,7 +5,7 @@ use syn::{Data, DeriveInput, Fields, LitStr, parse_macro_input, parse_quote, spa
 
 mod config;
 
-/// Automatically lower local struct types in an inline configuration module.
+/// Automatically lower local structs and unit enums in an inline config module.
 #[proc_macro_attribute]
 pub fn config(args: TokenStream, input: TokenStream) -> TokenStream {
     if !args.is_empty() {
@@ -43,6 +43,25 @@ enum Naming {
 }
 
 impl Naming {
+    fn variant(self, name: &str) -> String {
+        let name = name.strip_prefix("r#").unwrap_or(name);
+        let chars: Vec<_> = name.chars().collect();
+        let mut snake = String::new();
+        for (index, &ch) in chars.iter().enumerate() {
+            if ch.is_uppercase()
+                && index > 0
+                && (chars[index - 1].is_lowercase()
+                    || chars[index - 1].is_numeric()
+                    || (chars[index - 1].is_uppercase()
+                        && chars.get(index + 1).is_some_and(|next| next.is_lowercase())))
+            {
+                snake.push('_');
+            }
+            snake.extend(ch.to_lowercase());
+        }
+        self.field(&snake)
+    }
+
     fn field(self, name: &str) -> String {
         let name = name.strip_prefix("r#").unwrap_or(name);
         let mut output = String::new();
@@ -68,7 +87,7 @@ fn expand(input: DeriveInput, rooted: bool) -> syn::Result<proc_macro2::TokenStr
             attr.parse_nested_meta(|meta| {
                 if !meta.path.is_ident("rename_all") {
                     return Err(meta.error(
-                        "supported struct mapping is rename_all; nesting defines placement",
+                        "supported container mapping is rename_all; nesting defines placement",
                     ));
                 }
                 if rename_all.is_some() {
@@ -90,10 +109,23 @@ fn expand(input: DeriveInput, rooted: bool) -> syn::Result<proc_macro2::TokenStr
             })?;
         }
     }
+    let naming = rename_all
+        .as_ref()
+        .map(|(naming, _)| *naming)
+        .unwrap_or_default();
+    if let Data::Enum(data) = &input.data {
+        if rooted {
+            return Err(syn::Error::new_spanned(
+                &input.ident,
+                "IntoConfig requires a named struct",
+            ));
+        }
+        return enum_value(&input, data, naming);
+    }
     let Data::Struct(data) = &input.data else {
         return Err(syn::Error::new_spanned(
             &input.ident,
-            "derive supports structs; map enums explicitly with IntoRusnixValue and exhaustive match",
+            "derive supports structs and unit enums",
         ));
     };
     if let Some((_, name)) = &rename_all
@@ -104,7 +136,6 @@ fn expand(input: DeriveInput, rooted: bool) -> syn::Result<proc_macro2::TokenStr
             "rename_all requires named fields; newtypes are transparent",
         ));
     }
-    let naming = rename_all.map(|(naming, _)| naming).unwrap_or_default();
     let mut generics = input.generics.clone();
     let body = match &data.fields {
         Fields::Named(fields) => {
@@ -218,6 +249,77 @@ fn expand(input: DeriveInput, rooted: bool) -> syn::Result<proc_macro2::TokenStr
     ))
 }
 
+fn enum_value(
+    input: &DeriveInput,
+    data: &syn::DataEnum,
+    naming: Naming,
+) -> syn::Result<proc_macro2::TokenStream> {
+    let mut arms = Vec::new();
+    let mut names = std::collections::BTreeSet::new();
+    for variant in &data.variants {
+        if !matches!(variant.fields, Fields::Unit) {
+            return Err(syn::Error::new_spanned(
+                variant,
+                "automatic enum lowering supports unit variants only; implement IntoRusnixValue for data-carrying enums",
+            ));
+        }
+        let mut rename: Option<LitStr> = None;
+        for attr in &variant.attrs {
+            if !attr.path().is_ident("rusnix") {
+                continue;
+            }
+            attr.parse_nested_meta(|meta| {
+                if !meta.path.is_ident("rename") {
+                    return Err(meta.error("supported variant mapping is rename"));
+                }
+                if rename.is_some() {
+                    return Err(meta.error("duplicate rename"));
+                }
+                let name: LitStr = meta.value()?.parse()?;
+                if name.value().is_empty() || name.value().contains('\0') {
+                    return Err(meta.error("rename must be nonempty and NUL-free"));
+                }
+                rename = Some(name);
+                Ok(())
+            })?;
+        }
+        let name = rename.unwrap_or_else(|| {
+            LitStr::new(
+                &naming.variant(&variant.ident.to_string()),
+                variant.ident.span(),
+            )
+        });
+        if name.value().is_empty() || !names.insert(name.value()) {
+            return Err(syn::Error::new_spanned(
+                name,
+                "enum variants must lower to distinct nonempty names",
+            ));
+        }
+        let variant_name = &variant.ident;
+        // Conditional variants must also condition their generated match arm.
+        let mut gates = Vec::new();
+        for attr in &variant.attrs {
+            if let Some(gate) = config::cfg_gate(&attr.meta)? {
+                gates.push(quote!(#[#gate]));
+            }
+        }
+        arms.push(quote_spanned!(variant.span()=>
+            #(#gates)*
+            Self::#variant_name => ::rusnix_ir::IntoRusnixValue::into_value(#name)
+        ));
+    }
+    let name = &input.ident;
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+    Ok(quote!(
+        impl #impl_generics ::rusnix_ir::IntoRusnixValue for #name #ty_generics #where_clause {
+            #[track_caller]
+            fn into_value(self) -> ::rusnix_ir::RusnixValue {
+                match self { #(#arms),* }
+            }
+        }
+    ))
+}
+
 fn config_impl(name: &syn::Ident, generics: &syn::Generics) -> proc_macro2::TokenStream {
     let mut generics = generics.clone();
     generics
@@ -238,6 +340,20 @@ fn config_impl(name: &syn::Ident, generics: &syn::Generics) -> proc_macro2::Toke
 #[cfg(test)]
 mod tests {
     use super::Naming;
+
+    #[test]
+    fn variant_names_split_pascal_words_and_acronyms() {
+        for (rust, camel, pascal) in [
+            ("Server", "server", "Server"),
+            ("ReadOnly", "readOnly", "ReadOnly"),
+            ("HTTPServer", "httpServer", "HttpServer"),
+            ("TLS", "tls", "Tls"),
+            ("r#type", "type", "Type"),
+        ] {
+            assert_eq!(Naming::LowerCamel.variant(rust), camel);
+            assert_eq!(Naming::Pascal.variant(rust), pascal);
+        }
+    }
 
     #[test]
     fn lower_camel_joins_snake_case_words() {

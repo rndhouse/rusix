@@ -1,17 +1,14 @@
 //! Demonstrates two configuration decisions consuming the same Rust enum.
 //! Adding a variant makes the compiler identify both incomplete matches.
-use rusnix_ir::{self as rusnix, IntoConfig, IntoRusnixValue, RusnixValue};
+use rusnix_ir::{self as rusnix, IntoConfig};
 
-#[derive(Clone, Copy)]
-pub enum Mode {
-    Server,
-    Client,
-}
-
-// Both policy consumers and their local configuration tree share one boundary.
+// The enum, policy consumers and local configuration tree share one boundary.
 #[rusnix::config]
 mod config {
-    use super::Mode;
+    pub enum Mode {
+        Server,
+        Client,
+    }
 
     pub struct Port(pub u16);
 
@@ -24,7 +21,7 @@ mod config {
     }
 
     // No wildcard: a new mode must have an explicit policy in both functions.
-    pub fn firewall_policy(mode: Mode) -> FirewallPolicy {
+    pub fn firewall_policy(mode: &Mode) -> FirewallPolicy {
         match mode {
             Mode::Server => FirewallPolicy {
                 allowed_ports: vec![Port(443)],
@@ -35,7 +32,7 @@ mod config {
         }
     }
 
-    pub fn service_policy(mode: Mode) -> ServicePolicy {
+    pub fn service_policy(mode: &Mode) -> ServicePolicy {
         match mode {
             Mode::Server => ServicePolicy {
                 accepts_connections: true,
@@ -61,25 +58,15 @@ mod config {
         let mode = Mode::Client;
         Root {
             demo: Policies {
+                firewall: firewall_policy(&mode),
+                service: service_policy(&mode),
                 mode,
-                firewall: firewall_policy(mode),
-                service: service_policy(mode),
             },
         }
     }
 }
 
-pub use config::{firewall_policy, model, service_policy};
-
-impl IntoRusnixValue for Mode {
-    fn into_value(self) -> RusnixValue {
-        match self {
-            Self::Server => "server",
-            Self::Client => "client",
-        }
-        .into_value()
-    }
-}
+pub use config::{Mode, firewall_policy, model, service_policy};
 
 fn main() {
     let generated = rusnix_nix::compile(&model().into_config()).unwrap();

@@ -17,7 +17,7 @@ fn derives(attrs: &[Attribute]) -> syn::Result<BTreeSet<String>> {
 
 // Copy conditional existence to a generated adapter, not unrelated attributes
 // such as cfg_attr(..., derive(Debug)) which are invalid on an impl.
-fn cfg_gate(meta: &syn::Meta) -> syn::Result<Option<syn::Meta>> {
+pub(super) fn cfg_gate(meta: &syn::Meta) -> syn::Result<Option<syn::Meta>> {
     if meta.path().is_ident("cfg") {
         return Ok(Some(meta.clone()));
     }
@@ -152,8 +152,19 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<proc_macro2::TokenStrea
                         "root requires a named struct",
                     ));
                 }
-                // Fine-grained derives have no enum encoding. Explicit enum impls
-                // remain ordinary Rust; fields using an unmapped enum fail bounds.
+                let explicit = derives(&item.attrs)?.contains("IntoRusnixValue")
+                    || implementations
+                        .contains(&(item.ident.to_string(), "IntoRusnixValue".into()));
+                if !explicit
+                    && item
+                        .variants
+                        .iter()
+                        .all(|variant| matches!(variant.fields, Fields::Unit))
+                {
+                    item.attrs
+                        .insert(0, parse_quote!(#[derive(::rusnix_ir::IntoRusnixValue)]));
+                }
+                // Data-carrying enums retain user-defined conversion semantics.
             }
             _ => {}
         }

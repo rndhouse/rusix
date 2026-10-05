@@ -1,6 +1,6 @@
 //! Derive semantics exercised through real lowering and NixOS merges.
 use rusnix_ir::{
-    Config, Expr, IntoConfig, IntoRusnixValue, RusnixValue, ValueKind,
+    Config, Expr, IntoConfig, IntoRusnixValue, ValueKind,
     interop::{InputRef, ModuleRef, NixFunction, NixValue, Nixpkgs, OverlayRef, PackageRef},
     nixos::{DefinitionPriority, NixosModule, OptionRef},
 };
@@ -131,20 +131,11 @@ fn flatten_skip_generics_and_borrowed_values_have_only_requested_effects() {
 }
 
 #[test]
-fn explicitly_mapped_leaf_enums_remain_exhaustive_rust_types() {
+fn derived_unit_enums_remain_exhaustive_rust_types() {
+    #[derive(IntoRusnixValue)]
     enum Mode {
         Server,
         Client,
-    }
-
-    impl IntoRusnixValue for Mode {
-        fn into_value(self) -> RusnixValue {
-            match self {
-                Self::Server => "server",
-                Self::Client => "client",
-            }
-            .into_value()
-        }
     }
 
     #[derive(IntoConfig)]
@@ -656,5 +647,56 @@ fn naming_conventions_are_local_and_literal_rename_wins() {
             "ExecStart": "example", "Restart": "always", "User": "example", "WorkingDirectory": "/tmp",
             "exact_external_name": true, "NestedValue": {"listenPort": 8080}, "listenPort": 9090,
         }})
+    );
+}
+
+#[test]
+fn unit_enum_naming_and_provenance_survive_lowering() {
+    #[derive(IntoRusnixValue)]
+    enum Mode {
+        Server,
+        ReadOnly,
+        #[rusnix(rename = "client-only")]
+        Client,
+        #[cfg(any())]
+        Disabled,
+    }
+
+    #[derive(IntoRusnixValue)]
+    #[rusnix(rename_all = "PascalCase")]
+    enum ExternalMode {
+        ReadOnly,
+        #[rusnix(rename = "exact-name")]
+        ReadWrite,
+    }
+
+    #[derive(IntoConfig)]
+    struct Root {
+        modes: Vec<Mode>,
+        external: Vec<ExternalMode>,
+    }
+    let model = Root {
+        modes: vec![Mode::Server, Mode::ReadOnly, Mode::Client],
+        external: vec![ExternalMode::ReadOnly, ExternalMode::ReadWrite],
+    };
+    let conversion_line = line!() + 1;
+    let config = model.into_config();
+    for binding in &config.assignments {
+        assert_eq!(binding.origin.file, file!());
+        assert_eq!(binding.origin.line, conversion_line);
+        let ValueKind::List(values) = &binding.value.kind else {
+            panic!("enum list expected");
+        };
+        for value in values {
+            assert_eq!(value.origin.line, conversion_line);
+        }
+    }
+    assert_eq!(
+        NixSession::new()
+            .unwrap()
+            .evaluate(&compile(&config).unwrap())
+            .unwrap()
+            .value,
+        serde_json::json!({"modes":["server","readOnly","client-only"],"external":["ReadOnly","exact-name"]})
     );
 }

@@ -13,7 +13,7 @@ struct ServicePolicy {
     accepts_connections: bool,
 }
 
-fn firewall_policy(mode: Mode) -> FirewallPolicy {
+fn firewall_policy(mode: &Mode) -> FirewallPolicy {
     match mode {
         Mode::Server => FirewallPolicy {
             allowed_ports: vec![443],
@@ -24,7 +24,7 @@ fn firewall_policy(mode: Mode) -> FirewallPolicy {
     }
 }
 
-fn service_policy(mode: Mode) -> ServicePolicy {
+fn service_policy(mode: &Mode) -> ServicePolicy {
     match mode {
         Mode::Server => ServicePolicy {
             accepts_connections: true,

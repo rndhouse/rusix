@@ -22,7 +22,7 @@
     "file": "enum-string.rs",
     "code": "E0308",
     "count": 1,
-    "source": "accepts_connections(\"server\")",
+    "source": "accepts_connections(&\"server\")",
     "reason_tokens": [
       "Mode",
       "str"
@@ -118,9 +118,9 @@
     "file": "derive-enum.rs",
     "code": null,
     "count": 1,
-    "source": "enum Mode",
+    "source": "Client(String)",
     "reason_tokens": [
-      "map enums explicitly",
+      "unit variants only",
       "IntoRusnixValue"
     ]
   },
@@ -246,6 +246,34 @@
     "reason_tokens": [
       "Owned",
       "owner_name"
+    ]
+  },
+  {
+    "file": "derive-enum-collision.rs",
+    "code": null,
+    "count": 1,
+    "source": "rename = \"server\"",
+    "reason_tokens": [
+      "distinct nonempty names"
+    ]
+  },
+  {
+    "file": "derive-enum-variant-mapping.rs",
+    "code": null,
+    "count": 1,
+    "source": "flatten",
+    "reason_tokens": [
+      "supported variant mapping is rename"
+    ]
+  },
+  {
+    "file": "derive-enum-rename-all.rs",
+    "code": null,
+    "count": 1,
+    "source": "\"snake_case\"",
+    "reason_tokens": [
+      "lowerCamelCase",
+      "PascalCase"
     ]
   }
 ]

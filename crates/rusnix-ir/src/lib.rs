@@ -8,7 +8,7 @@ pub mod nixos;
 
 mod value;
 
-/// Local inline authoring: structs get the existing conversion derives, with
+/// Local inline authoring: structs and unit enums get conversion derives, with
 /// `#[rusnix(root)]` selecting rooted contributions. External types keep their
 /// own traits; no source files or imported type definitions are inspected.
 ///
@@ -33,15 +33,15 @@ mod value;
 /// let module = NixosModule::empty().add(configuration::model());
 /// ```
 ///
-/// Enums still require explicit `IntoRusnixValue` mappings, just as with the
-/// fine-grained API. The module attribute does not infer an enum encoding:
+/// Unit enums lower to lowerCamelCase strings (Server → "server", ReadOnly →
+/// "readOnly"). Data-carrying enums still require explicit conversion semantics:
 ///
 /// ```compile_fail,E0277
 /// use rusnix_ir as rusnix;
 ///
 /// #[rusnix::config]
 /// mod configuration {
-///     enum Mode { Server, Client }
+///     enum Mode { Server, Client { endpoint: String } }
 ///
 ///     #[rusnix(root)]
 ///     struct Machine { mode: Mode }

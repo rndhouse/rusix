@@ -29,7 +29,7 @@ The [typed configuration showcase](examples/README.md) now demonstrates static
 semantic types, unrepresentable field combinations, caller contracts, and
 exhaustive model consumers. Ten single-file examples define their own domain types
 and distinguish user models, opaque Nix objects and the generic escape hatch.
-Seven tested Nix comparisons and twenty-six UI fixtures
+Seven tested Nix comparisons and twenty-nine UI fixtures
 (including interop category safety and missing TLS keys) back their claims. The examples explain
 which guarantees are static, which require IR checks, and which remain NixOS
 checks; generic configuration/IR escape hatches remain explicit.
@@ -135,9 +135,11 @@ the existing derives to immediate local structs and IntoConfig to explicitly
 marked roots; multiple roots are supported. It retains explicit conversions
 spelled with the canonical IntoConfig/IntoRusnixValue names and imports external
 values through their existing traits. Aliased or macro-generated conversion
-implementations stay on the fine-grained path outside the boundary. Enums need manual
-exhaustive value mappings. Named structs and transparent single-field newtypes
-have the same mapping rules as fine-grained derives.
+implementations stay on the fine-grained path outside the boundary. Unit enums
+lower automatically to lowerCamelCase strings: Server → "server", ReadOnly →
+"readOnly". Reusable unit enums use the same IntoRusnixValue derive. Data-carrying
+enums still require explicit semantic mappings. Named structs and transparent
+single-field newtypes have the same mapping rules as fine-grained derives.
 
 Only inline modules are supported: no file loading, child-module traversal or
 function-local/macro-produced type discovery. Reusable types and multi-file
@@ -151,8 +153,8 @@ Single-field tuple newtypes derive IntoRusnixValue transparently; named structs
 become records. Generics and borrowed strings are supported. Do not derive both
 traits on the same struct, since IntoConfig already supplies the value impl.
 
-Struct-level rename_all supports only `lowerCamelCase` (the default) and
-`PascalCase`. Field-level `#[rusnix(rename = "...")]` overrides that convention;
+Struct/enum-level rename_all supports only `lowerCamelCase` (the default) and
+`PascalCase`. Field/variant-level `#[rusnix(rename = "...")]` overrides that convention;
 `#[rusnix(flatten)]` and `#[rusnix(skip)]` retain their structural meanings.
 Rename is **one literal attribute name**, so
 `rename = "a.b"` does not create a prefix. Flatten combines record fields within
@@ -812,12 +814,12 @@ filesystem-relative compiler artifacts, local input paths, and one fixed pinned
 package root. Rust-origin IDs and multi-origin diagnostics remain unchanged.
 
 
-Current verification: `cargo test --workspace --locked` passes **210 tests**
-(206 ordinary tests and 4 doctests, including 3 compile-fail cases; zero
+Current verification: `cargo test --workspace --locked` passes **213 tests**
+(209 ordinary tests and 4 doctests, including 3 compile-fail cases; zero
 failed/ignored). The interop target has 24 tests; structured_interop has 19
 and PostgreSQL has 54.
 Formatting and all-target Clippy with warnings denied pass.
-The fixture script passes 182 integration checks, ten runnable
+The fixture script passes 184 integration checks, ten runnable
 showcase examples plus the legacy generic SSH compiler example, and 20 original
 CLI fixture invocations. All 14 diagnostic snapshots remain passing.
 Examples print generated source without Nix evaluation, fixture construction or
@@ -926,7 +928,7 @@ division-by-zero provenance and source-map fallback, missing-reference provenanc
 lazy selection, bool/string/list uses, validation and escaped paths.
 `tests/ui/symbolic-integer-as-boolean.rs` checks E0308 with a primary span and
 `Expr<bool>`/`Expr<i64>` labels. An integer dependency cannot be an assertion
-condition. The UI suite has twenty-five cases checking twenty-seven errors (including twelve
+condition. The UI suite has twenty-nine cases checking thirty-one errors (including fifteen
 uncoded macro errors).
 An unused command dependency leaves a throwing port unevaluated; selecting the
 command demands it and maps the failure to the Rust reference. No `deepSeq` or
@@ -948,14 +950,14 @@ there is no whole-config handle, dynamic traversal, symbolic iteration or Rust
 fixed-point execution. All evaluations use the unchanged disposable-store helper.
 
 
-The derive integration target has fourteen evaluator tests for nested placement, literal renames,
-newtypes, flatten/skip, generics/lifetimes, explicit enum mapping, record-list
-laziness and provenance (including source-map fallback), independent NixOS
+The derive integration target has fifteen evaluator tests for nested placement, literal renames,
+newtypes, flatten/skip, generics/lifetimes, automatic unit-enum lowering, explicit
+structural enum mappings, record-list laziness and provenance (including source-map fallback), independent NixOS
 merges/priorities and two-origin conflicts, native handle preservation, real
 package resolution, symbolic override compatibility and local naming conventions
-with explicit rename precedence. Two proc-macro unit tests cover mechanical
-conversion rules. Twenty-five UI fixtures check twenty-seven errors (fifteen coded
-rustc errors and twelve macro errors),
+with explicit rename precedence. Three proc-macro naming tests cover mechanical
+conversion rules. Twenty-nine UI fixtures check thirty-one errors (sixteen coded
+rustc errors and fifteen macro errors),
 with primary spans and relevant tokens instead of full compiler snapshots.
 Dependencies reuse the already cached syn/quote/proc-macro2 versions; no fetch
 was needed. Nix invocation/store protections are unchanged. NixOS can still
@@ -963,8 +965,8 @@ inspect scalar heads while processing freeform namespaces; this is upstream
 module behavior, not new derive forcing.
 
 
-The inline-module authoring step adds eight integration tests for local structure,
-external reusable values, manual enums/custom converters, multiple roots, real
+The inline-module authoring target has nineteen integration tests for local structure,
+external reusable values, automatic unit enums/custom converters, multiple roots, real
 NixOS merges/priorities and two-origin conflicts, operation provenance/laziness,
 and native symbolic/opaque handles and actual package resolution. The symbolic
 example uses the new boundary; its existing same-artifact override tests still

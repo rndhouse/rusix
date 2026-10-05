@@ -282,10 +282,12 @@ fn plain_transport_has_no_credentials_and_both_mode_consumers_work() {
         .unwrap()
         .value;
     assert_eq!(value["demo"]["transport"], serde_json::json!({"tls":false}));
-    assert!(enum_option::accepts_connections(enum_option::Mode::Server));
-    assert!(!enum_option::accepts_connections(enum_option::Mode::Client));
+    assert!(enum_option::accepts_connections(&enum_option::Mode::Server));
+    assert!(!enum_option::accepts_connections(
+        &enum_option::Mode::Client
+    ));
     assert_eq!(
-        exhaustive_match::firewall_policy(exhaustive_match::Mode::Server)
+        exhaustive_match::firewall_policy(&exhaustive_match::Mode::Server)
             .allowed_ports
             .into_iter()
             .map(|port| port.0)
@@ -293,11 +295,11 @@ fn plain_transport_has_no_credentials_and_both_mode_consumers_work() {
         vec![443],
     );
     assert!(
-        exhaustive_match::firewall_policy(exhaustive_match::Mode::Client)
+        exhaustive_match::firewall_policy(&exhaustive_match::Mode::Client)
             .allowed_ports
             .is_empty()
     );
-    assert!(exhaustive_match::service_policy(exhaustive_match::Mode::Server).accepts_connections);
-    assert!(!exhaustive_match::service_policy(exhaustive_match::Mode::Client).accepts_connections);
+    assert!(exhaustive_match::service_policy(&exhaustive_match::Mode::Server).accepts_connections);
+    assert!(!exhaustive_match::service_policy(&exhaustive_match::Mode::Client).accepts_connections);
     assert_eq!(typed_values::listen(typed_values::Port(1000)).0, 1000);
 }
