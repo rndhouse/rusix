@@ -555,16 +555,6 @@ mod lowering {
         )
     }
 
-    // These finite compatibility records use reusable derives. Unlike configuration
-    // roots, they cross the Nix boundary as atomic values for mkIf, mkMerge and callbacks.
-    #[derive(IntoRusnixValue)]
-    struct Assertion {
-        // Retains an upstream invariant that ordinary Nix contributors can still violate.
-        assertion: NixValue,
-        // Explains the rejected input after symbolic values have been resolved by Nix.
-        message: NixValue,
-    }
-
     // Maps the service's lifecycle and hardening policy to systemd property names.
     #[derive(IntoRusnixValue)]
     #[rusnix(rename_all = "PascalCase")]
@@ -738,15 +728,15 @@ mod lowering {
             NixValue::function(|user| {
                 let name = user.clone().select("name");
 
-                opaque(Assertion {
-                    assertion: NixValue::if_else(
+                nixos::assertion(
+                    NixValue::if_else(
                         user.select("ensureDBOwnership"),
                         Nixpkgs::new()
                             .function("elem")
                             .apply([name.clone(), pg.ensure_databases()]),
                         true,
                     ),
-                    message: nix_text!(
+                    nix_text!(
                         r#"
                             For each database user defined with `services.postgresql.ensureUsers` and
                             `ensureDBOwnership = true;`, a database with the same name must be defined
@@ -756,7 +746,7 @@ mod lowering {
                         "#,
                         name = name,
                     ),
-                })
+                )
             }),
             pg.ensure_users(),
         ])

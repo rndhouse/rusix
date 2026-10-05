@@ -8,6 +8,30 @@ use crate::interop::{ModuleRef, NixValue, Nixpkgs, PackageRef};
 use crate::{Config, ConfigValue, Expr, IntoConfig, Node, Origin, ValueKind};
 use std::marker::PhantomData;
 
+/// Construct one standard NixOS assertion record for the `assertions` option.
+/// Both the condition and message may remain symbolic, including inside Nix
+/// callbacks. Construction does not check the condition or force the message;
+/// NixOS checks assertions when its evaluator demands them.
+///
+/// The message is preserved verbatim for upstream compatibility. Child expression
+/// origins and this call's record origin are retained. For a concrete message
+/// with a Rust-origin marker on a false condition, use [`NixosModule::assertion`].
+/// Nix remains authoritative for the actual boolean/string types of opaque values.
+///
+/// ```
+/// use rusnix_ir::{nixos, nix_text};
+/// let enabled = nixos::OptionRef::<bool>::new("services.example.enable").into_expr();
+/// let rule = nixos::assertion(
+///     enabled,
+///     nix_text!("{service} must be enabled", service = "example"),
+/// );
+/// // Put this deferred record in a contribution's assertions list.
+/// ```
+#[track_caller]
+pub fn assertion(condition: impl Into<NixValue>, message: impl Into<NixValue>) -> NixValue {
+    NixValue::record([("assertion", condition.into()), ("message", message.into())])
+}
+
 /// Combine deferred definition trees using NixOS mkMerge, not Rust merging.
 #[track_caller]
 pub fn merge(values: impl IntoIterator<Item = NixValue>) -> NixValue {

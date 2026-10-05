@@ -440,7 +440,9 @@ usage. A private `lowering` module implements compatibility using typed symbolic
 option references and opaque nixpkgs functions; the complete rewrite stays in
 one file. Generic currying (`.apply`),
 text/record construction (`nix_text!`/`nix_record!`), and NixOS definition helpers
-(`.when`, `.priority`, `.before`/`.after`, `nixos::merge`) come from Rusnix.
+(`nixos::assertion`, `.when`, `.priority`, `.before`/`.after`, `nixos::merge`)
+come from Rusnix. Assertions accept deferred conditions and messages without
+changing upstream message text; no local assertion schema is needed.
 Fixed compatibility schemas (systemd properties, service definitions and Unix
 accounts) use local Rust structs so rustfmt can format their construction.
 `into_value().into_nix_value()` keeps these records atomic when applying NixOS

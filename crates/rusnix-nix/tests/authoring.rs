@@ -374,3 +374,163 @@ fn active_deferred_definition_keeps_the_failing_operation_origin() {
     assert!(diagnostic.reason.contains("division by zero"));
     assert!(!diagnostic.raw_nix.is_empty());
 }
+
+#[test]
+fn standard_assertions_follow_final_options_with_verbatim_deferred_messages() {
+    use rusnix_ir::{
+        ValueKind,
+        interop::{InputRef, NixValue},
+        nix_text,
+        nixos::{self, OptionRef},
+    };
+    use std::{fs, path::Path};
+
+    let scratch = tempfile::tempdir().unwrap();
+    let downstream = scratch.path().join("downstream.nix");
+    fs::write(&downstream, "{ module = {}; }\n").unwrap();
+    let schema = InputRef::local(
+        "schema",
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/symbolic-options.nix"),
+    );
+
+    let port = OptionRef::<i64>::new("services.example.port").into_expr();
+    let condition = NixValue::from(port.clone()).equals(5432);
+    let message = nix_text!("expected port 5432, got {port}", port = port);
+    let record_line = line!() + 1;
+    let rule = nixos::assertion(condition, message);
+    let config = Config::new()
+        .set(
+            "services.example.port",
+            NixValue::from(5432).priority(DefinitionPriority::Default),
+        )
+        .set("assertions", NixValue::list([rule]));
+    let ValueKind::List(rules) = &config.assignments[1].value.kind else {
+        panic!("assertion list")
+    };
+    assert_eq!(rules[0].origin.file, file!());
+    assert_eq!(rules[0].origin.line, record_line);
+    let ValueKind::OpaqueRecord(fields) = &rules[0].kind else {
+        panic!("standard assertion record")
+    };
+    assert_eq!(fields[0].0, "assertion");
+    assert_eq!(fields[1].0, "message");
+
+    let artifact = compile_module(
+        &NixosModule::empty()
+            .import_ref(schema.module("schema"))
+            .import_ref(InputRef::local("downstream", &downstream).module("module"))
+            .add(config),
+    )
+    .unwrap();
+    let original = artifact.module.source.clone();
+    let session = NixSession::new().unwrap();
+
+    assert_eq!(
+        session
+            .evaluate_nixos(&artifact, &["services", "example", "port"], true)
+            .unwrap()
+            .value,
+        5432
+    );
+    fs::write(
+        &downstream,
+        "{ module = { services.example.port = 6432; }; }\n",
+    )
+    .unwrap();
+    let error = session
+        .evaluate_nixos(&artifact, &["services", "example", "port"], true)
+        .unwrap_err();
+    assert_eq!(error.kind, DiagnosticKind::NixosAssertion);
+    assert!(error.reason.contains("expected port 5432, got 6432"));
+    assert!(!error.reason.contains("rusnix-assertion:"));
+    assert!(!error.raw_nix.is_empty());
+    assert_eq!(artifact.module.source, original);
+}
+
+#[test]
+fn standard_assertion_messages_and_unused_conditions_remain_lazy() {
+    use rusnix_ir::{
+        interop::NixValue,
+        nixos::{self, OptionRef},
+    };
+
+    let message = Expr::int(1).divide(Expr::int(0)).to_text();
+    let unused_condition = OptionRef::<bool>::new("services.missing.enable").into_expr();
+    let session = NixSession::new().unwrap();
+
+    // A true condition does not demand its error message, even when assertions are checked.
+    let artifact = compile_module(&base().add(Config::new().set(
+        "assertions",
+        NixValue::list([nixos::assertion(true, message)]),
+    )))
+    .unwrap();
+    assert_eq!(
+        session
+            .evaluate_nixos(&artifact, &["services", "openssh", "enable"], true)
+            .unwrap()
+            .value,
+        false
+    );
+
+    // Selecting an unrelated option does not check the assertion's missing dependency.
+    let artifact = compile_module(&base().add(Config::new().set(
+        "assertions",
+        NixValue::list([nixos::assertion(unused_condition, "missing dependency")]),
+    )))
+    .unwrap();
+    assert_eq!(
+        session
+            .evaluate_nixos(&artifact, &["services", "openssh", "enable"], false)
+            .unwrap()
+            .value,
+        false
+    );
+}
+
+#[test]
+fn deferred_assertion_condition_failures_keep_the_child_operation_origin() {
+    use rusnix_ir::{interop::NixValue, nixos};
+
+    let operation_line = line!() + 1;
+    let invalid = Expr::int(44).divide(Expr::int(0));
+    let condition = NixValue::from(invalid).equals(22);
+    let artifact = compile_module(&base().add(Config::new().set(
+        "assertions",
+        NixValue::list([nixos::assertion(condition, "invalid condition")]),
+    )))
+    .unwrap();
+    let error = NixSession::new()
+        .unwrap()
+        .evaluate_nixos(&artifact, &["services", "openssh", "enable"], true)
+        .unwrap_err();
+
+    assert_eq!(error.primary.as_ref().unwrap().file, file!());
+    assert_eq!(error.primary.as_ref().unwrap().line, operation_line);
+    assert_eq!(error.provenance, Provenance::ErrorContext);
+    assert!(error.reason.contains("division by zero"));
+    assert!(!error.raw_nix.is_empty());
+}
+
+#[test]
+fn deferred_assertion_message_failures_keep_the_child_operation_origin() {
+    use rusnix_ir::{interop::NixValue, nix_text, nixos};
+
+    let operation_line = line!() + 1;
+    let invalid = Expr::int(44).divide(Expr::int(0));
+    let message = nix_text!("invalid result: {value}", value = invalid);
+    let artifact = compile_module(&base().add(Config::new().set(
+        "assertions",
+        NixValue::list([nixos::assertion(false, message)]),
+    )))
+    .unwrap();
+    let error = NixSession::new()
+        .unwrap()
+        .evaluate_nixos(&artifact, &["services", "openssh", "enable"], true)
+        .unwrap_err();
+
+    assert_eq!(error.primary.as_ref().unwrap().file, file!());
+    assert_eq!(error.primary.as_ref().unwrap().line, operation_line);
+    assert_eq!(error.provenance, Provenance::ErrorContext);
+    assert!(error.reason.contains("division by zero"));
+    assert!(!error.raw_nix.is_empty());
+}
