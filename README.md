@@ -28,9 +28,9 @@ fixtures remain; the separate NixOS harness uses real OpenSSH option declaration
 The [typed configuration showcase](examples/README.md) now demonstrates static
 semantic types, unrepresentable field combinations, caller contracts, and
 exhaustive model consumers. Nine single-file showcases and the multi-file
-PostgreSQL example define their own domain types and distinguish user models,
+PostgreSQL/Git examples define their own domain types and distinguish user models,
 opaque Nix objects and the generic escape hatch.
-Seven tested Nix comparisons and fifty UI fixtures
+Seven tested Nix comparisons and fifty-one UI fixtures
 (including interop category safety and missing TLS keys) back their claims. The examples explain
 which guarantees are static, which require IR checks, and which remain NixOS
 checks; generic configuration/IR escape hatches remain explicit.
@@ -1134,3 +1134,8 @@ while a bad schema default can identify its declaration.
 custom semantic projection while retaining generated-module parsing and existing
 Rusnix diagnostics. The adapter recognizes both staged nixpkgs library trees and
 preserves precise NixOS option paths inside opaque records.
+
+The [Git package example](examples/git/README.md) rewrites the pinned Git 2.47.0
+package expression using the real nixpkgs `callPackage`/`mkDerivation` backend.
+Its tests compare exact derivation recipes, feature/platform choices and ordinary
+Nix overrides without fetching sources or building Git.

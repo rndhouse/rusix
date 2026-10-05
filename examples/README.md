@@ -40,12 +40,14 @@ configuration, while keeping Nix's ecosystem and final checks underneath.
 | [Layered validation](layered-validation.rs) | Clear division of validation responsibility |
 | [Nix interop](nix-interop.rs) | Existing ecosystem works without generated bindings |
 | [Symbolic option](symbolic-option.rs) | Explicit typed dependencies follow ordinary Nix overrides |
+| [Git package](git/README.md) | Real package definition with exact derivation compatibility and typed feature choices |
 | [PostgreSQL NixOS module](postgresql-nixos-module/README.md) | Real module implementation with typed provisioning and NixOS compatibility |
 
 The nine small showcases each use **one Rust file** for user models, structural
-placement and lightweight source generation. PostgreSQL is the exception: its
-substantial complete module rewrite uses five files, separating the model, public
-schema, symbolic dependencies, lowering and entry point. Examples invoke no Nix evaluator
+placement and lightweight source generation. Git and PostgreSQL are substantial
+multi-file exceptions. Git separates its model, opaque inputs, package lowering
+and entry point. PostgreSQL uses five files, separating the model, public schema,
+symbolic dependencies, lowering and entry point. Examples invoke no Nix evaluator
 and write no artifacts; integration tests prove the behavioral claims. There is
 no handwritten mechanical lowering in the nine small examples. PostgreSQL adds
 one semantic IntoConfig adapter for ownership-derived roles and collection policy;

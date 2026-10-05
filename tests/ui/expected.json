@@ -477,5 +477,15 @@
     "reason_tokens": [
       "duplicate omit_none"
     ]
+  },
+  {
+    "file": "git-perl-disabled-feature.rs",
+    "code": "E0559",
+    "count": 1,
+    "source": "send_email: true",
+    "reason_tokens": [
+      "Perl::Disabled",
+      "send_email"
+    ]
   }
 ]

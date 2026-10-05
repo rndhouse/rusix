@@ -53,3 +53,7 @@ path = "../../examples/symbolic-option.rs"
 [[example]]
 name = "postgresql-nixos-module"
 path = "../../examples/postgresql-nixos-module/main.rs"
+
+[[example]]
+name = "git"
+path = "../../examples/git/main.rs"
