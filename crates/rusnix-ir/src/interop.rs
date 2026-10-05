@@ -33,6 +33,7 @@ impl AttrPath {
 pub enum Source {
     Packages { overlays: Vec<Reference> },
     Library,
+    NixosPackages { overlays: Vec<Reference> },
     ModuleFile { path: String },
     Input { name: String, file: PathBuf },
 }
@@ -50,7 +51,7 @@ impl Reference {
             path.validate(&self.origin)?;
         }
         match &self.source {
-            Source::Packages { overlays } => {
+            Source::Packages { overlays } | Source::NixosPackages { overlays } => {
                 for overlay in overlays {
                     overlay.validate()?;
                 }
@@ -144,6 +145,61 @@ impl ConfigValue for NixValue {
 }
 
 impl NixValue {
+    pub(crate) fn from_node(node: Node) -> Self {
+        Self(node)
+    }
+
+    /// Describe a scoped callback for an existing Nix function. Rust executes
+    /// the builder once with a symbolic parameter; it never reads Nix values.
+    #[track_caller]
+    pub fn function(build: impl FnOnce(Self) -> Self) -> Self {
+        use std::sync::atomic::{AtomicU64, Ordering};
+
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        let binding = NEXT.fetch_add(1, Ordering::Relaxed);
+        let origin = Origin::caller("opaque Nix callback");
+        let parameter = Self(Node {
+            origin: origin.clone(),
+            kind: ValueKind::Parameter(binding),
+        });
+        Self(Node {
+            origin,
+            kind: ValueKind::Function {
+                binding,
+                body: Box::new(build(parameter).0),
+            },
+        })
+    }
+
+    /// Only the chosen branch is demanded. Conditions remain authoritative in Nix.
+    #[track_caller]
+    pub fn if_else(condition: impl Into<Self>, yes: impl Into<Self>, no: impl Into<Self>) -> Self {
+        Self(Node {
+            origin: Origin::caller("opaque Nix choice"),
+            kind: ValueKind::If(
+                Box::new(condition.into().0),
+                Box::new(yes.into().0),
+                Box::new(no.into().0),
+            ),
+        })
+    }
+
+    #[track_caller]
+    pub fn equals(self, other: impl Into<Self>) -> Self {
+        Self(Node {
+            origin: Origin::caller("opaque Nix equality"),
+            kind: ValueKind::Equal(Box::new(self.0), Box::new(other.into().0)),
+        })
+    }
+
+    #[track_caller]
+    pub fn to_text(self) -> Self {
+        Self(Node {
+            origin: Origin::caller("opaque Nix to text"),
+            kind: ValueKind::ToText(Box::new(self.0)),
+        })
+    }
+
     /// Native leaves, preserving captured expression/reference origins. Float
     /// literals support finite normal f64 values and zero; validation rejects
     /// NaN, infinities and subnormals, which Nix cannot parse as literals.
@@ -260,12 +316,34 @@ impl NixFunction {
 
 #[derive(Clone, Debug, Default)]
 pub struct Nixpkgs {
+    module_scope: bool,
     overlays: Vec<Reference>,
 }
 
 impl Nixpkgs {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Use the package set supplied by NixOS, including its config and overlays.
+    /// References require NixosModule lowering, like OptionRef dependencies.
+    pub fn from_module() -> Self {
+        Self {
+            module_scope: true,
+            overlays: vec![],
+        }
+    }
+
+    fn package_source(&self) -> Source {
+        if self.module_scope {
+            Source::NixosPackages {
+                overlays: self.overlays.clone(),
+            }
+        } else {
+            Source::Packages {
+                overlays: self.overlays.clone(),
+            }
+        }
     }
 
     pub fn with_overlay(mut self, overlay: OverlayRef) -> Self {
@@ -283,9 +361,7 @@ impl Nixpkgs {
         let path = AttrPath::segments(parts);
         let origin = Origin::caller(format!("nixpkgs package lookup {}", path.0.join(".")));
         PackageRef(Reference {
-            source: Source::Packages {
-                overlays: self.overlays.clone(),
-            },
+            source: self.package_source(),
             path: Some(path),
             origin,
         })
@@ -314,9 +390,7 @@ impl Nixpkgs {
     #[track_caller]
     pub fn package_function(&self, path: &str) -> NixFunction {
         NixFunction(Reference {
-            source: Source::Packages {
-                overlays: self.overlays.clone(),
-            },
+            source: self.package_source(),
             path: Some(AttrPath::dotted(path)),
             origin: Origin::caller(format!("nixpkgs function lookup {path}")),
         })

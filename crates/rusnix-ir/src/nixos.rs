@@ -26,6 +26,15 @@ impl<T> OptionRef<T> {
         }
     }
 
+    /// Explicitly cross into the opaque boundary, including collection options.
+    /// This does not expose the referenced value to Rust.
+    pub fn into_value(self) -> crate::interop::NixValue {
+        crate::interop::NixValue::from_node(Node {
+            origin: self.origin,
+            kind: ValueKind::OptionReference(self.path),
+        })
+    }
+
     pub fn into_expr(self) -> Expr<T> {
         Expr::new(ValueKind::OptionReference(self.path), self.origin)
     }

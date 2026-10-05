@@ -33,10 +33,54 @@ fn documented_compile_fail_cases_fail_for_the_stated_reasons() {
             .max_by_key(|p| p.metadata().unwrap().modified().unwrap())
             .unwrap_or_else(|| panic!("Cargo-built {name} library"))
     };
-    let libraries: Vec<_> = ["rusnix_ir", "rusnix_nix", "serde_json"]
-        .into_iter()
-        .map(|name| (name, library(name)))
+    let scratch = tempfile::tempdir().unwrap();
+    let nix_library = library("rusnix_nix");
+    // Cargo can cache differently feature-unified IR artifacts. Newest-by-mtime
+    // alone can select a different crate identity than the backend actually uses.
+    let probe = scratch.path().join("compatible.rs");
+    fs::write(
+        &probe,
+        "fn main() { let _ = rusnix_nix::compile(&rusnix_ir::Config::new()); }",
+    )
+    .unwrap();
+    let mut ir_candidates: Vec<_> = fs::read_dir(deps)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| {
+            path.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("librusnix_ir-")
+                && path.extension().is_some_and(|s| s == "rlib")
+        })
         .collect();
+    ir_candidates
+        .sort_by_key(|path| std::cmp::Reverse(path.metadata().unwrap().modified().unwrap()));
+    let ir_library = ir_candidates
+        .into_iter()
+        .find(|path| {
+            Command::new(std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into()))
+                .arg(&probe)
+                .args(["--edition=2024", "--emit=metadata"])
+                .arg("--extern")
+                .arg(format!("rusnix_ir={}", path.display()))
+                .arg("--extern")
+                .arg(format!("rusnix_nix={}", nix_library.display()))
+                .arg("-L")
+                .arg(format!("dependency={}", deps.display()))
+                .arg("--out-dir")
+                .arg(scratch.path())
+                .output()
+                .unwrap()
+                .status
+                .success()
+        })
+        .expect("Cargo-built IR compatible with the backend");
+    let libraries = [
+        ("rusnix_ir", ir_library),
+        ("rusnix_nix", nix_library),
+        ("serde_json", library("serde_json")),
+    ];
     let cases: Vec<Case> =
         serde_json::from_str(include_str!("../../../tests/ui/expected.json")).unwrap();
     let mut registered: Vec<_> = cases.iter().map(|case| case.file.clone()).collect();
@@ -52,7 +96,6 @@ fn documented_compile_fail_cases_fail_for_the_stated_reasons() {
         registered, fixtures,
         "every UI fixture must have a diagnostic expectation"
     );
-    let scratch = tempfile::tempdir().unwrap();
     let artifacts = root.join("target/typed-examples/ui");
     fs::create_dir_all(&artifacts).unwrap();
     for case in cases {

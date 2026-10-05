@@ -35,19 +35,49 @@ pub fn compile(config: &Config) -> Result<Generated, Box<Diagnostic>> {
 
 /// Find scoped dependencies without evaluating any values.
 fn option_reference(node: &Node) -> Option<&Node> {
+    scoped_reference(node, false)
+}
+
+fn module_package_reference(node: &Node) -> Option<&Node> {
+    scoped_reference(node, true)
+}
+
+fn scoped_reference(node: &Node, packages_only: bool) -> Option<&Node> {
+    let option_reference = |node| scoped_reference(node, packages_only);
     match &node.kind {
-        ValueKind::OptionReference(_) => Some(node),
+        ValueKind::OptionReference(_) => {
+            if packages_only {
+                None
+            } else {
+                Some(node)
+            }
+        }
         ValueKind::List(items) => items.iter().find_map(option_reference),
         ValueKind::AttrSet(fields) | ValueKind::OpaqueRecord(fields) => {
             fields.iter().find_map(|(_, node)| option_reference(node))
         }
-        ValueKind::Apply(left, right) | ValueKind::Divide(left, right) => {
+        ValueKind::Apply(left, right)
+        | ValueKind::Divide(left, right)
+        | ValueKind::Equal(left, right) => {
             option_reference(left).or_else(|| option_reference(right))
         }
         ValueKind::Select(value, _)
         | ValueKind::ToText(value)
         | ValueKind::StringPrefix { value, .. }
         | ValueKind::InRange { value, .. } => option_reference(value),
+        ValueKind::Function { body, .. } => option_reference(body),
+        ValueKind::If(condition, yes, no) => option_reference(condition)
+            .or_else(|| option_reference(yes))
+            .or_else(|| option_reference(no)),
+        ValueKind::Reference(reference)
+            if matches!(
+                reference.source,
+                rusnix_ir::interop::Source::NixosPackages { .. }
+            ) =>
+        {
+            Some(node)
+        }
+        ValueKind::Parameter(_) => None,
         ValueKind::Bool(_)
         | ValueKind::Int(_)
         | ValueKind::Float(_)
@@ -85,7 +115,35 @@ fn binary(op: BinaryOp, left: NixExpr, right: NixExpr) -> NixExpr {
 }
 
 fn lower_value(node: &Node) -> NixExpr {
+    lower_scoped(node, &[])
+}
+
+fn lower_scoped(node: &Node, scope: &[u64]) -> NixExpr {
+    let lower_value = |node| lower_scoped(node, scope);
     let kind = match &node.kind {
+        ValueKind::Function { binding, body } => {
+            let name = format!("__rusnix_arg_{}", scope.len());
+            let mut scope = scope.to_vec();
+            scope.push(*binding);
+            NixKind::Lambda(name, Box::new(lower_scoped(body, &scope)))
+        }
+        ValueKind::Parameter(binding) => NixKind::Variable(format!(
+            "__rusnix_arg_{}",
+            scope
+                .iter()
+                .position(|id| id == binding)
+                .expect("validated callback scope")
+        )),
+        ValueKind::If(condition, yes, no) => NixKind::If(
+            Box::new(lower_value(condition)),
+            Box::new(lower_value(yes)),
+            Box::new(lower_value(no)),
+        ),
+        ValueKind::Equal(left, right) => NixKind::Binary(
+            crate::ast::BinaryOp::Equal,
+            Box::new(lower_value(left)),
+            Box::new(lower_value(right)),
+        ),
         ValueKind::Bool(v) => NixKind::Bool(*v),
         ValueKind::Int(v) => NixKind::Int(*v),
         ValueKind::Float(v) => NixKind::Float(*v),
@@ -157,7 +215,9 @@ fn lower_value(node: &Node) -> NixExpr {
     };
     if matches!(
         node.kind,
-        ValueKind::Divide(..)
+        ValueKind::If(..)
+            | ValueKind::Equal(..)
+            | ValueKind::Divide(..)
             | ValueKind::InRange { .. }
             | ValueKind::Apply(..)
             | ValueKind::OptionReference(_)

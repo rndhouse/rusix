@@ -1,6 +1,6 @@
 //! Structured opaque arguments use real pinned functions; no outputs are built.
 use rusnix_ir::{
-    Expr, IntoConfig, IntoRusnixValue, ValueKind,
+    Config, Expr, IntoConfig, IntoRusnixValue, ValueKind,
     interop::{InputRef, NixValue, Nixpkgs},
     nixos::{NixosModule, OptionRef},
 };
@@ -598,4 +598,106 @@ fn lazy_record_merging_keeps_unselected_fallible_values_unforced() {
         .unwrap_err();
     assert_eq!(error.reason, "division by zero");
     assert_eq!(error.primary.as_ref().unwrap().purpose, "integer division");
+}
+
+#[test]
+fn opaque_callbacks_capture_lexical_parameters_and_render_deterministically() {
+    fn callback() -> NixValue {
+        NixValue::function(|outer| {
+            NixValue::function(|inner| {
+                Nixpkgs::new()
+                    .function("concatStringsSep")
+                    .call(":")
+                    .call(NixValue::list([outer, inner]))
+            })
+        })
+    }
+    let artifact = || generated(callback().call("outside").call("inside"));
+    let first = artifact();
+    let second = artifact();
+    assert_eq!(first.source, second.source);
+    assert_eq!(
+        NixSession::new()
+            .unwrap()
+            .evaluate_interop(&first)
+            .unwrap()
+            .value["result"],
+        "outside:inside"
+    );
+}
+
+#[test]
+fn callback_parameters_cannot_escape_their_lexical_scope() {
+    let mut escaped = None;
+    let _callback = NixValue::function(|parameter| {
+        escaped = Some(parameter);
+        true.into()
+    });
+    let error = compile(
+        &ResultContribution {
+            result: escaped.unwrap(),
+        }
+        .into_config(),
+    )
+    .unwrap_err();
+    assert_eq!(error.kind, DiagnosticKind::Validation);
+    assert!(error.reason.contains("escaped its function scope"));
+}
+
+#[test]
+fn opaque_choices_leave_unused_branches_lazy() {
+    let failure: NixValue = Expr::int(44).divide(Expr::int(0)).into();
+    let value = NixValue::if_else(NixValue::from(42).equals(42), "selected", failure);
+    assert_eq!(evaluate(value), "selected");
+}
+
+#[test]
+fn opaque_callbacks_map_final_collection_options_and_preserve_origin() {
+    let session = NixSession::new().unwrap();
+    let callback_line = line!() + 1;
+    let callback = NixValue::function(|item| item.select("missing"));
+    let value = Nixpkgs::new()
+        .function("map")
+        .call(callback)
+        .call(NixValue::list([NixValue::record([(
+            "present",
+            true.into(),
+        )])]));
+    let error = session.evaluate_interop(&generated(value)).unwrap_err();
+    assert!(error.reason.contains("missing"));
+    assert!(error.primary.as_ref().unwrap().line >= callback_line);
+    assert_eq!(error.primary.as_ref().unwrap().file, file!());
+    assert!(!error.raw_nix.is_empty());
+}
+
+#[test]
+fn module_package_handles_are_scoped_and_follow_module_package_arguments() {
+    let pkgs = Nixpkgs::from_module();
+    let value = pkgs.get("hello").as_value().select("pname");
+    let error = compile(
+        &ResultContribution {
+            result: value.clone(),
+        }
+        .into_config(),
+    )
+    .unwrap_err();
+    assert_eq!(error.kind, DiagnosticKind::Validation);
+    let artifact =
+        compile_module(&NixosModule::empty().add(ResultContribution { result: value })).unwrap();
+    assert!(artifact.module.source.contains("pkgs"));
+    // This selection belongs to the existing minimal module harness's namespaces.
+    let artifact = compile_module(&NixosModule::empty().add(Config::new().set(
+        "environment.result",
+        pkgs.get("hello").as_value().select("pname"),
+    )))
+    .unwrap();
+    assert_eq!(session_value(&artifact), "hello");
+}
+
+fn session_value(artifact: &rusnix_nix::nixos::NixosArtifact) -> serde_json::Value {
+    NixSession::new()
+        .unwrap()
+        .evaluate_nixos_interop(artifact, &["environment", "result"], false)
+        .unwrap()
+        .value
 }

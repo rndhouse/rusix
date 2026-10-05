@@ -177,7 +177,20 @@ fn lower_module(module: &NixosModule) -> Result<(NixExpr, NixosArtifact), Box<Di
             .iter()
             .any(|a| crate::option_reference(&a.condition).is_some());
     let kind = if needs_config {
-        NixKind::Function(vec!["config".into()], Box::new(body))
+        let mut arguments = vec!["config".into()];
+        if module
+            .config
+            .assignments
+            .iter()
+            .any(|a| crate::module_package_reference(&a.value).is_some())
+            || module
+                .assertions
+                .iter()
+                .any(|a| crate::module_package_reference(&a.condition).is_some())
+        {
+            arguments.push("pkgs".into());
+        }
+        NixKind::Function(arguments, Box::new(body))
     } else {
         body.kind
     };

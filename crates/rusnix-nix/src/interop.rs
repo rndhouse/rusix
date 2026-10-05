@@ -44,6 +44,15 @@ pub(crate) fn source(source: &Source) -> NixExpr {
                 ),
             ]))),
         )),
+        Source::NixosPackages { overlays } => overlays.iter().fold(
+            NixExpr::plain(NixKind::Variable("pkgs".into())),
+            |pkgs, overlay| {
+                NixExpr::plain(NixKind::Apply(
+                    Box::new(select(pkgs, &AttrPath::dotted("extend"))),
+                    Box::new(lower_reference(overlay)),
+                ))
+            },
+        ),
         Source::Library => imported(NixExpr::plain(NixKind::Path("./nixpkgs/lib".into()))),
         Source::ModuleFile { path } => {
             let path = NixExpr::plain(NixKind::Binary(

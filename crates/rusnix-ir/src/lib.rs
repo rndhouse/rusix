@@ -106,6 +106,14 @@ pub enum ValueKind {
     Reference(interop::Reference),
     Apply(Box<Node>, Box<Node>),
     Select(Box<Node>, interop::AttrPath),
+    /// Scoped callbacks at the opaque Nix boundary, not Rust-side evaluation.
+    Function {
+        binding: u64,
+        body: Box<Node>,
+    },
+    Parameter(u64),
+    If(Box<Node>, Box<Node>, Box<Node>),
+    Equal(Box<Node>, Box<Node>),
     /// A NixOS-scoped dependency, never a concrete Rust value.
     OptionReference(interop::AttrPath),
     ToText(Box<Node>),
@@ -394,6 +402,11 @@ fn reject_nul(text: &str, origin: &Origin) -> Result<(), ValidationError> {
 }
 
 fn validate_value(node: &Node) -> Result<(), ValidationError> {
+    validate_scoped(node, &[])
+}
+
+fn validate_scoped(node: &Node, scope: &[u64]) -> Result<(), ValidationError> {
+    let validate_value = |node| validate_scoped(node, scope);
     match &node.kind {
         ValueKind::String(text) => reject_nul(text, &node.origin)?,
         ValueKind::List(items) => {
@@ -416,7 +429,9 @@ fn validate_value(node: &Node) -> Result<(), ValidationError> {
                 validate_value(value)?;
             }
         }
-        ValueKind::Divide(left, right) | ValueKind::Apply(left, right) => {
+        ValueKind::Divide(left, right)
+        | ValueKind::Apply(left, right)
+        | ValueKind::Equal(left, right) => {
             validate_value(left)?;
             validate_value(right)?;
         }
@@ -435,6 +450,24 @@ fn validate_value(node: &Node) -> Result<(), ValidationError> {
         ValueKind::Select(value, path) => {
             validate_value(value)?;
             path.validate(&node.origin)?;
+        }
+        ValueKind::Function { binding, body } => {
+            let mut scope = scope.to_vec();
+            scope.push(*binding);
+            validate_scoped(body, &scope)?;
+        }
+        ValueKind::Parameter(binding) => {
+            if !scope.contains(binding) {
+                return Err(ValidationError {
+                    origin: node.origin.clone(),
+                    message: "opaque callback parameter escaped its function scope".into(),
+                });
+            }
+        }
+        ValueKind::If(condition, yes, no) => {
+            validate_value(condition)?;
+            validate_value(yes)?;
+            validate_value(no)?;
         }
         ValueKind::OptionReference(path) => path.validate(&node.origin)?,
         ValueKind::ToText(value) => validate_value(value)?,

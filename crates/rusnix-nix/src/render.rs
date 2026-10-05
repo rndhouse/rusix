@@ -128,6 +128,11 @@ fn emit_kind(kind: &NixKind, out: &mut Generated, depth: usize, enclosing: &[Ori
                 out.source.push_str(&quote(part));
             }
         }
+        NixKind::Lambda(argument, body) => {
+            out.source.push_str(&format!("({argument}: "));
+            emit(body, out, depth, enclosing);
+            out.source.push(')');
+        }
         NixKind::Function(arguments, body) => {
             out.source.push_str("({ ");
             out.source.push_str(&arguments.join(", "));
@@ -181,6 +186,7 @@ fn emit_kind(kind: &NixKind, out: &mut Generated, depth: usize, enclosing: &[Ori
             out.source.push('(');
             emit(left, out, depth, enclosing);
             out.source.push_str(match op {
+                BinaryOp::Equal => " == ",
                 BinaryOp::GreaterEqual => " >= ",
                 BinaryOp::LessEqual => " <= ",
                 BinaryOp::And => " && ",

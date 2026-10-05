@@ -30,6 +30,7 @@ pub enum NixKind {
     Select(Box<NixExpr>, Vec<String>),
     /// Attribute-pattern function with the compiler-owned argument names.
     Function(Vec<String>, Box<NixExpr>),
+    Lambda(String, Box<NixExpr>),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -44,6 +45,7 @@ pub enum Builtin {
 
 #[derive(Clone, Copy, Debug)]
 pub enum BinaryOp {
+    Equal,
     GreaterEqual,
     LessEqual,
     And,

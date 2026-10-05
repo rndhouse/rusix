@@ -970,3 +970,13 @@ reuse its actual component. Typed-submodule retains fine-grained derives for its
 reusable types and uses the boundary for its local tree. Proc-macro tests reject
 out-of-line modules without loading files. The existing trait APIs, backend and
 store-isolation helper remain authoritative.
+
+
+The opaque boundary also supports scoped `NixValue::function` callbacks, lazy
+`if_else` choices, equality and context-preserving text conversion. Existing Nix
+functions still own collection traversal and schemas. Callback parameters cannot
+escape their scope; generated binder names are deterministic and capture-safe.
+`OptionRef<T>::into_value()` explicitly passes a finite known option dependency,
+including collection values, to this boundary without reading it in Rust.
+`Nixpkgs::from_module()` selects the NixOS-supplied package set, preserving its
+configuration and overlays; these references require NixosModule lowering.
