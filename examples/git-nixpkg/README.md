@@ -21,7 +21,9 @@ cargo run --locked -p rusnix-nix --example git-nixpkg
 
 `args::from_value(arguments)` binds the view to the record supplied by the native
 Nix function. Access such as `inputs.stdenv.host_platform.is_darwin()` constructs
-a deferred selection; Rust never reads the platform flags. Declared subtrees
+a lexical Nix dependency such as `stdenv.hostPlatform.isDarwin`; Rust never reads
+the platform flags. Dependent defaults use the same lexical scope without
+reconstructing the complete argument record. Declared subtrees
 marked `#[rusnix(value)]` expose `as_value()` when the whole opaque record is
 needed. Naming follows the same rules as `#[rusnix::options]`. Generic condition/list
 helpers use `NixLibrary::from_value(inputs.lib.as_value())`, preserving the
@@ -83,12 +85,12 @@ The matrix covers default/minimal/full Git; Perl/SVN/send-email/PCRE2/manual/Pyt
 translation/GUI/SSH/libsecret/check choices; Linux and Darwin on x86_64 and ARM;
 ARM, musl, MinGW and FreeBSD cross builds; dependent defaults, ordinary overrides,
 `overrideAttrs`, laziness, malformed dependencies and all three feature assertions.
-There are **38 Git tests**, including **34 full projection comparisons** (one
+There are **39 Git tests**, including **34 full projection comparisons** (one
 uses the explicit SunOS branch probe, and two check caller-supplied library
 overrides), three feature-assertion rejection cases,
 a malformed-dependency case, Solaris rejection, and focused Rust-model/laziness
-checks. The SunOS make-flags branch has an explicit host-flag probe. A real Solaris cross
-scope is rejected by this pinned nixpkgs's libc support in both implementations;
+checks, plus a regression against reconstructed argument records. The SunOS
+make-flags branch has an explicit host-flag probe. A real Solaris cross scope is rejected by this pinned nixpkgs's libc support in both implementations;
 the probe is not evidence of a working Solaris toolchain.
 
 These are **evaluation/derivation equivalence** tests. No source is fetched and

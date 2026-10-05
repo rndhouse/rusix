@@ -271,6 +271,9 @@ impl NixValue {
     /// Defaults may depend on other arguments and remain lazy. Nix owns required/
     /// unexpected-argument checks and callPackage's functionArgs behavior.
     /// Names must be valid Nix bindings and cannot use the reserved `__rusnix_` prefix.
+    /// Known argument selections lower to lexical bindings; whole-record use and
+    /// shadowed outer arguments retain a lazy resolved-record fallback. References
+    /// escaping their callback scope are rejected before Nix evaluation.
     /// This describes dependencies; it does not expose evaluated arguments to Rust.
     ///
     /// ```
@@ -425,6 +428,7 @@ impl NixValue {
 
     /// Select literal attribute segments; dots and special characters remain within a key.
     /// The lookup stays deferred and failures retain this operation's caller origin.
+    /// Inside native argument-set functions, known paths use lexical argument bindings.
     #[track_caller]
     pub fn select_segments(self, parts: impl IntoIterator<Item = impl Into<String>>) -> Self {
         let path = AttrPath::segments(parts);

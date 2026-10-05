@@ -51,6 +51,9 @@ pub enum NixKind {
     Variable(String),
     /// Select literal attribute segments from a deferred value.
     Select(Box<NixExpr>, Vec<String>),
+    /// Lexical argument access; safe path names use identifiers, others are quoted.
+    /// An empty path preserves the attributed lexical root without selecting a field.
+    ArgumentSelect(Box<NixExpr>, Vec<String>),
     /// Attribute-pattern function with the compiler-owned argument names.
     Function(Vec<String>, Box<NixExpr>),
     /// One compiler-selected parameter name and its deferred function body.

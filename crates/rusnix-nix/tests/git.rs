@@ -89,6 +89,29 @@ fn default_git_has_identical_derivation_and_passthru() {
 }
 
 #[test]
+fn generated_git_factory_does_not_reconstruct_native_argument_records() {
+    let generated = compile(&Config::new().set("factory", lowering::factory())).unwrap();
+    let compact: String = generated.source.split_whitespace().collect();
+
+    // Check the entire factory, including all dependent defaults and callbacks.
+    // Ignore whitespace rather than snapshotting the renderer's layout.
+    assert!(!compact.contains("let__rusnix_arg_"));
+    for name in [
+        "fetchurl",
+        "fetchpatch",
+        "stdenv",
+        "buildPackages",
+        "curl",
+        "tests",
+    ] {
+        assert!(!compact.contains(&format!("\"{name}\"={name};")));
+    }
+    assert!(compact.contains(".hostPlatform.isDarwin"));
+    assert!(compact.contains(".buildPlatform"));
+    assert!(compact.contains(".perl.libPrefix"));
+}
+
+#[test]
 fn caller_library_all_override_does_not_change_native_boolean_decisions() {
     // Upstream uses && for the name and linker decisions, not lib.all.
     // These decisions must remain independent of a replacement library function.

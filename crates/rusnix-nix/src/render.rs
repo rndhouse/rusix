@@ -150,6 +150,23 @@ fn emit_kind(kind: &NixKind, out: &mut Generated, depth: usize, enclosing: &[Ori
                 out.source.push_str(&quote(part));
             }
         }
+        NixKind::ArgumentSelect(value, path) => {
+            if path.is_empty() {
+                emit(value, out, depth, enclosing);
+            } else {
+                out.source.push('(');
+                emit(value, out, depth, enclosing);
+                out.source.push(')');
+                for part in path {
+                    out.source.push('.');
+                    if attribute_identifier(part) {
+                        out.source.push_str(part);
+                    } else {
+                        out.source.push_str(&quote(part));
+                    }
+                }
+            }
+        }
         NixKind::Lambda(argument, body) => {
             out.source.push_str(&format!("({argument}: "));
             emit(body, out, depth, enclosing);
@@ -258,6 +275,19 @@ fn emit_kind(kind: &NixKind, out: &mut Generated, depth: usize, enclosing: &[Ori
             out.source.push_str("))");
         }
     }
+}
+
+/// Quoting is required for literal punctuation, interpolation and reserved words.
+fn attribute_identifier(name: &str) -> bool {
+    let mut chars = name.chars();
+    chars
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || "_-'".contains(c))
+        && ![
+            "if", "then", "else", "assert", "with", "let", "in", "rec", "inherit", "or",
+        ]
+        .contains(&name)
 }
 
 /// Nix string literals, including escaping interpolation; JSON escaping alone

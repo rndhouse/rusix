@@ -1031,6 +1031,13 @@ The [Git argument declaration](examples/git-nixpkg/inputs.rs) exercises this API
 changing defaults, `functionArgs`, `callPackage`, `.override` or `.overrideAttrs`.
 The [argument-view tests](crates/rusnix-nix/tests/args.rs) verify literal path keys,
 caller provenance, laziness and ordinary Nix callers reusing the same artifact.
+
+Native argument selections lower directly to lexical bindings such as
+`stdenv.hostPlatform.isDarwin`, including in dependent defaults. Whole-record uses
+and outer arguments shadowed by nested named functions retain a lazy record
+capture; references that escape their callback scope are rejected. Argument lookup
+origins and error contexts remain intact.
+
 `NixValue::select_segments` preserves literal dots within keys, and
 `NixValue::into_expr::<T>()` attaches a supported expected scalar type while
 retaining the existing deferred expression and origin.

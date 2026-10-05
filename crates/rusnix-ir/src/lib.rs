@@ -226,7 +226,7 @@ pub enum ValueKind {
     },
     /// A finite Nix argument-set callback, retaining native defaults and callPackage introspection.
     FunctionAttrs {
-        /// Lexical identity of the record of resolved argument values.
+        /// Lexical identity of the named argument scope, including resolved defaults.
         binding: u64,
         /// Accepted Nix argument names; names without defaults are required.
         arguments: Vec<String>,

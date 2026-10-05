@@ -23,6 +23,7 @@ pub use diagnostic::{Diagnostic, DiagnosticKind, DiagnosticOrigin, OriginRole, P
 pub use isolated::{Evaluation, NixSession};
 pub use render::{Generated, SourceSpan, render};
 use rusnix_ir::{Config, Node, ValueKind};
+use std::{cell::Cell, rc::Rc};
 
 /// Validate and lower a generic contribution into Nix source and a source map.
 /// Does not evaluate Nix. NixOS option references and module-supplied package
@@ -135,13 +136,74 @@ fn lower_value(node: &Node) -> NixExpr {
     lower_scoped(node, &[])
 }
 
-fn lower_scoped(node: &Node, scope: &[u64]) -> NixExpr {
+/// A callback parameter or a native argument-set scope identified by semantic IR.
+#[derive(Clone)]
+struct ParameterScope<'a> {
+    /// Matches references to this function, independently of argument names.
+    binding: u64,
+    /// Native named bindings; ordinary callbacks have only a generated parameter.
+    arguments: Option<&'a [String]>,
+    /// Shared by nested lowering, so an outer record is captured before shadowing.
+    record_used: Rc<Cell<bool>>,
+}
+
+/// Lower one default or body, materializing resolved arguments only when needed.
+fn lower_argument_region(
+    node: &Node,
+    binding: u64,
+    arguments: &[String],
+    scope: &[ParameterScope<'_>],
+) -> NixExpr {
+    let record_used = Rc::new(Cell::new(false));
+    let mut nested = scope.to_vec();
+    nested.push(ParameterScope {
+        binding,
+        arguments: Some(arguments),
+        record_used: record_used.clone(),
+    });
+    let value = lower_scoped(node, &nested);
+
+    if !record_used.get() {
+        return value;
+    }
+
+    // Whole-record use and shadowed outer names need resolved bindings, not an
+    // @-pattern's raw caller record (which would omit defaulted arguments).
+    let record = NixExpr::plain(NixKind::AttrSet(
+        arguments
+            .iter()
+            .map(|argument| (vec![argument.clone()], variable(argument)))
+            .collect(),
+    ));
+    NixExpr::plain(NixKind::Let(
+        format!("__rusnix_arg_{}", scope.len()),
+        Box::new(record),
+        Box::new(value),
+    ))
+}
+
+/// Identify a selection chain rooted in a native argument-set scope.
+fn argument_scope(node: &Node, scope: &[ParameterScope<'_>]) -> Option<usize> {
+    match &node.kind {
+        ValueKind::Parameter(binding) => scope
+            .iter()
+            .position(|entry| entry.binding == *binding && entry.arguments.is_some()),
+        ValueKind::Select(value, _) => argument_scope(value, scope),
+        _ => None,
+    }
+}
+
+fn lower_scoped(node: &Node, scope: &[ParameterScope<'_>]) -> NixExpr {
     let lower_value = |node| lower_scoped(node, scope);
     let kind = match &node.kind {
         ValueKind::Function { binding, body } => {
             let name = format!("__rusnix_arg_{}", scope.len());
             let mut scope = scope.to_vec();
-            scope.push(*binding);
+            scope.push(ParameterScope {
+                binding: *binding,
+                arguments: None,
+                record_used: Rc::new(Cell::new(false)),
+            });
             NixKind::Lambda(name, Box::new(lower_scoped(body, &scope)))
         }
         ValueKind::FunctionAttrs {
@@ -149,47 +211,33 @@ fn lower_scoped(node: &Node, scope: &[u64]) -> NixExpr {
             arguments,
             defaults,
             body,
-        } => {
-            let name = format!("__rusnix_arg_{}", scope.len());
-            let mut scope = scope.to_vec();
-            scope.push(*binding);
-            let record = NixExpr::plain(NixKind::AttrSet(
-                arguments
-                    .iter()
-                    .map(|argument| (vec![argument.clone()], variable(argument)))
-                    .collect(),
-            ));
-            // Capture resolved bindings before nested functions can shadow their names.
-            let bind = |value| {
-                NixExpr::plain(NixKind::Let(
-                    name.clone(),
-                    Box::new(record.clone()),
-                    Box::new(lower_scoped(value, &scope)),
-                ))
-            };
-            NixKind::ArgumentFunction(
-                arguments
-                    .iter()
-                    .map(|argument| {
-                        (
-                            argument.clone(),
-                            defaults
-                                .iter()
-                                .find(|(n, _)| n == argument)
-                                .map(|(_, value)| bind(value)),
-                        )
-                    })
-                    .collect(),
-                Box::new(bind(body)),
-            )
-        }
-        ValueKind::Parameter(binding) => NixKind::Variable(format!(
-            "__rusnix_arg_{}",
-            scope
+        } => NixKind::ArgumentFunction(
+            arguments
                 .iter()
-                .position(|id| id == binding)
-                .expect("validated callback scope")
-        )),
+                .map(|argument| {
+                    (
+                        argument.clone(),
+                        defaults
+                            .iter()
+                            .find(|(n, _)| n == argument)
+                            .map(|(_, value)| {
+                                lower_argument_region(value, *binding, arguments, scope)
+                            }),
+                    )
+                })
+                .collect(),
+            Box::new(lower_argument_region(body, *binding, arguments, scope)),
+        ),
+        ValueKind::Parameter(binding) => {
+            let index = scope
+                .iter()
+                .position(|entry| entry.binding == *binding)
+                .expect("validated callback scope");
+            if scope[index].arguments.is_some() {
+                scope[index].record_used.set(true);
+            }
+            NixKind::Variable(format!("__rusnix_arg_{index}"))
+        }
         ValueKind::If(condition, yes, no) => NixKind::If(
             Box::new(lower_value(condition)),
             Box::new(lower_value(yes)),
@@ -227,10 +275,26 @@ fn lower_scoped(node: &Node, scope: &[u64]) -> NixExpr {
             Box::new(lower_value(argument)),
         ),
         ValueKind::Select(value, path) => {
-            return NixExpr::contextual(
-                interop::select(lower_value(value), path).kind,
-                node.origin.clone(),
-            );
+            let kind = if let Some(index) = argument_scope(value, scope) {
+                let first = &path.parts()[0];
+                let known = scope[index].arguments.unwrap().contains(first);
+                let shadowed = scope[index + 1..]
+                    .iter()
+                    .any(|entry| entry.arguments.is_some_and(|names| names.contains(first)));
+
+                // Only a direct parameter selection becomes a bare lexical name.
+                // Keep every enclosing selection's provenance and error context.
+                if matches!(value.kind, ValueKind::Parameter(_)) && known && !shadowed {
+                    let root =
+                        NixExpr::attributed(NixKind::Variable(first.clone()), value.origin.clone());
+                    NixKind::ArgumentSelect(Box::new(root), path.parts()[1..].to_vec())
+                } else {
+                    NixKind::ArgumentSelect(Box::new(lower_value(value)), path.parts().to_vec())
+                }
+            } else {
+                interop::select(lower_value(value), path).kind
+            };
+            return NixExpr::contextual(kind, node.origin.clone());
         }
         ValueKind::Divide(left, right) => {
             NixKind::Call(Builtin::Div, vec![lower_value(left), lower_value(right)])
