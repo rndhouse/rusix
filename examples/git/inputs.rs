@@ -62,60 +62,79 @@ pub(super) const ARGUMENTS: &[&str] = &[
     "tests",
 ];
 
-/// A finite package interface, not Rust bindings for the dependency internals.
+/// Symbolic access to the arguments supplied to Git's native Nix package function.
+/// Helpers construct deferred lookups and calls; Rust never reads the argument values.
 pub(super) struct Inputs {
-    /// Resolved native Nix arguments, including dependent defaults.
+    /// The argument record Nix resolves when calling the factory, including defaults.
     pub(super) args: NixValue,
 }
 
 impl Inputs {
+    /// Select a supplied argument or dotted child path, such as `perlPackages.perl`.
+    /// This follows the caller's dependencies and overrides, not a separate package set.
     #[track_caller]
     pub(super) fn get(&self, name: &str) -> NixValue {
         self.args.clone().select(name)
     }
 
+    /// Call a function from the caller's `lib`, applying arguments left to right.
+    /// Nix performs the curried application and validates the function's arguments.
     #[track_caller]
     pub(super) fn lib(&self, name: &str, args: impl IntoIterator<Item = NixValue>) -> NixValue {
         self.get("lib").select(name).apply(args)
     }
 
+    /// Select a property of `stdenv.hostPlatform`, where the resulting Git will run.
+    /// For cross builds this can differ from the platform running the build tools.
     #[track_caller]
     pub(super) fn host(&self, name: &str) -> NixValue {
         self.get("stdenv").select("hostPlatform").select(name)
     }
 
+    /// Defer the upstream native-build test: build and host platform records are equal.
+    /// The result is a Nix boolean expression, not a boolean Rust can inspect.
     #[track_caller]
     pub(super) fn native(&self) -> NixValue {
         self.get("stdenv.buildPlatform")
             .equals(self.get("stdenv.hostPlatform"))
     }
 
-    /// Local patches and the update script are paths in the checked pinned archive.
+    /// Refer to an asset in the pinned Git source directory, such as a patch or updater.
+    /// Returns a Nix path without reading the file or fetching anything.
     #[track_caller]
     pub(super) fn file(&self, name: &str) -> NixValue {
         Nixpkgs::new().source_path(&format!("pkgs/applications/version-management/git/{name}"))
     }
 
+    /// Produce a one-element list when the Nix condition is true, otherwise `[]`.
+    /// The excluded value stays unforced when the condition is false.
     #[track_caller]
     pub(super) fn optional(&self, condition: NixValue, value: NixValue) -> NixValue {
         self.lib("optional", [condition, value])
     }
 
+    /// Keep an entire deferred list when the Nix condition is true, otherwise `[]`.
+    /// Unlike `optional`, this does not wrap the supplied list in another list.
     #[track_caller]
     pub(super) fn optionals(&self, condition: NixValue, values: NixValue) -> NixValue {
         self.lib("optionals", [condition, values])
     }
 
+    /// Keep symbolic text when the Nix condition is true, otherwise an empty string.
+    /// Selected text retains its store dependencies; excluded text stays unforced.
     #[track_caller]
     pub(super) fn optional_text(&self, condition: NixValue, text: NixValue) -> NixValue {
         self.lib("optionalString", [condition, text])
     }
 
+    /// Negate a deferred boolean; Nix checks its type and chooses the result later.
     #[track_caller]
     pub(super) fn not(&self, condition: NixValue) -> NixValue {
         NixValue::if_else(condition, false, true)
     }
 
+    /// Defer a conjunction of conditions using `lib.all`, stopping at the first false.
+    /// An empty collection is true, matching the Nix library's behavior.
     #[track_caller]
     pub(super) fn all(&self, conditions: impl IntoIterator<Item = NixValue>) -> NixValue {
         self.lib(
@@ -124,6 +143,7 @@ impl Inputs {
         )
     }
 
+    /// Flatten one level of deferred lists in order, for composing dependency groups.
     #[track_caller]
     pub(super) fn lists(&self, lists: impl IntoIterator<Item = NixValue>) -> NixValue {
         self.lib("concatLists", [NixValue::list(lists)])

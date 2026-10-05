@@ -1,4 +1,5 @@
 //! Reproduces the pinned Git package recipe using real nixpkgs builders and helpers.
+//! Helpers construct deferred values and shell scripts; they never execute build commands in Rust.
 use super::inputs::{ARGUMENTS, Inputs};
 use rusnix_ir::{IntoRusnixValue, interop::NixValue, nix_text};
 
@@ -145,6 +146,8 @@ struct Derivation {
     meta: NixValue,
 }
 
+/// Assemble the builder attributes from deferred feature and platform inputs.
+/// The finalAttrs parameter preserves the install-check test's dependency on later overrides.
 fn attributes(i: &Inputs, final_attrs: NixValue) -> NixValue {
     let minimal = i.all(
         [
@@ -383,6 +386,7 @@ fn attributes(i: &Inputs, final_attrs: NixValue) -> NixValue {
     .unwrap()
 }
 
+/// Describe the pinned release, retaining licenses, platforms and maintainers from Nix.
 fn metadata(i: &Inputs) -> NixValue {
     NixValue::record([
         ("homepage", "https://git-scm.com/".into()),
@@ -396,6 +400,7 @@ fn metadata(i: &Inputs) -> NixValue {
     ])
 }
 
+/// Patch-phase commands that embed gettext and fix test-script interpreter paths.
 fn gettext_patch(i: &Inputs) -> NixValue {
     nix_text!(
         r#"
@@ -410,6 +415,7 @@ fn gettext_patch(i: &Inputs) -> NixValue {
     )
 }
 
+/// Patch-phase substitutions that make Git use the selected OpenSSH executable.
 fn ssh_patch(i: &Inputs) -> NixValue {
     nix_text!(
         r#"
@@ -422,6 +428,7 @@ fn ssh_patch(i: &Inputs) -> NixValue {
     )
 }
 
+/// Build-phase setup that derives the installed Perl library directory from Perl itself.
 fn pre_build() -> NixValue {
     nix_text!(
         r#"
@@ -430,6 +437,7 @@ fn pre_build() -> NixValue {
     )
 }
 
+/// Commands to build git-subtree in addition to Git's main programs.
 fn subtree_build() -> NixValue {
     nix_text!(
         r#"
@@ -438,6 +446,7 @@ fn subtree_build() -> NixValue {
     )
 }
 
+/// Commands to build the Perl-based diff-highlight helper when Perl support is enabled.
 fn diff_highlight_build() -> NixValue {
     nix_text!(
         r#"
@@ -446,6 +455,7 @@ fn diff_highlight_build() -> NixValue {
     )
 }
 
+/// Commands to build the optional macOS Keychain credential helper.
 fn keychain_build() -> NixValue {
     nix_text!(
         r#"
@@ -454,6 +464,7 @@ fn keychain_build() -> NixValue {
     )
 }
 
+/// Commands to build the optional libsecret credential helper.
 fn secret_build() -> NixValue {
     nix_text!(
         r#"
@@ -462,6 +473,7 @@ fn secret_build() -> NixValue {
     )
 }
 
+/// Prepare the Keychain helper's executable symlink and remove its intermediate object.
 fn keychain_install() -> NixValue {
     nix_text!(
         r#"
@@ -472,6 +484,7 @@ fn keychain_install() -> NixValue {
     )
 }
 
+/// Prepare the libsecret helper's executable symlink and remove its intermediate object.
 fn secret_install() -> NixValue {
     nix_text!(
         r#"
@@ -482,6 +495,8 @@ fn secret_install() -> NixValue {
     )
 }
 
+/// Common installation commands for contrib tools, completions and embedded runtime-tool paths.
+/// Also defines the removal helper used by disabled-feature installation branches.
 fn base_install(i: &Inputs) -> NixValue {
     nix_text!(
         r#"
@@ -549,6 +564,7 @@ fn base_install(i: &Inputs) -> NixValue {
     )
 }
 
+/// Wrap Perl helpers with their library paths and patch gitweb's gzip and CGI dependencies.
 fn perl_install(i: &Inputs) -> NixValue {
     nix_text!(
         r#"
@@ -597,6 +613,7 @@ fn perl_install(i: &Inputs) -> NixValue {
     )
 }
 
+/// Wrap git-svn with the selected Subversion package and its Perl libraries.
 fn svn_install(i: &Inputs, svn: NixValue) -> NixValue {
     nix_text!(
         r#"
@@ -614,6 +631,7 @@ fn svn_install(i: &Inputs, svn: NixValue) -> NixValue {
     )
 }
 
+/// Remove git-svn from the installed output when SVN support is disabled.
 fn no_svn_install() -> NixValue {
     nix_text!(
         r#"
@@ -623,6 +641,7 @@ fn no_svn_install() -> NixValue {
     )
 }
 
+/// Wrap git-send-email with the SMTP libraries supplied by the Nix caller.
 fn email_install(i: &Inputs) -> NixValue {
     nix_text!(
         r#"
@@ -637,6 +656,7 @@ fn email_install(i: &Inputs) -> NixValue {
     )
 }
 
+/// Remove git-send-email from the installed output when email support is disabled.
 fn no_email_install() -> NixValue {
     nix_text!(
         r#"
@@ -646,6 +666,7 @@ fn no_email_install() -> NixValue {
     )
 }
 
+/// Install documentation using the build-platform Perl, including in cross builds.
 fn manual_install(i: &Inputs) -> NixValue {
     nix_text!(
         r#"
@@ -657,6 +678,7 @@ fn manual_install(i: &Inputs) -> NixValue {
     )
 }
 
+/// Point Tcl/Tk launchers at nixpkgs' wish interpreter and install gitk completion.
 fn gui_install(i: &Inputs) -> NixValue {
     nix_text!(
         r#"
@@ -672,6 +694,7 @@ fn gui_install(i: &Inputs) -> NixValue {
     )
 }
 
+/// Remove the GUI entry points when Tcl/Tk support is disabled.
 fn no_gui_install() -> NixValue {
     nix_text!(
         r#"
@@ -683,6 +706,7 @@ fn no_gui_install() -> NixValue {
     )
 }
 
+/// Generate the system Git configuration selecting the macOS Keychain credential helper.
 fn keychain_config() -> NixValue {
     nix_text!(
         r#"
@@ -696,6 +720,8 @@ fn keychain_config() -> NixValue {
     )
 }
 
+/// Prepare installed tests and exclude sandbox-incompatible tests exactly as upstream does.
+/// SVN test selection remains dependent on the final factory arguments.
 fn base_check(i: &Inputs) -> NixValue {
     nix_text!(
         r#"
@@ -735,6 +761,7 @@ fn base_check(i: &Inputs) -> NixValue {
     )
 }
 
+/// Exclude send-email tests when their corresponding feature is disabled.
 fn no_email_check() -> NixValue {
     nix_text!(
         r#"
@@ -744,6 +771,7 @@ fn no_email_check() -> NixValue {
     )
 }
 
+/// Exclude the pinned recipe's known flaky and filesystem-sensitive tests on all platforms.
 fn common_check() -> NixValue {
     nix_text!(
         r#"
@@ -757,6 +785,7 @@ fn common_check() -> NixValue {
     )
 }
 
+/// Apply the pinned recipe's additional macOS test exclusions.
 fn darwin_check() -> NixValue {
     nix_text!(
         r#"
@@ -772,6 +801,7 @@ fn darwin_check() -> NixValue {
     )
 }
 
+/// Exclude the upstream fsmonitor test on Apple Silicon.
 fn darwin_arm_check() -> NixValue {
     nix_text!(
         r#"
@@ -780,6 +810,7 @@ fn darwin_arm_check() -> NixValue {
     )
 }
 
+/// Exclude the upstream locale and encoding tests that fail with musl.
 fn musl_check() -> NixValue {
     nix_text!(
         r#"
@@ -792,6 +823,7 @@ fn musl_check() -> NixValue {
     )
 }
 
+/// Compose the patch phase, including SSH substitutions only when requested.
 fn post_patch(i: &Inputs) -> NixValue {
     NixValue::concat_text([
         gettext_patch(i),
@@ -799,6 +831,7 @@ fn post_patch(i: &Inputs) -> NixValue {
     ])
 }
 
+/// Compose auxiliary builds in upstream order, retaining symbolic feature conditions.
 fn post_build(i: &Inputs) -> NixValue {
     NixValue::concat_text([
         subtree_build(),
@@ -808,6 +841,7 @@ fn post_build(i: &Inputs) -> NixValue {
     ])
 }
 
+/// Compose pre-install preparation for whichever credential helpers are enabled.
 fn pre_install(i: &Inputs) -> NixValue {
     NixValue::concat_text([
         i.optional_text(i.get("osxkeychainSupport"), keychain_install()),
@@ -815,6 +849,8 @@ fn pre_install(i: &Inputs) -> NixValue {
     ])
 }
 
+/// Compose installation and wrapping branches in upstream order.
+/// Nix selects feature branches later, preserving laziness and string dependency context.
 fn post_install(i: &Inputs, svn: NixValue) -> NixValue {
     NixValue::concat_text([
         base_install(i),
@@ -831,6 +867,7 @@ fn post_install(i: &Inputs, svn: NixValue) -> NixValue {
     ])
 }
 
+/// Compose installed-test setup and feature/platform exclusions in upstream order.
 fn pre_install_check(i: &Inputs) -> NixValue {
     NixValue::concat_text([
         base_check(i),
