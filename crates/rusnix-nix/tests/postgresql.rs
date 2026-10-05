@@ -345,3 +345,82 @@ fn extension_lookup_failures_retain_a_rust_boundary_origin() {
     );
     assert!(!error.raw_nix.is_empty());
 }
+
+#[test]
+fn typed_role_clauses_match_all_upstream_three_state_cases() {
+    use example::{Clause, Postgresql, Role, RoleClauses};
+    let session = session()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    fs::write(session.root().join("downstream.nix"), "{}\n").unwrap();
+    for case in ["clauses_preserve", "clauses_enable", "clauses_disable"] {
+        let clause = || {
+            Some(match case {
+                "clauses_preserve" => Clause::Preserve,
+                "clauses_enable" => Clause::Enable,
+                _ => Clause::Disable,
+            })
+        };
+        let module = example::implementation().add(Postgresql {
+            enable: true,
+            roles: vec![Role {
+                name: "alice".into(),
+                clauses: RoleClauses {
+                    superuser: clause(),
+                    createrole: clause(),
+                    createdb: clause(),
+                    inherit: clause(),
+                    login: clause(),
+                    replication: clause(),
+                    bypassrls: clause(),
+                },
+            }],
+            ..Postgresql::default()
+        });
+        let artifact = compile_module(&module).unwrap();
+        let upstream = evaluate(&session, &artifact, case, false, false)
+            .unwrap()
+            .value;
+        // Inputs come from the Rust model, not the matching Nix case fixture.
+        let rewritten = evaluate(&session, &artifact, "minimal", true, false)
+            .unwrap()
+            .value;
+        assert_eq!(upstream, rewritten, "typed role clauses: {case}");
+    }
+}
+
+#[test]
+fn unset_role_clauses_and_explicit_preserve_keep_distinct_definitions() {
+    use example::{Clause, Postgresql, Role, RoleClauses};
+    use rusnix_ir::IntoConfig;
+    let input = Postgresql {
+        roles: vec![
+            Role {
+                name: "unset".into(),
+                clauses: RoleClauses::default(),
+            },
+            Role {
+                name: "preserve".into(),
+                clauses: RoleClauses {
+                    login: Some(Clause::Preserve),
+                    ..RoleClauses::default()
+                },
+            },
+        ],
+        ..Postgresql::default()
+    }
+    .into_config();
+    let session = session()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let evaluated = session
+        .evaluate(&rusnix_nix::compile(&input).unwrap())
+        .unwrap()
+        .value;
+    let users = &evaluated["services"]["postgresql"]["ensureUsers"];
+    assert_eq!(users[0]["ensureClauses"], serde_json::json!({}));
+    assert_eq!(
+        users[1]["ensureClauses"],
+        serde_json::json!({"login": null})
+    );
+}

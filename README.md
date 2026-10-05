@@ -29,7 +29,7 @@ The [typed configuration showcase](examples/README.md) now demonstrates static
 semantic types, unrepresentable field combinations, caller contracts, and
 exhaustive model consumers. Ten single-file examples define their own domain types
 and distinguish user models, opaque Nix objects and the generic escape hatch.
-Seven tested Nix comparisons and twenty-nine UI fixtures
+Seven tested Nix comparisons and thirty UI fixtures
 (including interop category safety and missing TLS keys) back their claims. The examples explain
 which guarantees are static, which require IR checks, and which remain NixOS
 checks; generic configuration/IR escape hatches remain explicit.
@@ -814,12 +814,12 @@ filesystem-relative compiler artifacts, local input paths, and one fixed pinned
 package root. Rust-origin IDs and multi-origin diagnostics remain unchanged.
 
 
-Current verification: `cargo test --workspace --locked` passes **213 tests**
-(209 ordinary tests and 4 doctests, including 3 compile-fail cases; zero
+Current verification: `cargo test --workspace --locked` passes **215 tests**
+(211 ordinary tests and 4 doctests, including 3 compile-fail cases; zero
 failed/ignored). The interop target has 24 tests; structured_interop has 19
-and PostgreSQL has 54.
+and PostgreSQL has 56.
 Formatting and all-target Clippy with warnings denied pass.
-The fixture script passes 184 integration checks, ten runnable
+The fixture script passes 186 integration checks, ten runnable
 showcase examples plus the legacy generic SSH compiler example, and 20 original
 CLI fixture invocations. All 14 diagnostic snapshots remain passing.
 Examples print generated source without Nix evaluation, fixture construction or
@@ -928,7 +928,7 @@ division-by-zero provenance and source-map fallback, missing-reference provenanc
 lazy selection, bool/string/list uses, validation and escaped paths.
 `tests/ui/symbolic-integer-as-boolean.rs` checks E0308 with a primary span and
 `Expr<bool>`/`Expr<i64>` labels. An integer dependency cannot be an assertion
-condition. The UI suite has twenty-nine cases checking thirty-one errors (including fifteen
+condition. The UI suite has thirty cases checking thirty-two errors (including fifteen
 uncoded macro errors).
 An unused command dependency leaves a throwing port unevaluated; selecting the
 command demands it and maps the failure to the Rust reference. No `deepSeq` or
@@ -956,7 +956,7 @@ structural enum mappings, record-list laziness and provenance (including source-
 merges/priorities and two-origin conflicts, native handle preservation, real
 package resolution, symbolic override compatibility and local naming conventions
 with explicit rename precedence. Three proc-macro naming tests cover mechanical
-conversion rules. Twenty-nine UI fixtures check thirty-one errors (sixteen coded
+conversion rules. Thirty UI fixtures check thirty-two errors (seventeen coded
 rustc errors and fifteen macro errors),
 with primary spans and relevant tokens instead of full compiler snapshots.
 Dependencies reuse the already cached syn/quote/proc-macro2 versions; no fetch
@@ -988,7 +988,8 @@ configuration and overlays; these references require NixosModule lowering.
 
 ## PostgreSQL implementation rewrite
 
-The substantial [PostgreSQL example](examples/postgresql.rs) rewrites the pinned
+The substantial [PostgreSQL example](examples/postgresql.rs) presents a user-defined
+Rust model first, then a private compatibility-lowering module. It rewrites the pinned
 module's configuration generation while reusing its public NixOS option schema.
 Typed owned-database provisioning and three-state role clauses coexist with
 finite final-option dependencies and opaque package/build-helper calls.

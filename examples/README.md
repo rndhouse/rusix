@@ -427,11 +427,18 @@ option type. No service is built or run.
 679-line PostgreSQL module at `8b27c1239e5c421a2bbc2c65d52e4a6fbf2ff296` (about
 210 implementation lines). It reuses upstream public option declarations and
 migration imports; it does not recreate the NixOS option schema.
+The top of the file shows a Rust-native PostgreSQL model and ordinary Rusnix
+usage. A private `lowering` module implements compatibility using typed symbolic
+option references and opaque nixpkgs functions; the complete rewrite stays in one file.
 
 `Postgresql` supplies ordinary Rust inputs. `Database::Owned { name, clauses }`
 creates the matching database and role, so their names cannot disagree.
 `Clause::{Preserve, Enable, Disable}` distinguishes leaving an existing role
-attribute alone from granting or revoking it. The new
+attribute alone from granting or revoking it. `RoleClauses` names the seven
+clauses in the pinned schema; unknown fields fail at compile time, as checked by
+[postgresql-unknown-clause.rs](../tests/ui/postgresql-unknown-clause.rs).
+Its optional fields preserve omission (`None`) versus explicit null
+(`Some(Clause::Preserve)`), without closing the open-ended settings map. The
 [compile-fail fixture](../tests/ui/postgresql-owned-mismatch.rs) proves that the
 owned form has no separate owner-name field. Unowned databases and additional
 roles remain available, and PostgreSQL setting names remain open-ended.
@@ -441,7 +448,10 @@ let postgres = Postgresql {
     enable: true,
     databases: vec![Database::Owned {
         name: "app".into(),
-        clauses: BTreeMap::from([("login".into(), Clause::Enable)]),
+        clauses: RoleClauses {
+            login: Some(Clause::Enable),
+            ..RoleClauses::default()
+        },
     }],
     ..Postgresql::default()
 };
@@ -451,8 +461,12 @@ let module = implementation().add(postgres);
 The two local roots automatically lower input and implementation trees.
 The input adapter's dynamic record omits unset options and derives matching roles;
 that is semantic conversion, not repetitive field lowering. The implementation
-uses finite OptionRef dependencies for enabled state, package/JIT/extensions,
-settings, files, databases/users, state version and numeric Unix identities.
+uses a local `PostgresqlOptions` view: known booleans, strings and the port remain
+`Expr<bool>`, `Expr<String>` and `Expr<i64>` until the Nix boundary. Dynamic
+settings, packages, nullable files and final collections remain opaque NixValue.
+Every dependency still resolves through OptionRef after NixOS merging; no value
+is read in Rust. NixOS remains authoritative for actual option types, including
+path/string coercion. State version and numeric Unix identities are also symbolic.
 `NixValue::function` callbacks give existing Nix library functions bounded work
 on those final collections. Rust never reads final config or traverses a global
 fixed point. `Nixpkgs::from_module()` uses NixOS's package set and overlays.
@@ -530,7 +544,7 @@ Tests retain reviewable generated Nix/results under `target/typed-examples/` and
 Seven important Nix comparisons live in `tests/comparisons/` as executable test
 data. Backend tests import the actual single-file Rust examples and compare
 their evaluated outputs with these modules, including native enum/assertion
-rejections. Twenty-nine UI fixtures back the documented invalid Rust cases through the
+rejections. Thirty UI fixtures back the documented invalid Rust cases through the
 code/span/type-label checker. They import actual example-local types and functions
 or deliberately evolve a test-local enum; the moved fixture-only SSH helper's
 contract is also checked. Two fixtures verify two independent errors each.
@@ -539,8 +553,8 @@ assertion condition with E0308. A derived PackageRef field rejects ModuleRef
 with E0308. Derive errors reject container prefixes, automatic data-carrying enum conversion
 and conflicting attributes. Enum fixtures also reject name collisions, unsupported
 variant mappings and unsupported naming conventions. Additional cases reject invalid/duplicate rename_all,
-rename_all on transparent newtypes, and misplaced field rename_all. The twenty-nine
-fixtures check thirty-one errors using codes where available, useful primary spans
+rename_all on transparent newtypes, and misplaced field rename_all. The thirty
+fixtures check thirty-two errors using codes where available, useful primary spans
 and relevant messages/type labels.
 The module API also rejects missing/duplicate roots, enum/tuple roots, macro
 arguments and category mistakes. Core has three compile-fail doctests for generic

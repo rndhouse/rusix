@@ -275,5 +275,15 @@
       "lowerCamelCase",
       "PascalCase"
     ]
+  },
+  {
+    "file": "postgresql-unknown-clause.rs",
+    "code": "E0560",
+    "count": 1,
+    "source": "nonexistent_privilege",
+    "reason_tokens": [
+      "RoleClauses",
+      "nonexistent_privilege"
+    ]
   }
 ]
