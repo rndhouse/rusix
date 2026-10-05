@@ -55,6 +55,11 @@ pub(crate) fn source(source: &Source) -> NixExpr {
             },
         ),
         Source::Library => imported(NixExpr::plain(NixKind::Path("./nixpkgs/lib".into()))),
+        Source::PinnedPath { path } => NixExpr::plain(NixKind::Binary(
+            BinaryOp::Add,
+            Box::new(NixExpr::plain(NixKind::Path("./nixpkgs-full".into()))),
+            Box::new(string(format!("/{path}"))),
+        )),
         Source::ModuleFile { path } => {
             let path = NixExpr::plain(NixKind::Binary(
                 BinaryOp::Add,

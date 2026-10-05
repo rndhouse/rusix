@@ -162,6 +162,23 @@ fn emit_kind(kind: &NixKind, out: &mut Generated, depth: usize, enclosing: &[Ori
             emit(body, out, depth, enclosing);
             out.source.push(')');
         }
+        NixKind::ArgumentFunction(arguments, body) => {
+            out.source.push_str("({ ");
+            for (index, (name, default)) in arguments.iter().enumerate() {
+                if index > 0 {
+                    out.source.push_str(", ");
+                }
+                out.source.push_str(name);
+                if let Some(value) = default {
+                    out.source.push_str(" ? (");
+                    emit(value, out, depth, enclosing);
+                    out.source.push(')');
+                }
+            }
+            out.source.push_str(" }: ");
+            emit(body, out, depth, enclosing);
+            out.source.push(')');
+        }
         NixKind::Group(value) => {
             out.source.push('(');
             emit(value, out, depth, enclosing);

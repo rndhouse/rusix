@@ -51,6 +51,11 @@ pub enum Source {
     },
     /// The pinned nixpkgs library, independent of package-set overlays.
     Library,
+    /// A file or directory in the pinned source tree, without importing or fetching it.
+    PinnedPath {
+        /// Relative path under nixpkgs; parent traversal is rejected.
+        path: String,
+    },
     /// The NixOS module's supplied `pkgs`, preserving its configuration and overlays.
     NixosPackages {
         /// Additional overlays applied to the supplied package set in order.
@@ -95,7 +100,7 @@ impl Reference {
                     overlay.validate()?;
                 }
             }
-            Source::ModuleFile { path } => {
+            Source::ModuleFile { path } | Source::PinnedPath { path } => {
                 if path.is_empty()
                     || path.contains('\0')
                     || PathBuf::from(path)
@@ -104,9 +109,12 @@ impl Reference {
                 {
                     return Err(ValidationError {
                         origin: self.origin.clone(),
-                        message:
+                        message: if matches!(self.source, Source::PinnedPath { .. }) {
+                            "source paths must be relative, nonempty paths without parent traversal"
+                        } else {
                             "module paths must be relative, nonempty paths without parent traversal"
-                                .into(),
+                        }
+                        .into(),
                     });
                 }
             }
@@ -227,22 +235,65 @@ impl NixValue {
     /// callback is an IR validation error. Nix invokes the resulting function.
     #[track_caller]
     pub fn function(build: impl FnOnce(Self) -> Self) -> Self {
-        use std::sync::atomic::{AtomicU64, Ordering};
-
-        static NEXT: AtomicU64 = AtomicU64::new(0);
-
-        let binding = NEXT.fetch_add(1, Ordering::Relaxed);
         let origin = Origin::caller("opaque Nix callback");
-        let parameter = Self(Node {
-            origin: origin.clone(),
-            kind: ValueKind::Parameter(binding),
-        });
-
+        let (binding, parameter) = Self::parameter(&origin);
         Self(Node {
             origin,
             kind: ValueKind::Function {
                 binding,
                 body: Box::new(build(parameter).0),
+            },
+        })
+    }
+
+    fn parameter(origin: &Origin) -> (u64, Self) {
+        use std::sync::atomic::{AtomicU64, Ordering};
+
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+
+        let binding = NEXT.fetch_add(1, Ordering::Relaxed);
+        let parameter = Self(Node {
+            origin: origin.clone(),
+            kind: ValueKind::Parameter(binding),
+        });
+
+        (binding, parameter)
+    }
+
+    /// Declare a native Nix argument-set function with a finite, explicit interface.
+    /// Rust builds the body once with a symbolic record of resolved arguments.
+    /// Return named defaults and the body; omitted defaults make arguments required.
+    /// Defaults may depend on other arguments and remain lazy. Nix owns required/
+    /// unexpected-argument checks and callPackage's functionArgs behavior.
+    /// Names must be valid Nix bindings and cannot use the reserved `__rusnix_` prefix.
+    /// This describes dependencies; it does not expose evaluated arguments to Rust.
+    ///
+    /// ```
+    /// use rusnix_ir::interop::NixValue;
+    /// let factory = NixValue::function_attrs(["name", "label"], |args| {
+    ///     let name = args.clone().select("name");
+    ///     (vec![("label", name)], args.select("label"))
+    /// });
+    /// let deferred = factory.call(NixValue::record([("name", "git".into())]));
+    /// ```
+    #[track_caller]
+    pub fn function_attrs<K: Into<String>>(
+        arguments: impl IntoIterator<Item = impl Into<String>>,
+        build: impl FnOnce(Self) -> (Vec<(K, Self)>, Self),
+    ) -> Self {
+        let origin = Origin::caller("Nix argument-set function");
+        let (binding, parameter) = Self::parameter(&origin);
+        let (defaults, body) = build(parameter);
+        Self(Node {
+            origin,
+            kind: ValueKind::FunctionAttrs {
+                binding,
+                arguments: arguments.into_iter().map(Into::into).collect(),
+                defaults: defaults
+                    .into_iter()
+                    .map(|(name, value)| (name.into(), value.0))
+                    .collect(),
+                body: Box::new(body.0),
             },
         })
     }
@@ -517,6 +568,21 @@ impl Nixpkgs {
     /// Use [`Self::from_module`] to follow a NixOS module's platform/configuration.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Refer to a pinned nixpkgs source file or directory, such as a package patch.
+    /// Returns a real deferred Nix path, not file contents or generated source text.
+    /// Relative names are escaped as data; parent traversal is rejected by validation.
+    #[track_caller]
+    pub fn source_path(&self, path: &str) -> NixValue {
+        NixValue(
+            Reference {
+                source: Source::PinnedPath { path: path.into() },
+                path: None,
+                origin: Origin::caller(format!("nixpkgs source path {path}")),
+            }
+            .node(),
+        )
     }
 
     /// Use the package set supplied by NixOS, including its config and overlays.

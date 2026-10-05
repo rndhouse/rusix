@@ -55,6 +55,8 @@ pub enum NixKind {
     Function(Vec<String>, Box<NixExpr>),
     /// One compiler-selected parameter name and its deferred function body.
     Lambda(String, Box<NixExpr>),
+    /// Native named arguments, including lazy default expressions; extra names are rejected.
+    ArgumentFunction(Vec<(String, Option<NixExpr>)>, Box<NixExpr>),
 }
 
 /// Nix builtins emitted by supported lowering operations.

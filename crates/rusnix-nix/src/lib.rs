@@ -78,6 +78,10 @@ fn scoped_reference(node: &Node, packages_only: bool) -> Option<&Node> {
         | ValueKind::StringPrefix { value, .. }
         | ValueKind::InRange { value, .. } => option_reference(value),
         ValueKind::Function { body, .. } => option_reference(body),
+        ValueKind::FunctionAttrs { defaults, body, .. } => defaults
+            .iter()
+            .find_map(|(_, v)| option_reference(v))
+            .or_else(|| option_reference(body)),
         ValueKind::If(condition, yes, no) => option_reference(condition)
             .or_else(|| option_reference(yes))
             .or_else(|| option_reference(no)),
@@ -139,6 +143,45 @@ fn lower_scoped(node: &Node, scope: &[u64]) -> NixExpr {
             let mut scope = scope.to_vec();
             scope.push(*binding);
             NixKind::Lambda(name, Box::new(lower_scoped(body, &scope)))
+        }
+        ValueKind::FunctionAttrs {
+            binding,
+            arguments,
+            defaults,
+            body,
+        } => {
+            let name = format!("__rusnix_arg_{}", scope.len());
+            let mut scope = scope.to_vec();
+            scope.push(*binding);
+            let record = NixExpr::plain(NixKind::AttrSet(
+                arguments
+                    .iter()
+                    .map(|argument| (vec![argument.clone()], variable(argument)))
+                    .collect(),
+            ));
+            // Capture resolved bindings before nested functions can shadow their names.
+            let bind = |value| {
+                NixExpr::plain(NixKind::Let(
+                    name.clone(),
+                    Box::new(record.clone()),
+                    Box::new(lower_scoped(value, &scope)),
+                ))
+            };
+            NixKind::ArgumentFunction(
+                arguments
+                    .iter()
+                    .map(|argument| {
+                        (
+                            argument.clone(),
+                            defaults
+                                .iter()
+                                .find(|(n, _)| n == argument)
+                                .map(|(_, value)| bind(value)),
+                        )
+                    })
+                    .collect(),
+                Box::new(bind(body)),
+            )
         }
         ValueKind::Parameter(binding) => NixKind::Variable(format!(
             "__rusnix_arg_{}",

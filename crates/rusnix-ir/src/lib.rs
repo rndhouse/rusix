@@ -190,6 +190,17 @@ pub enum ValueKind {
         /// Deferred callback result, possibly referring to the symbolic parameter.
         body: Box<Node>,
     },
+    /// A finite Nix argument-set callback, retaining native defaults and callPackage introspection.
+    FunctionAttrs {
+        /// Lexical identity of the record of resolved argument values.
+        binding: u64,
+        /// Accepted Nix argument names; names without defaults are required.
+        arguments: Vec<String>,
+        /// Deferred defaults, which can refer to other resolved arguments.
+        defaults: Vec<(String, Node)>,
+        /// Deferred result, potentially a derivation from an existing builder.
+        body: Box<Node>,
+    },
     /// A symbolic callback parameter; validation rejects uses outside its scope.
     Parameter(u64),
     /// A deferred condition, then branch and else branch; only one branch is demanded.
@@ -586,6 +597,48 @@ fn validate_scoped(node: &Node, scope: &[u64]) -> Result<(), ValidationError> {
         ValueKind::Function { binding, body } => {
             let mut scope = scope.to_vec();
             scope.push(*binding);
+            validate_scoped(body, &scope)?;
+        }
+        ValueKind::FunctionAttrs {
+            binding,
+            arguments,
+            defaults,
+            body,
+        } => {
+            let mut names = std::collections::BTreeSet::new();
+            for name in arguments {
+                let mut chars = name.chars();
+                let first = chars
+                    .next()
+                    .is_some_and(|c| c.is_ascii_alphabetic() || c == '_');
+                let rest = chars.all(|c| c.is_ascii_alphanumeric() || "_-'".contains(c));
+                if !first
+                    || !rest
+                    || name.starts_with("__rusnix_")
+                    || [
+                        "if", "then", "else", "assert", "with", "let", "in", "rec", "inherit",
+                    ]
+                    .contains(&name.as_str())
+                    || !names.insert(name)
+                {
+                    return Err(ValidationError {
+                        origin: node.origin.clone(),
+                        message: format!("invalid or duplicate Nix function argument: {name}"),
+                    });
+                }
+            }
+            let mut scope = scope.to_vec();
+            scope.push(*binding);
+            let mut seen = std::collections::BTreeSet::new();
+            for (name, value) in defaults {
+                if !names.contains(name) || !seen.insert(name) {
+                    return Err(ValidationError {
+                        origin: node.origin.clone(),
+                        message: format!("unknown or duplicate Nix function default: {name}"),
+                    });
+                }
+                validate_scoped(value, &scope)?;
+            }
             validate_scoped(body, &scope)?;
         }
         ValueKind::Parameter(binding) => {
