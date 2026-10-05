@@ -40,11 +40,13 @@ configuration, while keeping Nix's ecosystem and final checks underneath.
 | [Layered validation](layered-validation.rs) | Clear division of validation responsibility |
 | [Nix interop](nix-interop.rs) | Existing ecosystem works without generated bindings |
 | [Symbolic option](symbolic-option.rs) | Explicit typed dependencies follow ordinary Nix overrides |
+| [PostgreSQL](postgresql.rs) | Real module implementation with typed provisioning and NixOS compatibility |
 
 Each example is **one Rust file**: user models, structural placement and lightweight
 source generation. Examples invoke no Nix evaluator and write no artifacts;
 integration tests prove the behavioral claims. There is no separate Rust support/config/main tree and
-no handwritten IntoConfig implementation in the nine examples.
+no handwritten mechanical lowering in the nine small examples. PostgreSQL adds
+one semantic IntoConfig adapter for optional inputs and ownership-derived roles.
 The first six use a fictional `demo` schema, not bindings for actual NixOS
 services. Each file defines its own small types directly, including its enums,
 newtypes and policies. Small definitions repeat intentionally so an example is
@@ -162,12 +164,12 @@ integration tests prove an ordinary Nix override changes dependent output withou
 rerunning conversion or lowering. Expected Rust
 types constrain expression operations; NixOS remains authoritative for schemas.
 
-All nine showcase files use the module boundary for their local tree. The
+All ten showcase files use the module boundary for their local tree. The
 remaining explicit IntoRusnixValue derives are intentional: reusable domain
 values outside that module (credentials, endpoint fields and account identities),
 and function-local Plain/Tls records inside semantic enum conversions. The latter
 keep each mapping self-contained; the module macro does not inspect function
-bodies. No showcase type explicitly derives IntoConfig.
+bodies. No showcase type explicitly derives IntoConfig; local roots use the module macro.
 
 ## Enum option
 
@@ -415,6 +417,78 @@ traversal. The harness declares types for example options while systemd is a
 freeform placeholder; a separate upstream OpenSSH banner test checks a real
 option type. No service is built or run.
 
+## PostgreSQL compatibility rewrite
+
+[postgresql.rs](postgresql.rs) replaces the configuration-generation side of the
+679-line PostgreSQL module at `8b27c1239e5c421a2bbc2c65d52e4a6fbf2ff296` (about
+210 implementation lines). It reuses upstream public option declarations and
+migration imports; it does not recreate the NixOS option schema.
+
+`Postgresql` supplies ordinary Rust inputs. `Database::Owned { name, clauses }`
+creates the matching database and role, so their names cannot disagree.
+`Clause::{Preserve, Enable, Disable}` distinguishes leaving an existing role
+attribute alone from granting or revoking it. The new
+[compile-fail fixture](../tests/ui/postgresql-owned-mismatch.rs) proves that the
+owned form has no separate owner-name field. Unowned databases and additional
+roles remain available, and PostgreSQL setting names remain open-ended.
+
+```rust
+let postgres = Postgresql {
+    enable: true,
+    databases: vec![Database::Owned {
+        name: "app".into(),
+        clauses: BTreeMap::from([("login".into(), Clause::Enable)]),
+    }],
+    ..Postgresql::default()
+};
+let module = implementation().add(postgres);
+```
+
+The two local roots automatically lower input and implementation trees.
+The input adapter's dynamic record omits unset options and derives matching roles;
+that is semantic conversion, not repetitive field lowering. The implementation
+uses finite OptionRef dependencies for enabled state, package/JIT/extensions,
+settings, files, databases/users, state version and numeric Unix identities.
+`NixValue::function` callbacks give existing Nix library functions bounded work
+on those final collections. Rust never reads final config or traverses a global
+fixed point. `Nixpkgs::from_module()` uses NixOS's package set and overlays.
+Package variants/withPackages, writeText, writeTextDir and runCommand remain opaque
+Nix operations. Text templates contain shell/SQL/configuration data, not Nix syntax.
+
+[The integration suite](../crates/rusnix-nix/tests/postgresql.rs) evaluates the full
+pinned NixOS module set twice: once with upstream PostgreSQL, once replacing that
+import slot with upstream declarations plus the generated Rust implementation.
+It compares settings, authentication/ident files, generated-file derivation
+recipes, service scripts and unit text, environment, hardening, directories,
+Unix accounts, package identities and check recipes. Store paths and Nix string
+contexts are compared exactly. Only the set-like pathsToLink list is sorted;
+SQL, package, argument and executable-string ordering remain significant.
+
+The matrix covers disabled/default/custom packages, JIT, extension functions and
+list coercion, directories, all setting primitives and preload-list coercion,
+authentication addition/replacement, ident maps, initdb/initial/recovery scripts,
+databases/users/ownership, all seven clauses in all three states, priorities,
+TCP/IP, hardening overrides, checks, state-version defaults, renamed/removed
+options, invalid values, laziness and cross compilation. A legacy-metadata fixture
+uses a real derivation with explicitly synthetic version metadata for the old
+service-type/directory-permission branches; it does not claim to build old PostgreSQL.
+
+[An ordinary Nix contributor](../tests/fixtures/postgresql-downstream.nix) changes
+port to 6432, data directory, settings, authentication, ensured databases/users
+and PostgreSQL package to version 15. The same generated artifact follows every
+change without rerunning Rust lowering, and remains equivalent to upstream.
+Conflict tests retain both Rust origins; a failing symbolic setting retains its
+original Rust division operation. Foreign ownership assertions retain NixOS's
+reason but currently lack a per-user Rust origin after assertion aggregation.
+
+Evaluation constructs derivations but builds no files or packages and runs no
+SQL/service/check commands. Thus this proves configuration-generation equivalence,
+not database migration or runtime correctness. Upstream remains authoritative for
+its schema: null is allowed for declared nullable settings, not arbitrary freeform
+keys. Raw input strings retain upstream quoting behavior. This example must replace
+upstream's implementation, not be imported alongside it; the schema-only adapter
+and comparison machinery belong to tests. There is no PostgreSQL type in core.
+
 ## Verification and limits
 
 ```bash
@@ -427,7 +501,7 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 bash scripts/check-fixtures.sh
 ```
 
-All nine examples compile and run without invoking Nix: they print generated
+All ten examples compile and run without invoking Nix: they print generated
 source. The fixture script runs every example and the legacy generic SSH compiler
 example, integration checks and existing CLI fixtures. Only tests and CLI checks
 perform evaluation, always through the isolated-store helper.
@@ -443,6 +517,7 @@ perform evaluation, always through the isolated-store helper.
 | layered-validation | Valid upstream contribution | typed_examples.rs; invalid assemblies and schema errors |
 | nix-interop | Opaque handles, composition, explicit escape | interop.rs; real lookups, boundaries and assertions |
 | symbolic-option | Typed dependency and automatic local unit structure | symbolic_options.rs; artifact reuse, override, priority and provenance |
+| postgresql | Domain provisioning, symbolic derivation and real nixpkgs builders | postgresql.rs; full NixOS equivalence, overrides and failures |
 
 DOCUMENTATION stays here: comparisons, expected outcomes, test links and limitations.
 Tests retain reviewable generated Nix/results under `target/typed-examples/` and
@@ -451,7 +526,7 @@ Tests retain reviewable generated Nix/results under `target/typed-examples/` and
 Seven important Nix comparisons live in `tests/comparisons/` as executable test
 data. Backend tests import the actual single-file Rust examples and compare
 their evaluated outputs with these modules, including native enum/assertion
-rejections. Twenty-five UI fixtures back the documented invalid Rust cases through the
+rejections. Twenty-six UI fixtures back the documented invalid Rust cases through the
 code/span/type-label checker. They import actual example-local types and functions
 or deliberately evolve a test-local enum; the moved fixture-only SSH helper's
 contract is also checked. Two fixtures verify two independent errors each.
@@ -459,8 +534,8 @@ The symbolic-reference fixture rejects an integer expression as a boolean
 assertion condition with E0308. A derived PackageRef field rejects ModuleRef
 with E0308. Derive errors reject container prefixes, automatic enum conversion
 and conflicting attributes. Additional cases reject invalid/duplicate rename_all,
-rename_all on transparent newtypes, and misplaced field rename_all. The twenty-five
-fixtures check twenty-seven errors using codes where available, useful primary spans
+rename_all on transparent newtypes, and misplaced field rename_all. The twenty-six
+fixtures check twenty-eight errors using codes where available, useful primary spans
 and relevant messages/type labels.
 The module API also rejects missing/duplicate roots, enum/tuple roots, macro
 arguments and category mistakes. Core has three compile-fail doctests for generic

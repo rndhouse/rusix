@@ -311,6 +311,31 @@ impl NixSession {
         Ok(pin_root)
     }
 
+    /// Run a caller-owned evaluation/projection driver against module.nix.
+    /// Drivers are backend/test infrastructure, not Rust authoring expressions.
+    /// The generated module is separately parsed and diagnostics use its origins.
+    pub fn evaluate_nixos_with_driver(
+        &self,
+        artifact: &NixosArtifact,
+        driver: &Generated,
+    ) -> Result<Evaluation, Box<Diagnostic>> {
+        let pin_root = self.stage_pinned()?;
+        self.stage_interop()?;
+        let parse_stderr = self.validate_generated(&artifact.module, "module.nix")?;
+        self.evaluate(driver).map_err(|error| {
+            if error.kind != DiagnosticKind::NixEval {
+                return error;
+            }
+            let diagnostic = Diagnostic::from_nix(
+                DiagnosticKind::NixEval,
+                &format!("{parse_stderr}{}", error.raw_nix),
+                &artifact.module,
+                &self.root().join("module.nix"),
+            );
+            Box::new(translate(diagnostic, artifact, &pin_root))
+        })
+    }
+
     pub fn evaluate_nixos(
         &self,
         artifact: &NixosArtifact,
@@ -425,13 +450,18 @@ fn translate(mut diagnostic: Diagnostic, artifact: &NixosArtifact, pin_root: &Pa
     let evidence = crate::diagnostic::nix_evidence(&diagnostic.raw_nix);
     let in_module_system = evidence.iter().any(|(file, _)| {
         file.as_deref().is_some_and(|file| {
-            file.starts_with(&format!("{}/lib/modules.nix:", pin_root.display()))
+            [
+                pin_root.to_owned(),
+                pin_root.parent().unwrap().join("nixpkgs-full"),
+            ]
+            .iter()
+            .any(|root| matches_file(file, &root.join("lib/modules.nix")))
         })
     });
     if in_module_system && let Some(failure) = crate::diagnostic::module_failure(&diagnostic.reason)
     {
         diagnostic.kind = failure.kind;
-        diagnostic.option_path = Some(failure.option);
+        diagnostic.option_path = Some(failure.option.clone());
         let mut origins = Vec::new();
         for file in &failure.files {
             let source = if let Some(id) = file.strip_prefix("rusnix-definition:") {
@@ -440,9 +470,13 @@ fn translate(mut diagnostic: Diagnostic, artifact: &NixosArtifact, pin_root: &Pa
                     .iter()
                     .find(|b| b.origin.id == id)
                     .map(|boundary| {
-                        // The semantic path is more useful than NixOS's synthetic
-                        // list-entry suffix in single-definition type errors.
-                        diagnostic.option_path = Some(boundary.path.clone());
+                        // Keep precise NixOS paths within opaque records. Only
+                        // synthetic list-definition suffixes need the IR path.
+                        if !failure.option.starts_with(&format!("{}.", boundary.path))
+                            || failure.option.contains("[definition ")
+                        {
+                            diagnostic.option_path = Some(boundary.path.clone());
+                        }
                         DiagnosticOrigin {
                             origin: Some(boundary.origin.clone()),
                             role: if failure.kind == DiagnosticKind::NixosMerge {

@@ -27,9 +27,9 @@ fixtures remain; the separate NixOS harness uses real OpenSSH option declaration
 
 The [typed configuration showcase](examples/README.md) now demonstrates static
 semantic types, unrepresentable field combinations, caller contracts, and
-exhaustive model consumers. Nine single-file examples define their own domain types
+exhaustive model consumers. Ten single-file examples define their own domain types
 and distinguish user models, opaque Nix objects and the generic escape hatch.
-Seven tested Nix comparisons and twenty-five UI fixtures
+Seven tested Nix comparisons and twenty-six UI fixtures
 (including interop category safety and missing TLS keys) back their claims. The examples explain
 which guarantees are static, which require IR checks, and which remain NixOS
 checks; generic configuration/IR escape hatches remain explicit.
@@ -177,10 +177,11 @@ initializers do not acquire separate source spans. Contributions are never
 flattened across NixosModule::add calls, preserving NixOS priorities and
 multi-origin conflicts. Handwritten IntoConfig remains available for custom
 adapters, and Config::set remains the explicit generic escape hatch.
-The [nine examples](examples/README.md) use `#[rusnix::config]` for local trees,
+The [examples](examples/README.md) use `#[rusnix::config]` for local trees,
 fine-grained derives for reusable values, and explicit implementations for
-semantic conversions. They contain no handwritten IntoConfig impls;
-only nix-interop deliberately calls Config::set; layered-validation failure assemblies live in tests.
+semantic conversions. The nine small examples contain no handwritten IntoConfig
+impls; PostgreSQL adds one semantic adapter for optional inputs and ownership.
+Only nix-interop deliberately calls Config::set; layered-validation failure assemblies live in tests.
 
 `Expr<i64>` and `Expr<bool>` are distinct Rust types. Passing a boolean
 expression to integer division fails Rust type checking. Ordinary Rust vectors
@@ -811,11 +812,12 @@ filesystem-relative compiler artifacts, local input paths, and one fixed pinned
 package root. Rust-origin IDs and multi-origin diagnostics remain unchanged.
 
 
-Current verification: `cargo test --workspace --locked` passes **151 tests**
-(147 ordinary tests and 4 doctests, including 3 compile-fail cases; zero
-failed/ignored). The interop target has 24 tests; structured_interop adds 14.
+Current verification: `cargo test --workspace --locked` passes **210 tests**
+(206 ordinary tests and 4 doctests, including 3 compile-fail cases; zero
+failed/ignored). The interop target has 24 tests; structured_interop has 19
+and PostgreSQL has 54.
 Formatting and all-target Clippy with warnings denied pass.
-The fixture script passes 123 integration checks, nine runnable
+The fixture script passes 182 integration checks, ten runnable
 showcase examples plus the legacy generic SSH compiler example, and 20 original
 CLI fixture invocations. All 14 diagnostic snapshots remain passing.
 Examples print generated source without Nix evaluation, fixture construction or
@@ -825,7 +827,7 @@ combined interop behavior and symbolic artifact reuse.
 
 The original examples cleanup kept eight single Rust files under `examples/`,
 with models and typed functions before lowering. It used manual conversion for
-complete components; the current nine examples use structural derives and
+complete components; the nine small examples now use automatic structural lowering and
 explicit value mappings.
 Reusable Endpoint values have no global conversion: the typed-submodule example
 now owns its placement through a derived Root → Demo → Endpoint tree. TLS requires
@@ -980,3 +982,21 @@ escape their scope; generated binder names are deterministic and capture-safe.
 including collection values, to this boundary without reading it in Rust.
 `Nixpkgs::from_module()` selects the NixOS-supplied package set, preserving its
 configuration and overlays; these references require NixosModule lowering.
+
+
+## PostgreSQL implementation rewrite
+
+The substantial [PostgreSQL example](examples/postgresql.rs) rewrites the pinned
+module's configuration generation while reusing its public NixOS option schema.
+Typed owned-database provisioning and three-state role clauses coexist with
+finite final-option dependencies and opaque package/build-helper calls.
+The [equivalence suite](crates/rusnix-nix/tests/postgresql.rs) compares full NixOS
+evaluation, generated-file/check derivation recipes and string dependency contexts,
+including ordinary downstream overrides of the same generated artifact. It builds
+and activates nothing. See [the example notes](examples/README.md#postgresql-compatibility-rewrite)
+for coverage and limitations.
+
+`NixSession::evaluate_nixos_with_driver` lets backend/test infrastructure use a
+custom semantic projection while retaining generated-module parsing and existing
+Rusnix diagnostics. The adapter recognizes both staged nixpkgs library trees and
+preserves precise NixOS option paths inside opaque records.

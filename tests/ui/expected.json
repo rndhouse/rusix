@@ -237,5 +237,15 @@
       "PackageRef",
       "ModuleRef"
     ]
+  },
+  {
+    "file": "postgresql-owned-mismatch.rs",
+    "code": "E0559",
+    "count": 1,
+    "source": "owner_name",
+    "reason_tokens": [
+      "Owned",
+      "owner_name"
+    ]
   }
 ]

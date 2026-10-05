@@ -49,3 +49,7 @@ path = "../../examples/nix-interop.rs"
 [[example]]
 name = "symbolic-option"
 path = "../../examples/symbolic-option.rs"
+
+[[example]]
+name = "postgresql"
+path = "../../examples/postgresql.rs"

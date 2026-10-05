@@ -385,6 +385,19 @@ impl Nixpkgs {
         })
     }
 
+    /// Arbitrary package-set data, without claiming a package/function category.
+    #[track_caller]
+    pub fn value(&self, path: &str) -> NixValue {
+        NixValue(
+            Reference {
+                source: self.package_source(),
+                path: Some(AttrPath::dotted(path)),
+                origin: Origin::caller(format!("nixpkgs value lookup {path}")),
+            }
+            .node(),
+        )
+    }
+
     /// A function in the package set (e.g. writeText), including its overlays.
     /// `function` separately addresses nixpkgs/lib. No schemas are inferred.
     #[track_caller]
