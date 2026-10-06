@@ -59,3 +59,7 @@ path = "../../examples/git-nixpkg/main.rs"
 [[example]]
 name = "curl-nixpkg"
 path = "../../examples/curl-nixpkg/main.rs"
+
+[[example]]
+name = "openssl-nixpkg"
+path = "../../examples/openssl-nixpkg/main.rs"
