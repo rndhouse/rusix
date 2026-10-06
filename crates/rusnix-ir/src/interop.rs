@@ -514,6 +514,26 @@ impl NixValue {
             .into()
     }
 
+    /// Construct boolean OR, sharing [`crate::Expr::or`] semantics.
+    /// Nix checks demanded operands as booleans and evaluates the right operand
+    /// only when the left is false. No caller-supplied library is consulted.
+    #[track_caller]
+    pub fn or(self, other: impl Into<Self>) -> Self {
+        self.into_expr::<bool>()
+            .or(other.into().into_expr::<bool>())
+            .into()
+    }
+
+    /// Construct boolean implication, sharing [`crate::Expr::implies`] semantics.
+    /// Nix checks demanded operands as booleans. A false left operand returns true
+    /// without evaluating the right operand. No caller-supplied library is consulted.
+    #[track_caller]
+    pub fn implies(self, other: impl Into<Self>) -> Self {
+        self.into_expr::<bool>()
+            .implies(other.into().into_expr::<bool>())
+            .into()
+    }
+
     /// Compare two values using Nix’s `==` operation when they are evaluated.
     /// The result represents a Nix boolean; no comparison happens in Rust.
     #[track_caller]
@@ -643,6 +663,81 @@ impl NixValue {
         Self::join_text("", Self::list(parts))
     }
 
+    /// Replace text using ordered `(from, to)` pairs through `builtins.replaceStrings`.
+    /// Inputs stay deferred and string dependencies are retained. This follows Nix's
+    /// replacement rules, rather than applying a sequence of Rust string replacements.
+    /// Use [`NixLibrary::replace_text`] to call the supplied library instead.
+    #[track_caller]
+    pub fn replace_text(
+        self,
+        replacements: impl IntoIterator<Item = (impl Into<Self>, impl Into<Self>)>,
+    ) -> Self {
+        let [from, to] = replacement_lists(replacements);
+        Self::builtin("replaceStrings").apply([from, to, self])
+    }
+
+    /// Test for one literal attribute name supplied as text, possibly computed by Nix.
+    /// Dots and punctuation remain part of the name, rather than describing a path.
+    /// This uses `builtins.hasAttr` and does not evaluate the attribute's value.
+    #[track_caller]
+    pub fn has_attr(self, name: impl Into<Self>) -> Self {
+        Self::builtin("hasAttr").apply([name.into(), self])
+    }
+
+    /// Select one literal attribute name, or evaluate `fallback` if it is absent.
+    /// The name may be computed by Nix; dots and punctuation remain literal data.
+    /// An existing null value is returned as null. The unchosen value stays lazy.
+    /// Uses `builtins.hasAttr` and `builtins.getAttr`, independently of nixpkgs `lib`.
+    #[track_caller]
+    pub fn attr_or(self, name: impl Into<Self>, fallback: impl Into<Self>) -> Self {
+        let name = name.into();
+        let fallback = fallback.into();
+        let origin = Origin::caller("opaque Nix attribute fallback");
+        let (attrs_binding, attrs) = Self::parameter(&origin);
+        let (name_binding, attribute_name) = Self::parameter(&origin);
+        // Build outside Rust callbacks so track_caller reaches the public call.
+        // Nix callbacks share both inputs while keeping the fallback lazy.
+        let selected = Self::if_else(
+            attrs.clone().has_attr(attribute_name.clone()),
+            Self::builtin("getAttr").apply([attribute_name, attrs]),
+            fallback,
+        );
+        let lookup = Self(Node {
+            origin: origin.clone(),
+            kind: ValueKind::Function {
+                binding: name_binding,
+                body: Box::new(selected.0),
+            },
+        });
+        Self(Node {
+            origin,
+            kind: ValueKind::Function {
+                binding: attrs_binding,
+                body: Box::new(lookup.call(name).0),
+            },
+        })
+        .call(self)
+    }
+
+    /// Call this package's supplied `override` function with argument changes.
+    /// `overrides` may be a record or a Nix callback accepted by the package.
+    /// nixpkgs owns default handling and dependency splicing; Rust only describes
+    /// the call and retains the returned package's ordinary override interface.
+    #[track_caller]
+    pub fn override_args(self, overrides: impl Into<Self>) -> Self {
+        self.select("override").call(overrides.into())
+    }
+
+    /// Call this package's supplied `overrideAttrs` function with an update.
+    /// Pass a record or deferred callback accepted by the package's implementation,
+    /// including nested callbacks for the recursive final/previous-attributes form.
+    /// nixpkgs owns attribute and self-reference semantics; Rust does not rebuild
+    /// or inspect the derivation.
+    #[track_caller]
+    pub fn override_attrs(self, update: impl Into<Self>) -> Self {
+        self.select("overrideAttrs").call(update.into())
+    }
+
     /// Look up named fields in a Nix attribute set later.
     /// `value.select("foo.bar")` represents `value.foo.bar`; it does not read
     /// fields into Rust. Missing fields can be reported at this Rust call.
@@ -679,6 +774,21 @@ impl NixValue {
             ty: std::marker::PhantomData,
         }
     }
+}
+
+// Both builtin and library replacements use aligned lists without reading any text.
+#[track_caller]
+fn replacement_lists(
+    replacements: impl IntoIterator<Item = (impl Into<NixValue>, impl Into<NixValue>)>,
+) -> [NixValue; 2] {
+    let mut from = Vec::new();
+    let mut to = Vec::new();
+    // Conversions inside a Rust iterator callback would lose track_caller.
+    for (pattern, replacement) in replacements {
+        from.push(pattern.into());
+        to.push(replacement.into());
+    }
+    [NixValue::list(from), NixValue::list(to)]
 }
 
 /// Negates a deferred Nix boolean, preserving its origin and checking its type in Nix.

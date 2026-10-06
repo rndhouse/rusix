@@ -19,7 +19,8 @@ interfaces. Only exceptional names such as `CoreServices`, `pkg-config`,
 refinements use `nix_record!`; dynamic fields retain ordinary Rust iteration.
 Boolean conjunction and native list concatenation use `NixValue::and` and
 `NixValue::concat_lists`; version comparisons use the supplied
-`NixLibrary::version_at_least`. These shared helpers preserve lazy evaluation
+`NixLibrary::version_at_least` and `version_older`. Test-name text replacement
+uses `NixValue::replace_text`. These shared helpers preserve lazy evaluation
 and Rust call locations without local copies of their implementations.
 
 The common attributes are shared lazily using an existing NixValue callback

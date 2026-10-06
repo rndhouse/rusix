@@ -1,7 +1,7 @@
 //! Call common functions from nixpkgs’ utility library without evaluating them in Rust.
 // Promote named helpers from demonstrated real-world usage; keep arbitrary lib
 // access on the existing NixValue escape hatch rather than mirroring nixpkgs.
-use super::NixValue;
+use super::{NixValue, replacement_lists};
 
 /// A Rust handle for nixpkgs’ utility library, `lib`.
 ///
@@ -50,11 +50,11 @@ impl NixLibrary {
     /// call. Rust does not read the library or execute the function.
     ///
     /// ```
-    /// use rusnix_ir::interop::Nixpkgs;
+    /// use rusnix_ir::interop::{NixValue, Nixpkgs};
     /// let lib = Nixpkgs::new().library();
-    /// let headers = lib.as_value().clone().select("getDev")
-    ///     .apply([Nixpkgs::new().get("curl").into()]);
-    /// // Represents lib.getDev pkgs.curl, evaluated later by Nix.
+    /// let path = lib.as_value().clone().select("makeBinPath")
+    ///     .call(NixValue::list([Nixpkgs::new().get("curl").into()]));
+    /// // Represents lib.makeBinPath [pkgs.curl], evaluated later by Nix.
     /// ```
     pub fn as_value(&self) -> &NixValue {
         &self.value
@@ -148,6 +148,46 @@ impl NixLibrary {
         minimum: impl Into<NixValue>,
     ) -> NixValue {
         self.apply("versionAtLeast", [version.into(), minimum.into()])
+    }
+
+    /// Test whether `version` precedes `other` through the supplied `lib.versionOlder`.
+    /// Rust constructs the comparison; the library compares strings when Nix evaluates it.
+    #[track_caller]
+    pub fn version_older(
+        &self,
+        version: impl Into<NixValue>,
+        other: impl Into<NixValue>,
+    ) -> NixValue {
+        self.apply("versionOlder", [version.into(), other.into()])
+    }
+
+    /// Select a package's development output through the supplied `lib.getDev`.
+    /// The standard library falls back to the package's default output when no
+    /// development output exists. This is not a direct `.dev` attribute lookup.
+    #[track_caller]
+    pub fn get_dev(&self, package: impl Into<NixValue>) -> NixValue {
+        self.apply("getDev", [package.into()])
+    }
+
+    /// Select a package's library output through the supplied `lib.getLib`.
+    /// The standard library falls back to the package's default output when no
+    /// library output exists. A caller's replacement remains authoritative.
+    #[track_caller]
+    pub fn get_lib(&self, package: impl Into<NixValue>) -> NixValue {
+        self.apply("getLib", [package.into()])
+    }
+
+    /// Replace text using ordered `(from, to)` pairs through the supplied `lib.replaceStrings`.
+    /// Rust constructs aligned lists; the library performs the replacement in Nix.
+    /// Use [`NixValue::replace_text`] for builtin replacement independent of `lib`.
+    #[track_caller]
+    pub fn replace_text(
+        &self,
+        text: impl Into<NixValue>,
+        replacements: impl IntoIterator<Item = (impl Into<NixValue>, impl Into<NixValue>)>,
+    ) -> NixValue {
+        let [from, to] = replacement_lists(replacements);
+        self.apply("replaceStrings", [from, to, text.into()])
     }
 
     /// Join several Nix lists into one, preserving their element order.

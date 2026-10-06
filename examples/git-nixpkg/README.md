@@ -31,11 +31,13 @@ caller's library overrides. Feature checks use native `NixValue::assert`; their
 order remains explicit in the package factory, and an overridden `lib.throwIfNot`
 cannot bypass them. Other library functions use the visibly dynamic
 `lib.as_value().clone().select(...).apply(...)` escape hatch.
-Boolean `!` and `Expr<bool>::and` stay symbolic and
-independent of library overrides. Implication and disjunction use native deferred
-conditionals, and passthru merging uses `merge_attrs`, so replacing `lib.any` or
+Boolean `!`, `.and()`, `.or()` and `.implies()` stay symbolic and
+independent of library overrides. Passthru merging uses `merge_attrs`, so replacing `lib.any` or
 `lib.mergeAttrs` does not change those native operations. Pinned Git asset paths
 remain an Inputs helper.
+Output selection uses `NixLibrary::get_dev`, retaining the supplied library's
+fallback behavior. `override_args` and `override_attrs` call the existing package
+functions, including the eventual final package's recursive test override.
 
 The complete `Inputs` declaration also supplies `args::argument_names()` to the
 factory; there is no separate list of its 57 parameters. Defaults remain explicit

@@ -51,26 +51,25 @@ deferred candidate; D = missing general operation; E = nixpkgs remains authorita
 | Source construct | Classification | Implementation / decision |
 | --- | --- | --- |
 | Native arguments and 18 lazy defaults | A | `function_attrs` and structural argument views; defaults use lexical parameters |
-| GSS/SCP defaults and platform feature predicates | A/C | Symbolic booleans and complete build/host record comparison; keep the small native-build helper local |
+| GSS/SCP defaults and platform feature predicates | A/C | Symbolic booleans and shared `package::build_host_equal` comparison of full platform values |
 | Four TLS flags and `lib.count` | B | Call the supplied `lib.count`; the Rust enum is a separate convenience surface |
 | Native TLS `assert` | D | Add `NixValue::assert`; using `lib.throwIfNot` would let a caller override change native assertion semantics |
-| Builtin release-tag replacement and comparison | D | Add `NixValue::builtin`; builtin functions are independent of nixpkgs `lib` |
+| Builtin release-tag replacement and comparison | D | `replace_text` and builtin comparison remain independent of nixpkgs `lib` |
 | Fixed recipe and metadata | A/C | Local derived Rust records and `try_into_nix_value`; no universal mkDerivation or metadata schema |
 | Conditional propagated inputs | A/B | Supplied `optional`/`optionals`; native builtin concatenation preserves independence from overridden `lib.concatLists` |
 | Configure switches | B | Supplied `enableFeature`, `withFeature`, `withFeatureAs`; no configure DSL or new library bindings |
 | Environment workaround | B/C | Supplied `optionalAttrs` with a normal Rust record; no attrset builder |
-| Output selection | B/C | Supplied `getDev` and `getLib`; do not substitute direct `.dev` / `.lib` selection |
+| Output selection | B/C | `NixLibrary::get_dev` and `get_lib` call the supplied functions, retaining output fallback semantics |
 | Shell scripts | A | `nix_text!` and supplied `optional_text`; exact text and Nix store dependency context |
-| Recursive source/consuming-package checks | A/E | Scoped callbacks, real `override`/`overrideAttrs`, real final package |
+| Recursive source/consuming-package checks | A/E | Scoped callbacks, shared `override_args`/`override_attrs`, real final package |
 | Fetchpatch test's shallow record replacement | D | Add `NixValue::merge_attrs` for native `//`; distinct from NixOS definition merging |
 | Sources, build tools, frameworks, standard builder | E | Existing caller-supplied nixpkgs objects; evaluation never fetches or builds |
 
-No functions were promoted into `NixLibrary`. `getDev` now has independent Git
-and curl evidence, but raw output-helper calls remain clear and preserve the
-caller's fallback behavior. `getLib`, `optionalAttrs` and the configure helpers
-remain candidates for another substantial rewrite. Metadata records stay local.
-The native-build predicate now has Git and curl evidence, but still lacks a
-natural general home; it compares full platform records, not system strings.
+Output helpers use the shared `NixLibrary` API based on Git and curl usage.
+`optionalAttrs` and the configure helpers retain ordinary deferred library calls;
+metadata records stay local. The shared `package::build_host_equal` predicate
+compares full platform records rather than system strings. Boolean disjunction
+uses `.or()`; release-tag replacement uses `NixValue::replace_text`.
 Curl does **not** call `lib.concatStringsSep`; its text construction uses the
 existing generic primitive, so that candidate remains deferred. There is no
 ordered multi-check helper or package-validation DSL.

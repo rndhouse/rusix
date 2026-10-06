@@ -145,11 +145,7 @@ struct Metadata {
 fn attributes(i: &Inputs, final_attrs: NixValue) -> NixValue {
     let lib = NixLibrary::from_value(i.lib.as_value());
     let version = final_attrs.clone().select("version");
-    let release_tag = NixValue::builtin("replaceStrings").apply([
-        NixValue::list([".".into()]),
-        NixValue::list(["_".into()]),
-        version.clone(),
-    ]);
+    let release_tag = version.clone().replace_text([(".", "_")]);
 
     // curl bootstraps fetchurl. Source/patch handling must not introduce fetchpatch;
     // that argument is used only by the existing lazy passthru test graph.
@@ -293,10 +289,7 @@ fn configure_flags(i: &Inputs, lib: &NixLibrary) -> NixValue {
     }
 
     for (condition, name) in [
-        (
-            (!(!i.openssl_support()).and(!i.gnutls_support())),
-            "ca-fallback",
-        ),
+        (i.openssl_support().or(i.gnutls_support()), "ca-fallback"),
         (i.http3_support(), "nghttp3"),
         (i.http3_support(), "ngtcp2"),
         (i.rtmp_support(), "librtmp"),
@@ -319,7 +312,7 @@ fn configure_flags(i: &Inputs, lib: &NixLibrary) -> NixValue {
         (i.scp_support(), "libssh2", i.libssh2()),
         (i.wolfssl_support(), "wolfssl", i.wolfssl()),
     ] {
-        let output = raw.clone().select("getDev").call(package);
+        let output = lib.get_dev(package);
         flags.push(raw.clone().select("withFeatureAs").apply([
             condition.into(),
             name.into(),
@@ -331,10 +324,7 @@ fn configure_flags(i: &Inputs, lib: &NixLibrary) -> NixValue {
         NixValue::list(flags),
         lib.optional(
             i.gss_support(),
-            nix_text!(
-                "--with-gssapi={krb5}",
-                krb5 = raw.clone().select("getDev").call(i.libkrb5()),
-            ),
+            nix_text!("--with-gssapi={krb5}", krb5 = lib.get_dev(i.libkrb5()),),
         ),
         lib.optional(
             !package::build_host_equal(i.stdenv.as_value()),
@@ -409,8 +399,8 @@ fn post_install(i: &Inputs, lib: &NixLibrary) -> NixValue {
                 r#"
                 sed '/^dependency_libs/s|{dev}|{lib}|' -i "$out"/lib/*.la
             "#,
-                dev = lib.as_value().clone().select("getDev").call(i.libssh2()),
-                lib = lib.as_value().clone().select("getLib").call(i.libssh2()),
+                dev = lib.get_dev(i.libssh2()),
+                lib = lib.get_lib(i.libssh2()),
             ),
         ),
         lib.optional_text(
@@ -430,31 +420,24 @@ fn post_install(i: &Inputs, lib: &NixLibrary) -> NixValue {
 /// Override a consuming package with the eventual curl, not an earlier recipe snapshot.
 #[track_caller]
 fn use_this_curl(package: NixValue, curl: &NixValue) -> NixValue {
-    package
-        .select("override")
-        .call(nix_record! { "curl": curl.clone() })
+    package.override_args(nix_record! { "curl": curl.clone() })
 }
 
 /// Preserve the recursive test graph; requesting these values constructs recipes only.
 fn passthru(i: &Inputs, final_attrs: NixValue) -> NixValue {
     let curl = final_attrs.select("finalPackage");
-    let with_check = curl
-        .clone()
-        .select("overrideAttrs")
-        .call(NixValue::function(|_| {
-            nix_record! { "doCheck": true }
-        }));
+    let with_check = curl.clone().override_attrs(NixValue::function(|_| {
+        nix_record! { "doCheck": true }
+    }));
     let fetchpatch = i
         .fetchpatch()
-        .select("override")
-        .call(nix_record! { "fetchurl": use_this_curl(i.fetchurl(), &curl) })
+        .override_args(nix_record! { "fetchurl": use_this_curl(i.fetchurl(), &curl) })
         .merge_attrs(nix_record! { "version": 1_i64 });
     let fetchpatch_test = i
         .tests
         .fetchpatch
         .simple()
-        .select("override")
-        .call(nix_record! { "fetchpatch": fetchpatch });
+        .override_args(nix_record! { "fetchpatch": fetchpatch });
 
     nix_record! {
         "opensslSupport": i.openssl_support(),

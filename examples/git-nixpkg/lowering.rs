@@ -45,13 +45,11 @@ pub fn factory() -> PackageFunction {
                 attributes(&inputs, final_attrs)
             }));
         let checks = [
-            NixValue::if_else(
-                inputs.osxkeychain_support(),
-                inputs.stdenv.host_platform.is_darwin(),
-                true,
-            ),
-            NixValue::if_else(inputs.send_email_support(), inputs.perl_support(), true),
-            NixValue::if_else(inputs.svn_support(), inputs.perl_support(), true),
+            inputs
+                .osxkeychain_support()
+                .implies(inputs.stdenv.host_platform.is_darwin()),
+            inputs.send_email_support().implies(inputs.perl_support()),
+            inputs.svn_support().implies(inputs.perl_support()),
         ];
 
         // Build guards inside out so Nix checks them in source order when the
@@ -148,7 +146,7 @@ fn attributes(i: &Inputs, final_attrs: NixValue) -> NixValue {
     .fold(Expr::boolean(true), |result, condition| {
         result.and(!condition)
     });
-    let svn = i.subversion_client().select("override").call(nix_record! {
+    let svn = i.subversion_client().override_args(nix_record! {
         "perlBindings": i.perl_support(),
     });
     let perl = i.perl_packages.perl.as_value();
@@ -266,8 +264,8 @@ fn attributes(i: &Inputs, final_attrs: NixValue) -> NixValue {
     // This finite self-reference is evaluated by mkDerivation, not inspected in Rust.
     // overrideAttrs must see the eventual package, including later ordinary Nix overrides.
     let installed_test = final_attrs
-        .select("finalPackage.overrideAttrs")
-        .call(NixValue::function(|_| {
+        .select("finalPackage")
+        .override_attrs(NixValue::function(|_| {
             nix_record! { "doInstallCheck": true }
         }));
     let passthru_tests = nix_record! {
@@ -312,7 +310,7 @@ fn attributes(i: &Inputs, final_attrs: NixValue) -> NixValue {
         configure_flags: lib.concat_lists([
             NixValue::list([nix_text!(
                 "ac_cv_prog_CURL_CONFIG={curl}/bin/curl-config",
-                curl = lib.as_value().clone().select("getDev").apply([i.curl()])
+                curl = lib.get_dev(i.curl())
             )]),
             lib.optionals(
                 !package::build_host_equal(i.stdenv.as_value()),
@@ -344,11 +342,10 @@ fn attributes(i: &Inputs, final_attrs: NixValue) -> NixValue {
             nix_text!("PERL_PATH={perl}/bin/perl", perl = i.build_packages.perl()),
         ]),
         native_install_check_inputs: lib.optional(
-            NixValue::if_else(
-                i.stdenv.host_platform.is_darwin(),
-                true,
-                i.stdenv.host_platform.is_free_bsd(),
-            ),
+            i.stdenv
+                .host_platform
+                .is_darwin()
+                .or(i.stdenv.host_platform.is_free_bsd()),
             i.sysctl(),
         ),
         pre_install_check: pre_install_check(i),

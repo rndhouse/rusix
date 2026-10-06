@@ -179,11 +179,9 @@ fn settings_text() -> NixValue {
             NixValue::function(|value| {
                 let quoted = nix_text!(
                     "'{value}'",
-                    value = Nixpkgs::new().function("replaceStrings").apply([
-                        NixValue::list(["'".into()]),
-                        NixValue::list(["''".into()]),
-                        value.clone()
-                    ]),
+                    value = Nixpkgs::new()
+                        .library()
+                        .replace_text(value.clone(), [("'", "''")]),
                 );
 
                 // Match upstream boolean spelling and PostgreSQL single-quote escaping.
@@ -539,12 +537,10 @@ fn assertions() -> NixValue {
             let name = user.clone().select("name");
 
             nixos::assertion(
-                NixValue::if_else(
-                    user.select("ensureDBOwnership"),
+                user.select("ensureDBOwnership").implies(
                     Nixpkgs::new()
                         .function("elem")
                         .apply([name.clone(), pg.ensure_databases()]),
-                    true,
                 ),
                 nix_text!(
                     r#"

@@ -326,7 +326,8 @@ pub enum ValueKind {
 /// `T` restricts Rust composition. For references to external Nix values, it is
 /// an expectation rather than proof of their actual types; Nix or NixOS checks
 /// those during evaluation. Child operations retain their Rust source locations.
-/// Boolean expressions support `!` and short-circuit [`Self::and`].
+/// Boolean expressions support `!` and short-circuit [`Self::and`], [`Self::or`]
+/// and [`Self::implies`].
 ///
 /// Integer and boolean expressions cannot be interchanged:
 #[doc = concat!("```compile_fail,E0308\n", include_str!("../../../tests/fixtures/rust-type-failure.rs"), "\n```")]
@@ -422,6 +423,23 @@ impl Expr<bool> {
     pub fn and(self, other: Self) -> Self {
         let other = interop::NixValue::if_else(other, true, false);
         interop::NixValue::if_else(self, other, false).into_expr()
+    }
+
+    /// Construct boolean OR for Nix to evaluate later.
+    /// Nix checks demanded operands as booleans and evaluates the right operand
+    /// only when the left is false, independently of nixpkgs `lib`.
+    #[track_caller]
+    pub fn or(self, other: Self) -> Self {
+        let other = interop::NixValue::if_else(other, true, false);
+        interop::NixValue::if_else(self, true, other).into_expr()
+    }
+
+    /// Construct boolean implication: the right operand must be true if the left is true.
+    /// Nix checks demanded operands as booleans. A false left operand returns true
+    /// without evaluating the right operand, independently of nixpkgs `lib`.
+    #[track_caller]
+    pub fn implies(self, other: Self) -> Self {
+        (!self).or(other)
     }
 }
 

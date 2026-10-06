@@ -88,9 +88,7 @@ fn common(i: &Inputs, lib: &NixLibrary) -> NixValue {
             NixValue::concat_lists([
                 NixValue::list([i.libkrb5(), i.systemd()]),
                 NixValue::if_else(
-                    i.lib()
-                        .select("versionOlder")
-                        .apply([i.version(), "10.6".into()]),
+                    lib.version_older(i.version(), "10.6"),
                     NixValue::list([i.libaio()]),
                     NixValue::list([i.liburing()]),
                 ),
@@ -162,11 +160,11 @@ fn common(i: &Inputs, lib: &NixLibrary) -> NixValue {
     ]);
     let test_version = nix_text!(
         "mariadb_{version}",
-        version = NixValue::builtin("replaceStrings").apply([
-            NixValue::list([".".into()]),
-            NixValue::list(["".into()]),
-            i.lib().select("versions.majorMinor").call(i.version())
-        ])
+        version = i
+            .lib()
+            .select("versions.majorMinor")
+            .call(i.version())
+            .replace_text([(".", "")])
     );
     let tests = NixValue::function(|version| {
         NixValue::record(

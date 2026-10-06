@@ -115,15 +115,8 @@ fn attributes(
 ) -> NixValue {
     let modern = lib.version_at_least(version.clone(), "1.1.1");
     let v3 = lib.version_at_least(version.clone(), "3.0.0");
-    let old = i
-        .lib()
-        .select("versionOlder")
-        .apply([version.clone(), "3.0".into()]);
-    let fixed = NixValue::builtin("replaceStrings").apply([
-        NixValue::list([".".into()]),
-        NixValue::list(["_".into()]),
-        version.clone(),
-    ]);
+    let old = lib.version_older(version.clone(), "3.0");
+    let fixed = version.clone().replace_text([(".", "_")]);
     let source = i.fetchurl().call(nix_record! {
         "url": NixValue::if_else(
             old,
@@ -165,9 +158,10 @@ fn attributes(
         lib.optional(host(i, "isOpenBSD"), "no-devcryptoeng"),
         lib.optionals(
             host(i, "isMips").and(
-                NixValue::builtin("hasAttr")
-                    .apply(["gcc".into(), i.stdenv().select("hostPlatform")])
-                    .and(NixValue::builtin("hasAttr").apply(["arch".into(), host(i, "gcc")])),
+                i.stdenv()
+                    .select("hostPlatform")
+                    .has_attr("gcc")
+                    .and(host(i, "gcc").has_attr("arch")),
             ),
             NixValue::list([nix_text!(
                 "CFLAGS=-march={arch}",
@@ -197,13 +191,8 @@ fn attributes(
         ]),
         set_output_flags: false,
         separate_debug_info: (!host(i, "isDarwin")).and(
-            (!NixValue::if_else(
-                NixValue::builtin("hasAttr")
-                    .apply(["useLLVM".into(), i.stdenv().select("hostPlatform")]),
-                host(i, "useLLVM"),
-                false,
-            ))
-            .and(i.stdenv().select("cc.isGNU")),
+            (!i.stdenv().select("hostPlatform").attr_or("useLLVM", false))
+                .and(i.stdenv().select("cc.isGNU")),
         ),
         native_build_inputs: NixValue::concat_lists([
             lib.optional(!host(i, "isWindows"), i.make_binary_wrapper()),
@@ -360,14 +349,7 @@ fn configure_script(i: &Inputs, lib: &NixLibrary, version: &NixValue) -> NixValu
         ),
     ));
     // Dynamic attribute lookup/fallback is appropriate NixValue interop; no platform schema.
-    NixValue::function(|targets| {
-        NixValue::if_else(
-            NixValue::builtin("hasAttr").apply([host(i, "system"), targets.clone()]),
-            NixValue::builtin("getAttr").apply([host(i, "system"), targets]),
-            fallback,
-        )
-    })
-    .call(NixValue::record(targets))
+    NixValue::record(targets).attr_or(host(i, "system"), fallback)
 }
 
 #[derive(IntoRusnixValue)]

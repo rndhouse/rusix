@@ -2,6 +2,7 @@
 use rusnix_ir::{
     Config, Expr,
     interop::{NixValue, Nixpkgs, PackageFunction},
+    nix_record,
 };
 use rusnix_nix::{NixSession, compile};
 
@@ -319,18 +320,29 @@ fn callpackage_override_and_functionargs_preserve_the_native_interface() {
     ]);
     let override_required = package
         .clone()
-        .select("override")
-        .call(NixValue::record([("required", 7_i64.into())]));
+        .override_args(NixValue::record([("required", 7_i64.into())]));
     let override_derived = package
         .clone()
-        .select("override")
-        .call(NixValue::record([("derived", 9_i64.into())]));
+        .override_args(NixValue::record([("derived", 9_i64.into())]));
+    let callback_override = package
+        .clone()
+        .override_args(NixValue::function(|previous| {
+            NixValue::record([(
+                "required",
+                previous
+                    .select("required")
+                    .into_expr::<i64>()
+                    .divide(Expr::int(2))
+                    .into(),
+            )])
+        }));
 
     assert_eq!(
         evaluate(NixValue::record([
             ("base", package.select("derived")),
             ("overrideRequired", override_required.select("derived")),
             ("overrideDerived", override_derived.select("derived")),
+            ("callbackOverride", callback_override.select("derived")),
             (
                 "interface",
                 Nixpkgs::new().function("functionArgs").call(function)
@@ -338,6 +350,7 @@ fn callpackage_override_and_functionargs_preserve_the_native_interface() {
         ])),
         serde_json::json!({
             "base":42,"overrideRequired":7,"overrideDerived":9,
+            "callbackOverride":21,
             "interface":{"required":false,"derived":true},
         }),
     );
@@ -593,6 +606,111 @@ fn typed_package_function_emits_and_composes_as_an_ordinary_value() {
 }
 
 #[test]
+fn attribute_override_helpers_preserve_real_record_and_callback_semantics() {
+    let package = Nixpkgs::new()
+        .value("stdenv.mkDerivation")
+        .call(NixValue::function(|final_attrs| {
+            nix_record! {
+                "pname": "rusnix-override-probe",
+                "version": "1",
+                "dontUnpack": true,
+                "passthru": nix_record! { "versionFromFinal": final_attrs.select("version") },
+            }
+        }));
+    let record = package
+        .clone()
+        .override_attrs(nix_record! { "version": "2" });
+    let unary = package
+        .clone()
+        .override_attrs(NixValue::function(|previous| {
+            nix_record! {
+                "version": NixValue::concat_text([previous.select("version"), ".unary".into()]),
+            }
+        }));
+    let binary = package.clone().override_attrs(NixValue::function(|final_attrs| {
+        NixValue::function(|previous| nix_record! {
+            "version": NixValue::concat_text([previous.clone().select("version"), ".binary".into()]),
+            "passthru": previous.select("passthru").merge_attrs(nix_record! {
+                "selectedFinal": final_attrs.select("version"),
+            }),
+        })
+    }));
+    let chained = record
+        .clone()
+        .override_attrs(nix_record! { "version": "3" });
+
+    assert_eq!(
+        evaluate(nix_record! {
+            "base": package.select("version"),
+            "record": record.clone().select("version"),
+            "recordFinal": record.clone().select("versionFromFinal"),
+            "unary": unary.clone().select("version"),
+            "unaryFinal": unary.select("versionFromFinal"),
+            "binary": binary.clone().select("version"),
+            "binaryFinal": binary.select("selectedFinal"),
+            "chained": chained.select("versionFromFinal"),
+            "stillOverridable": record.has_attr("overrideAttrs"),
+        }),
+        serde_json::json!({
+            "base":"1", "record":"2", "recordFinal":"2",
+            "unary":"1.unary", "unaryFinal":"1.unary",
+            "binary":"1.binary", "binaryFinal":"1.binary", "chained":"3",
+            "stillOverridable":true,
+        })
+    );
+}
+
+#[test]
+fn override_helpers_use_supplied_functions_and_retain_call_and_child_origins() {
+    let package = nix_record! {
+        "override": NixValue::function(|changes| nix_record! { "arguments": changes }),
+        "overrideAttrs": NixValue::function(|changes| nix_record! { "attributes": changes }),
+    };
+    let changes = nix_record! { "version": "caller" };
+    assert_eq!(
+        evaluate(nix_record! {
+            "arguments": package.clone().override_args(changes.clone()),
+            "attributes": package.clone().override_attrs(changes),
+        }),
+        serde_json::json!({
+            "arguments":{"arguments":{"version":"caller"}},
+            "attributes":{"attributes":{"version":"caller"}},
+        })
+    );
+
+    let empty = nix_record! {};
+    let calls = [
+        (empty.clone().override_args(nix_record! {}), line!()),
+        (empty.override_attrs(nix_record! {}), line!()),
+    ];
+    for (value, line) in calls {
+        let error = NixSession::new()
+            .unwrap()
+            .evaluate_interop(&compile(&Config::new().set("result", value)).unwrap())
+            .unwrap_err();
+        assert_eq!(error.primary.as_ref().unwrap().file, file!());
+        assert_eq!(error.primary.as_ref().unwrap().line, line);
+        assert!(error.reason.contains("override"));
+        assert!(!error.raw_nix.is_empty());
+    }
+
+    let child_line = line!() + 1;
+    let failure: NixValue = Expr::int(1).divide(Expr::int(0)).into();
+    for value in [
+        package.clone().override_args(failure.clone()),
+        package.override_attrs(failure),
+    ] {
+        let error = NixSession::new()
+            .unwrap()
+            .evaluate_interop(&compile(&Config::new().set("result", value)).unwrap())
+            .unwrap_err();
+        assert_eq!(error.reason, "division by zero");
+        assert_eq!(error.primary.as_ref().unwrap().line, child_line);
+        assert!(!error.raw_nix.is_empty());
+    }
+}
+
+#[test]
 fn real_call_package_supplies_dependencies_defaults_and_authoritative_overrides() {
     let factory = PackageFunction::from_function_attrs(["curl", "derived", "unused"], |args| {
         (
@@ -616,7 +734,7 @@ fn real_call_package_supplies_dependencies_defaults_and_authoritative_overrides(
         &factory,
         NixValue::record([("derived", "explicit default".into())]),
     );
-    let overridden = base.clone().select("override").call(NixValue::record([(
+    let overridden = base.clone().override_args(NixValue::record([(
         "curl",
         NixValue::record([("pname", "overridden curl".into())]),
     )]));

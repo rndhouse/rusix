@@ -44,6 +44,93 @@ fn builtin_functions_accept_concrete_and_scoped_symbolic_values() {
 }
 
 #[test]
+fn replacement_pairs_preserve_order_and_accept_deferred_text_and_patterns() {
+    let factory = NixValue::function_attrs(["text", "from", "to"], |args| {
+        (
+            Vec::<(&str, NixValue)>::new(),
+            args.clone()
+                .select("text")
+                .replace_text([(args.clone().select("from"), args.select("to"))]),
+        )
+    });
+    let failure: NixValue = Expr::int(1).divide(Expr::int(0)).into();
+    assert_eq!(
+        evaluate(NixValue::record([
+            (
+                "symbolic",
+                factory.call(NixValue::record([
+                    ("text", "8.11.0".into()),
+                    ("from", ".".into()),
+                    ("to", "_".into()),
+                ]))
+            ),
+            (
+                "nonRecursive",
+                NixValue::from("ab a").replace_text([("ab", "a"), ("a", "b")])
+            ),
+            (
+                "firstMatch",
+                NixValue::from("ab").replace_text([("a", "_"), ("ab", "long")])
+            ),
+            (
+                "empty",
+                NixValue::from("unchanged").replace_text([] as [(&str, &str); 0])
+            ),
+            (
+                "unusedReplacement",
+                NixValue::from("a")
+                    .replace_text([("a", NixValue::from("matched")), ("b", failure)])
+            ),
+        ])),
+        serde_json::json!({
+            "symbolic":"8_11_0", "nonRecursive":"a b", "firstMatch":"_b",
+            "empty":"unchanged", "unusedReplacement":"matched",
+        })
+    );
+}
+
+#[test]
+fn attribute_helpers_keep_names_literal_and_unselected_values_lazy() {
+    let failure: NixValue = Expr::int(1).divide(Expr::int(0)).into();
+    let unusual = "a.\"${builtins.abort \"not code\"}\n";
+    let attrs = NixValue::record([
+        ("a.b", 42_i64.into()),
+        (unusual, "literal data".into()),
+        ("null", NixValue::null()),
+        ("bad", failure.clone()),
+        ("", "empty name".into()),
+    ]);
+    let factory = NixValue::function(|name| attrs.clone().attr_or(name, failure.clone()));
+
+    assert_eq!(
+        evaluate(NixValue::record([
+            ("hasBad", attrs.clone().has_attr("bad")),
+            ("hasDotted", attrs.clone().has_attr("a.b")),
+            ("hasPrefix", attrs.clone().has_attr("a")),
+            ("dotted", attrs.clone().attr_or("a.b", failure.clone())),
+            ("dynamic", factory.call(unusual)),
+            ("absent", attrs.clone().attr_or("absent", 7_i64)),
+            ("null", attrs.clone().attr_or("null", failure.clone())),
+            ("emptyName", attrs.clone().attr_or("", failure.clone())),
+            (
+                "selectedSubtree",
+                attrs
+                    .attr_or(
+                        "missing",
+                        NixValue::record([("good", 7_i64.into()), ("bad", failure),])
+                    )
+                    .select("good")
+            ),
+        ])),
+        serde_json::json!({
+            "hasBad":true,"hasDotted":true,"hasPrefix":false,"dotted":42,
+            "dynamic":"literal data","absent":7,"null":null,"emptyName":"empty name",
+            "selectedSubtree":7,
+        })
+    );
+}
+
+#[test]
 fn native_assertion_leaves_its_value_lazy_and_retains_its_call_site() {
     let unused: NixValue = Expr::int(1).divide(Expr::int(0)).into();
     let line = line!() + 1;
@@ -117,6 +204,14 @@ fn native_operation_failures_preserve_child_origins_and_operation_boundaries() {
             .clone()
             .merge_attrs(NixValue::record([] as [(&str, NixValue); 0])),
         NixValue::builtin("lessThan").apply([failure.clone(), 2_i64.into()]),
+        failure.clone().replace_text([("a", "b")]),
+        NixValue::from("a").replace_text([(failure.clone(), "b")]),
+        NixValue::from("a").replace_text([("a", failure.clone())]),
+        failure.clone().has_attr("a"),
+        NixValue::record([] as [(&str, NixValue); 0]).has_attr(failure.clone()),
+        failure.clone().attr_or("a", 42_i64),
+        NixValue::record([] as [(&str, NixValue); 0]).attr_or("a", failure.clone()),
+        NixValue::record([("a", failure.clone())]).attr_or("a", 42_i64),
     ] {
         let error = NixSession::new()
             .unwrap()
@@ -152,6 +247,32 @@ fn native_operation_failures_preserve_child_origins_and_operation_boundaries() {
         .evaluate_interop(&compile(&Config::new().set("result", invalid)).unwrap())
         .unwrap_err();
     assert_eq!(error.primary.as_ref().unwrap().line, call_line);
+}
+
+#[test]
+fn named_operation_type_failures_report_the_public_call_site() {
+    let text_line = line!() + 1;
+    let invalid_text = NixValue::from(true).replace_text([("a", "b")]);
+    let pattern_line = line!() + 1;
+    let invalid_pattern = NixValue::from("a").replace_text([(true, "b")]);
+    let name_line = line!() + 1;
+    let invalid_name = NixValue::record([] as [(&str, NixValue); 0]).has_attr(42_i64);
+    let cases = [
+        (invalid_text, text_line),
+        (invalid_pattern, pattern_line),
+        (invalid_name, name_line),
+        (NixValue::from(true).has_attr("a"), line!()),
+        (NixValue::from(true).attr_or("a", 42_i64), line!()),
+    ];
+    for (value, line) in cases {
+        let error = NixSession::new()
+            .unwrap()
+            .evaluate_interop(&compile(&Config::new().set("result", value)).unwrap())
+            .unwrap_err();
+        assert_eq!(error.primary.as_ref().unwrap().file, file!());
+        assert_eq!(error.primary.as_ref().unwrap().line, line);
+        assert!(!error.raw_nix.is_empty());
+    }
 }
 
 #[test]

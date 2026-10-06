@@ -1102,21 +1102,34 @@ Nix overrides of the same artifact; UI fixtures check the compile-time boundary.
 `lib` is nixpkgs' utility library, a record of functions separate from the Nix
 language's `builtins`. Bind its supported Rust helpers to a caller's library with
 `NixLibrary::from_value(inputs.lib.as_value())`. The `optional`, `optionals`,
-`optional_text`, `all`, `concat_lists`, `version_at_least` and `throw_if_not` methods
-call that exact library, including caller overrides. `throw_if_not(condition, message, value)`
+`optional_text`, `all`, `concat_lists`, version comparisons, output selection and
+text replacement methods call that exact library, including caller overrides.
+`throw_if_not(condition, message, value)`
 validates an expression when Nix evaluates it; it is separate from the NixOS
 assertion collection. Arbitrary functions remain accessible through
-`lib.as_value().clone().select("getDev").apply([package])`.
+`lib.as_value().clone().select("makeBinPath").call(packages)`.
 Named helpers grow from demonstrated real-world usage; arbitrary nixpkgs `lib`
 access remains available through the generic `NixValue` escape hatch.
 For the pinned library, explicitly choose `Nixpkgs::library()`.
-Boolean `!` and `.and()` work on both `Expr<bool>` and opaque `NixValue`, providing
-lazy boolean operations independent of library overrides. Both stay deferred and
-check actual boolean types in Nix. `NixValue::concat_lists` joins lists through
+Boolean `!`, `.and()`, `.or()` and `.implies()` work on both `Expr<bool>` and opaque
+`NixValue`, providing lazy boolean operations independent of library overrides.
+They check demanded operands as booleans in Nix. `NixValue::concat_lists` joins lists through
 `builtins.concatLists`, keeping element values lazy and remaining independent of
-`lib.concatLists`. `lib.version_at_least(version, minimum)` instead calls the
-supplied library's version comparison. These operations preserve child origins
-and Nix string dependency context rather than computing in Rust.
+`lib.concatLists`. `value.replace_text([(".", "_")])` likewise uses the builtin;
+`lib.replace_text(value, pairs)` uses the supplied library. Replacement pairs
+preserve order and Nix's replacement rules. `lib.version_at_least(version, minimum)`
+and `lib.version_older(version, other)` call the supplied library's comparisons.
+`lib.get_dev(package)` and `lib.get_lib(package)` retain its output fallback and
+explicit-output semantics. These operations preserve child origins and Nix string
+dependency context rather than computing in Rust.
+
+`value.has_attr(name)` and `value.attr_or(name, fallback)` use builtins with one
+literal attribute name, including names computed by Nix. Dots are part of the
+name, rather than a path. A present null value stays null; unselected values and
+fallbacks remain lazy. `package.override_args(changes)` and
+`package.override_attrs(update)` call that value's existing override functions.
+Records and deferred callbacks retain nixpkgs' default, dependency-splicing and
+recursive final-attribute behavior; Rust does not reconstruct the package.
 
 For package-function adapters, `#[rusnix::args]` provides the same finite structural
 navigation over a supplied deferred argument record. Bind it with

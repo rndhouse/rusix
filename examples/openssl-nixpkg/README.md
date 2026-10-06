@@ -15,7 +15,10 @@ Fixed opaque records use `nix_record!`, with iterators retained for release fami
 and dynamic target tables.
 Boolean conjunction and native list concatenation use `NixValue::and` and
 `NixValue::concat_lists`; version comparisons use the supplied
-`NixLibrary::version_at_least`. These shared helpers preserve lazy evaluation
+`NixLibrary::version_at_least` and `version_older`. Text replacement uses
+`NixValue::replace_text`; native attribute checks and fallbacks use `has_attr`
+and `attr_or`, including dynamically selected configuration targets.
+These shared helpers preserve lazy evaluation
 and Rust call locations without local copies of their implementations.
 
 All package policy is Rust authored. The backend remains the caller's nixpkgs
