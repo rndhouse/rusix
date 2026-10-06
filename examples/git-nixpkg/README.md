@@ -88,12 +88,11 @@ The matrix covers default/minimal/full Git; Perl/SVN/send-email/PCRE2/manual/Pyt
 translation/GUI/SSH/libsecret/check choices; Linux and Darwin on x86_64 and ARM;
 ARM, musl, MinGW and FreeBSD cross builds; dependent defaults, ordinary overrides,
 `overrideAttrs`, laziness, malformed dependencies and all three feature assertions.
-There are **41 Git tests**, including **34 full projection comparisons** (one
-uses the explicit SunOS branch probe, and two check caller-supplied library
-overrides), three feature-assertion rejection cases,
-a malformed-dependency case, Solaris rejection, and focused Rust-model/laziness
-checks, plus regressions against reconstructed argument records and structural
-runtime diagnostic wrappers. A paired rendering test also compares the complete
+Full projection comparisons include the explicit SunOS branch probe and
+caller-supplied library overrides. Rejection cases cover feature assertions,
+malformed dependencies and Solaris. Focused Rust-model/laziness checks include
+regressions against reconstructed argument records and structural runtime
+diagnostic wrappers. A paired rendering test also compares the complete
 projection with and without inspection comments. The SunOS
 make-flags branch has an explicit host-flag probe. A real Solaris cross scope is rejected by this pinned nixpkgs's libc support in both implementations;
 the probe is not evidence of a working Solaris toolchain.

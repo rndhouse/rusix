@@ -27,7 +27,8 @@ source handle; keep the checkout unchanged while evaluation is running.
 
 `nixpkgs-pin.json` records that same revision and individual SHA-256 digests for
 232 upstream files (about 1 MB of content). The minimal module evaluator verifies
-every listed file once per process and copies it into each disposable session.
+every listed file once per process and stages the checked subset once per
+disposable session. Later evaluations reuse the staged files.
 The manifest is reviewed repository data, not an upstream signature.
 
 The minimal selection is all of upstream `lib/`, root `.version`,

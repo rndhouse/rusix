@@ -31,15 +31,15 @@ operations, and a small actual NixOS module evaluation surface. It preserves
 selective evaluation without forcing siblings. The original plain-attribute-set
 fixtures remain; the separate NixOS harness uses real OpenSSH option declarations.
 
-The [typed configuration showcase](examples/README.md) now demonstrates static
+The [typed configuration showcase](examples/README.md) demonstrates static
 semantic types, unrepresentable field combinations, caller contracts, and
-exhaustive model consumers. Nine single-file showcases and the multi-file
-PostgreSQL/Git examples define their own domain types and distinguish user models,
-opaque Nix objects and the generic escape hatch.
-Seven tested Nix comparisons and fifty-nine UI fixtures
-(including interop category safety and missing TLS keys) back their claims. The examples explain
-which guarantees are static, which require IR checks, and which remain NixOS
-checks; generic configuration/IR escape hatches remain explicit.
+exhaustive model consumers. The examples define their own domain types and
+distinguish user models, opaque Nix objects and the generic escape hatch.
+Executable [Nix comparisons](tests/comparisons/) and registered
+[UI fixtures](tests/ui/expected.json), including interop category safety and
+missing TLS keys, back their claims. The examples explain which guarantees are
+static, which require IR checks, and which remain NixOS checks; generic
+configuration/IR escape hatches remain explicit.
 
 ## Run
 
@@ -82,7 +82,10 @@ error[nix-eval]: generated configuration was rejected by Nix
 `value.json` or `diagnostic.json` and `diagnostic.txt`. The source map includes
 the exact generated text, byte spans, Rust origins, and enclosing semantic origins. The JSON diagnostic is
 Rusnix's own representation and retains the original Nix stderr. Reusing an
-output directory replaces these compiler-owned artifacts and clears old results.
+output directory clears compiler-owned artifacts from both plain and NixOS
+commands, including stale sources, maps and results. Unrelated files are
+preserved. Unknown fixtures are rejected before cleanup, and compilation failures
+in either mode save diagnostics.
 
 `emit` generates artifacts without running Nix. `version` probes Nix through
 the isolated helper too. `rusnix-cli` is a fixture harness; it does not dynamically
@@ -200,7 +203,8 @@ The [examples](examples/README.md) use `#[rusnix::config]` for local trees,
 fine-grained derives for reusable values, and explicit implementations for
 semantic conversions. The nine small examples contain no handwritten IntoConfig
 impls; PostgreSQL adds one semantic adapter for optional inputs and ownership.
-Only nix-interop deliberately calls Config::set; layered-validation failure assemblies live in tests.
+Nix-interop uses Config::set for its dynamic escape hatch, and curl uses it to
+export its factory and package. Layered-validation failure assemblies live in tests.
 
 `Expr<i64>` and `Expr<bool>` are distinct Rust types. Passing a boolean
 expression to integer division fails Rust type checking. Ordinary Rust vectors
@@ -361,6 +365,13 @@ frontend operation fetches, builds, activates, or deploys anything. Temporary
 store roots are removed when the session drops; process termination can leave
 an abandoned temporary directory.
 
+Evaluations sharing a `NixSession` run serially, including staging, parsing and
+diagnostic translation. This prevents concurrent calls from overwriting the
+session's input files. Separate sessions keep separate stores. Checked minimal
+nixpkgs files are staged once per session and reused by later evaluations;
+[session tests](crates/rusnix-nix/tests/session.rs) cover concurrent calls and
+staging reuse.
+
 Nix's chroot local store still uses logical `/nix/store` names. The **physical**
 store is `<root>/store/nix/store`, with its database inside that same root.
 One regression test uses `builtins.toFile` through the isolated helper and
@@ -371,12 +382,13 @@ store-selection variables. Literal-selection tests cover quotes, interpolation,
 and attribute names resembling store-selection flags. This prevents accidental
 default-store selection through this helper; it is not filesystem sandboxing.
 
-## Agent iteration
+## Verification
 
 ```bash
 cargo test --workspace --locked
 bash scripts/check-fixtures.sh
 cargo fmt --all --check
+cargo run --locked --quiet -p rusnix-derive --bin check-rust-spacing
 cargo clippy --workspace --all-targets --locked -- -D warnings
 ```
 
@@ -386,15 +398,19 @@ conflicts, generated syntax/static-binding failures, and an explicitly unmapped
 error. Tests also cover lazy-context loss, structured/text/source-map adapters,
 escaping/interpolation, integer boundaries, store isolation, and CLI artifacts.
 Selective scalar/list evaluation, cloned-expression path recovery, and a live
-source-map-only failure are covered too. Fourteen committed snapshots compare the stable Rust-facing diagnostic surface,
-including actual source locations and underlying reasons. Missing Nix tooling
+source-map-only failure are covered too. Committed [diagnostic snapshots](tests/snapshots/)
+compare the stable Rust-facing diagnostic surface, including actual source
+locations and underlying reasons. Missing Nix tooling
 fails tests instead of silently skipping the central experiment.
 
 The fixture script reruns snapshots and saves all CLI cases under
 `target/diagnostic-fixtures/`. Failed fixtures are expected and their diagnostic
 kinds are checked. Rust's type failure is covered by `cargo test` rather than
-being passed to Nix. The original small warm suite took under one second; the interop suite
-also verifies the pinned submodule and evaluates packages.
+being passed to Nix. The [UI expectation manifest](tests/ui/expected.json) is the
+source of truth for compile-fail cases and expected errors. Its harness compiles
+the original fixtures through Cargo with locked, offline dependencies and the
+active target, profile and compiler flags; it checks codes, primary spans and
+causal labels rather than full compiler wording.
 Cargo's first dependency acquisition may need network access; once cached,
 append `--offline` to Cargo commands. Nix expressions never fetch network data.
 
@@ -406,7 +422,7 @@ implemented.
 
 ## NixOS module experiment
 
-The new frontend lives in `rusnix-ir/nixos.rs`; lowering, pinned source staging,
+The module frontend lives in `rusnix-ir/nixos.rs`; lowering, pinned source staging,
 and module-specific diagnostic translation live in `rusnix-nix/nixos.rs`.
 The existing IR, AST, renderer, source maps, and subprocess boundary are reused.
 
@@ -429,12 +445,17 @@ its `enable` takes `bool` and `ports` takes `Vec<u16>`. The generic
 strings to the genuine upstream integer-list option. Local typed setters capture
 caller locations through to their semantic assignments. IR module imports and
 assertions have their own origins; no Nix syntax is exposed by this API.
+Assertion conditions and generated imports receive scoped IR validation before
+lowering, so escaped callback parameters and invalid paths produce validation
+diagnostics with Rust origins.
 
 **Evaluation surface:** pinned nixpkgs commit
 `8b27c1239e5c421a2bbc2c65d52e4a6fbf2ff296` (24.11), with its complete library
-and four modules staged from the unmodified upstream submodule. See `vendor/README.md`
-and `vendor/nixpkgs-pin.json`. Every listed file is SHA-256 checked, then copied
-into the disposable session. The library is imported from there offline.
+and four modules staged from the unmodified upstream submodule. See
+`vendor/README.md` and `vendor/nixpkgs-pin.json`. The backend reads the revision
+and file hashes from that manifest. Every listed file is SHA-256 checked once per
+process, then copied once into each disposable session. The library is imported
+from there offline.
 
 `nixos-driver.nix` calls actual `lib.evalModules`, imports the upstream assertions
 option declaration and generated module, and selects `result.config` using an
@@ -549,12 +570,8 @@ retains external filenames when no Rust boundary matches. Transitive causal
 dependency graphs remain unproven. Hashing/staging adds a
 small dependency (`sha2`) and assumes the initialized submodule is available relative
 to the build workspace. The harness does not prove installed binary portability.
-Generated module source is 486–979 bytes for these fixtures, plus a shared
-1,635-byte driver; one-module-per-definition adds scaffolding but no eager
-wrappers. The core design remains Rust IR → backend AST → source map/metadata.
-
-The original 9 NixOS tests and all earlier snapshots still pass. The current
-full verification result and multi-origin findings follow below.
+One module per definition adds scaffolding without eager forcing. The core
+design remains Rust IR → backend AST → source map/metadata.
 
 ## Multi-origin module diagnostics
 
@@ -704,26 +721,12 @@ and `_file` markers; this is source identity, not unique module-instance identit
 All original raw diagnostics remain retained unchanged. Single `primary` users
 must migrate to `origins` to avoid discarding contributors.
 
-The evaluator/driver and store-selection helper were not expanded for this
-experiment. No broad forcing, metadata probe, extra fetch, build, activation,
-or host-store operation was added. An unselected conflicting option leaves
-selected ports usable. All prior lazy/context/source-map/compiler/store tests
-pass. Generated fixture modules are 781–1,322 bytes; nested imports and small
-priority payloads are the added scaffolding.
-
-Run the new cases with `check-nixos <fixture> --out <directory>`, or run
-`scripts/check-fixtures.sh` for all old/new cases and reviewable artifacts.
-The multi-origin phase added 9 merge/causal-set integration tests, 2 adapter/
-rendering unit tests, and 1 CLI test, bringing that phase to 49 passing tests.
-All four new rendering snapshots remain passing. The subsequent typed showcase
-brought the typed-example phase to **67 passing tests**, zero failures or ignored
-tests (58 ordinary tests and 9 compile-fail doctests). Its additions are 10 live
-example/comparison tests, 1 UI diagnostic-code test, and 7 compile-fail doctests.
-Formatting, Clippy with warnings denied, and the full fixture script pass.
-
-The provenance experiment is complete at this scope. The following typed showcase phase demonstrates frontend invariants that reject
-important invalid configurations before Nix evaluation. No diagnostic infrastructure
-was expanded for the showcase. See `examples/README.md`.
+An unselected conflicting option leaves selected ports usable. The generated
+modules retain lazy evaluation, operation contexts and source-map ancestry.
+Run cases with `check-nixos <fixture> --out <directory>`, or run
+`scripts/check-fixtures.sh` for diagnostic snapshots and reviewable artifacts.
+The [typed showcase](examples/README.md) demonstrates frontend invariants that
+reject invalid configurations before Nix evaluation.
 
 ## References
 
@@ -956,58 +959,29 @@ filesystem-relative compiler artifacts, local input paths, and one fixed pinned
 package root. Rust-origin IDs and multi-origin diagnostics remain unchanged.
 
 
-Current verification: `cargo test --workspace --locked` passes **238 tests**
-(233 ordinary tests and 5 doctests, including 3 compile-fail cases; zero
-failed/ignored). The interop target has 24 tests; structured_interop has 23
-and PostgreSQL has 56.
-Formatting and all-target Clippy with warnings denied pass.
-The fixture script passes 203 integration checks, twelve runnable showcase
-examples and 20 original CLI fixture invocations. All 14 diagnostic snapshots remain passing.
-Examples print generated source without Nix evaluation, fixture construction or
-artifact writes. Tests reuse the actual authoring models for comparison,
-combined interop behavior and symbolic artifact reuse.
+Examples print generated source without Nix evaluation or artifact writes.
+Tests reuse the actual authoring models for comparison, combined interop behavior
+and symbolic artifact reuse. Executable Nix comparisons live in
+`tests/comparisons/`; the local opaque Nix input is
+`tests/fixtures/nix-interop-input.nix`.
 
-
-The original examples cleanup kept eight single Rust files under `examples/`,
-with models and typed functions before lowering. It used manual conversion for
-complete components; the nine small examples now use automatic structural lowering and
-explicit value mappings.
-Reusable Endpoint values have no global conversion: the typed-submodule example
-now owns its placement through a derived Root → Demo → Endpoint tree. TLS requires
-both Certificate and PrivateKey. The model-evolution fixture checks two incomplete
-policy consumers; the domain fixture checks both a field and a function argument.
-The native Nix assertion test also rejects TLS without its key. IR/AST separation,
-diagnostics, lazy evaluation and store isolation are preserved. Executable
-Nix comparisons now live in `tests/comparisons/`; the local opaque Nix input is
-`tests/fixtures/nix-interop-input.nix`. That cleanup added no showcase examples; symbolic-option was added subsequently.
-
-The first authoring abstraction is `IntoConfig::into_config(self) -> Config`
-(tracked caller, unsealed) plus `NixosModule::empty().add(component)`.
-Each add stores a separate child NixosModule; bindings are never flattened
-across components. Config remains a contribution with duplicate-path validation,
-and Config::set remains the supported generic escape hatch. Config itself also
-implements IntoConfig. Explicit per-contribution priority continues to use
+`IntoConfig::into_config(self) -> Config` is tracked and unsealed.
+`NixosModule::empty().add(component)` stores a separate child module for each
+component; bindings are never flattened across components. Config retains
+its duplicate-path validation and also implements IntoConfig. Explicit
+per-contribution priority uses
 `module(NixosModule::new(component.into_config()).priority(...))`.
-The six authoring tests exercise two different typed components, individually
-valid definitions that conflict together with both Rust origins, list merging,
-priority filtering, caller forwarding and previously captured expression origins.
-This authoring step reused the existing backend, diagnostics, opaque handles and store-isolation machinery.
 Conversion-generated bindings identify the into_config/add authoring call;
 untracked adapter helpers stop caller forwarding, so tracked lowering helpers
 remain important. During priority filtering Nix can inspect the head of an
 unwrapped definition; an override wrapper keeps its discarded content lazy.
-This is upstream module behavior, not additional Rusnix forcing.
 
-Domain-neutral cleanup removed `rusnix_ir::typed`, LogLevel, OpenSsh and the
-ExistingModule catalogue from core. All examples define their own small
-models directly. Fixture-only SSH/module helpers live in `tests/support/nixos.rs`.
-Pinned imports now carry a validated relative path as data, rendered through the
-Nix AST with escaped string addition; opaque references are unchanged.
-The domain UI fixtures compile actual example-owned types (or a deliberately evolved
-test-local enum) and check codes/spans/type labels. They preserve the former nine
-domain/example compile-fail doctest guarantees, including the moved SSH setter
-contract; the two remaining core compile-fail doctests cover generic Expr and
-opaque PackageRef/ModuleRef category safety. No domain aliases are retained.
+Domain models belong to the examples. Fixture-only SSH/module helpers live in
+`tests/support/nixos.rs`. Pinned imports carry validated relative paths as data,
+rendered through the Nix AST with escaped string addition. UI fixtures compile
+actual example-owned types or deliberately evolved test-local enums and check
+codes, spans and type labels. See [verification](#verification) for the shared
+checks and authoritative fixture manifest.
 
 ## Explicit symbolic NixOS dependencies
 
@@ -1157,14 +1131,14 @@ only that ordinary Nix input: `"example --port=5432"` becomes
 Another ordinary module's `lib.mkForce 7432` wins over both the normal definition
 and Rusnix's default. NixOS alone selects the final value.
 
-Nine tests cover the base value, unchanged-artifact override, priority selection,
+[Symbolic option tests](crates/rusnix-nix/tests/symbolic_options.rs) cover the base
+value, unchanged-artifact override, priority selection,
 the same symbolic text accepted by the real upstream OpenSSH `banner` option,
 division-by-zero provenance and source-map fallback, missing-reference provenance,
 lazy selection, bool/string/list uses, validation and escaped paths.
 `tests/ui/symbolic-integer-as-boolean.rs` checks E0308 with a primary span and
 `Expr<bool>`/`Expr<i64>` labels. An integer dependency cannot be an assertion
-condition. The UI suite has thirty cases checking thirty-two errors (including fifteen
-uncoded macro errors).
+condition.
 An unused command dependency leaves a throwing port unevaluated; selecting the
 command demands it and maps the failure to the Rust reference. No `deepSeq` or
 global forcing is generated.
@@ -1185,31 +1159,23 @@ there is no whole-config handle, dynamic traversal, symbolic iteration or Rust
 fixed-point execution. All evaluations use the unchanged disposable-store helper.
 
 
-The derive integration target has fifteen evaluator tests for nested placement, literal renames,
-newtypes, flatten/skip, generics/lifetimes, automatic unit-enum lowering, explicit
-structural enum mappings, record-list laziness and provenance (including source-map fallback), independent NixOS
-merges/priorities and two-origin conflicts, native handle preservation, real
-package resolution, symbolic override compatibility and local naming conventions
-with explicit rename precedence. Three proc-macro naming tests cover mechanical
-conversion rules. Thirty-eight UI fixtures check forty errors (nineteen coded
-rustc errors and twenty-one macro errors),
-with primary spans and relevant tokens instead of full compiler snapshots.
-Dependencies reuse the already cached syn/quote/proc-macro2 versions; no fetch
-was needed. Nix invocation/store protections are unchanged. NixOS can still
-inspect scalar heads while processing freeform namespaces; this is upstream
-module behavior, not new derive forcing.
+[Derive integration tests](crates/rusnix-nix/tests/derive.rs) cover nested
+placement, literal renames, newtypes, flatten/skip, generics/lifetimes,
+automatic unit-enum lowering, explicit structural enum mappings, record-list
+laziness and provenance, independent NixOS merges/priorities and two-origin
+conflicts, native handles, package resolution, symbolic overrides and naming
+conventions. Proc-macro and UI tests cover naming rules and invalid annotations.
+NixOS can inspect scalar heads while processing freeform namespaces; list
+elements remain deferred.
 
-
-The inline-module authoring target has nineteen integration tests for local structure,
-external reusable values, automatic unit enums/custom converters, multiple roots, real
-NixOS merges/priorities and two-origin conflicts, operation provenance/laziness,
-and native symbolic/opaque handles and actual package resolution. The symbolic
-example uses the new boundary; its existing same-artifact override tests still
-reuse its actual component. Typed-submodule retains fine-grained derives for its
-reusable types and uses the boundary for its local tree. Proc-macro tests reject
-out-of-line modules without loading files. The existing trait APIs, backend and
-store-isolation helper remain authoritative.
-
+[Inline-module tests](crates/rusnix-nix/tests/config_module.rs) cover local
+structure, external reusable values, automatic unit enums/custom converters,
+multiple roots, NixOS merges/priorities, two-origin conflicts, operation
+provenance/laziness, symbolic/opaque handles and package resolution. The symbolic
+example uses the module boundary; its override tests reuse the same generated
+artifact. Typed-submodule retains fine-grained derives for reusable types and
+uses the boundary for its local tree. Proc-macro tests reject out-of-line modules
+without loading files.
 
 The opaque boundary also supports scoped `NixValue::function` callbacks, lazy
 `if_else` choices, equality and context-preserving text conversion. Existing Nix

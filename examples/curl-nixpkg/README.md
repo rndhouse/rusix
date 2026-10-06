@@ -80,10 +80,10 @@ order, configure flags, shell bytes/string contexts, metadata and passthru.
 Nothing affecting a derivation hash is normalized away. Linux's default recipe is
 `/nix/store/cb2y179hgas7837a8wnx08gxawn61p1m-curl-8.11.0.drv`.
 
-The suite covers **72 equal full package projections**, one equal public-function
-interface projection, and **17 paired rejection cases** across 22 Rust tests.
-Five additional generic-operation tests cover builtin access, native assertions
-and record union, including laziness and precise source attribution.
+The suite compares full package projections, the public-function interface and
+paired rejection cases. [Generic-operation tests](../../crates/rusnix-nix/tests/nix_operations.rs)
+cover builtin access, native assertions and record union, including laziness and
+precise source attribution.
 
 The matrix includes both directions of 14 independent feature switches; all five
 valid TLS choices and all 11 invalid multi-backend combinations; minimal/full

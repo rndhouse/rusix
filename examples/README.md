@@ -60,8 +60,8 @@ self-contained; there is no example-types crate. The examples use direct tuple
 construction and only the derives needed for lowering. Policy functions borrow
 Mode so the same choice can feed several consumers without Clone/Copy. A few
 types, fields and model functions remain public so integration/UI tests can import the actual
-example code; other declarations are private. Production validation and builders
-are deliberately omitted. Each main unwraps only compilation of its known-valid
+example code; other declarations are private. The small showcases omit production
+validation and builders. Each main unwraps only compilation of its known-valid
 model, rather than introducing a separate error-handling API.
 
 `Transport::Tls` requires both credentials; invalid-states additionally gives
@@ -185,8 +185,9 @@ priorities and two-origin conflicts. The
 [module tests](../crates/rusnix-nix/tests/config_module.rs) also cover external
 reusable values, explicit/manual conversions and multiple roots. The older
 [authoring tests](../crates/rusnix-nix/tests/authoring.rs) still verify handwritten
-adapter compatibility. Only nix-interop uses Config::set, for its intentionally
-labelled dynamic escape hatch; it remains available for unsupported/dynamic paths.
+adapter compatibility. Nix-interop uses Config::set for its labelled dynamic
+escape hatch; curl uses it to export the factory and selected package. It remains
+available for unsupported/dynamic paths.
 
 OptionRef declares a typed dependency resolved after NixOS merging, with no Rust
 read operation. [Symbolic option](symbolic-option.rs) shows the dependency in generated Nix;
@@ -194,9 +195,9 @@ integration tests prove an ordinary Nix override changes dependent output withou
 rerunning conversion or lowering. Expected Rust
 types constrain expression operations; NixOS remains authoritative for schemas.
 
-All ten showcase files use the module boundary for their local tree. The
-remaining explicit IntoRusnixValue derives are intentional: reusable domain
-values outside that module (credentials, endpoint fields and account identities),
+Typed configuration roots in the showcases use the module boundary for their
+local tree. The remaining explicit IntoRusnixValue derives are intentional:
+reusable domain values outside that module (credentials, endpoint fields and account identities),
 and function-local Plain/Tls records inside semantic enum conversions. The latter
 keep each mapping self-contained; the module macro does not inspect function
 bodies. No showcase type explicitly derives IntoConfig; local roots use the module macro.
@@ -593,13 +594,12 @@ and comparison machinery belong to tests. There is no PostgreSQL type in core.
 cargo run --locked -p rusnix-nix --example invalid-states
 cargo run --locked -p rusnix-nix --example nix-interop
 cargo run --locked -p rusnix-nix --example symbolic-option
-cargo test --workspace --locked
-cargo fmt --all --check
-cargo clippy --workspace --all-targets --locked -- -D warnings
-bash scripts/check-fixtures.sh
 ```
 
-All twelve showcase examples compile and run without invoking Nix: they print generated
+Run the shared [workspace verification checks](../README.md#verification) for
+Rust tests, formatting, structural spacing, Clippy and diagnostic fixtures.
+
+All showcase examples compile and run without invoking Nix: they print generated
 source. The fixture script runs every example, integration checks and existing CLI
 fixtures. Only tests and CLI checks perform evaluation, always through the
 isolated-store helper.
@@ -616,33 +616,32 @@ isolated-store helper.
 | nix-interop | Opaque handles, composition, explicit escape | interop.rs; real lookups, boundaries and assertions |
 | symbolic-option | Typed dependency and automatic local unit structure | symbolic_options.rs; artifact reuse, override, priority and provenance |
 | postgresql-nixos-module | Domain provisioning, symbolic derivation and real nixpkgs builders | postgresql.rs; full NixOS equivalence, overrides and failures |
+| git-nixpkg | Native package function, overrides and reusable derivation model | git.rs; ordinary Nix equivalence and override behavior |
+| curl-nixpkg | Native package function, typed flags and symbolic package dependencies | curl.rs; ordinary Nix equivalence and override behavior |
 
 DOCUMENTATION stays here: comparisons, expected outcomes, test links and limitations.
 Tests retain reviewable generated Nix/results under `target/typed-examples/` and
 `target/symbolic-options/`; compiler JSON goes under `target/typed-examples/ui/`.
 
-Seven important Nix comparisons live in `tests/comparisons/` as executable test
-data. Backend tests import the actual Rust examples and compare
-their evaluated outputs with these modules, including native enum/assertion
-rejections. Fifty UI fixtures back the documented invalid Rust cases through the
-code/span/type-label checker. They import actual example-local types and functions
-or deliberately evolve a test-local enum; the moved fixture-only SSH helper's
-contract is also checked. Two fixtures verify two independent errors each.
-The symbolic-reference fixture rejects an integer expression as a boolean
-assertion condition with E0308. A derived PackageRef field rejects ModuleRef
-with E0308. Derive errors reject container prefixes, automatic data-carrying enum conversion
-and conflicting attributes. Enum fixtures also reject name collisions, unsupported
-variant mappings and unsupported naming conventions. Additional cases reject invalid/duplicate rename_all,
-rename_all on transparent newtypes, and misplaced field rename_all. The forty-six
-fixtures check forty-eight errors using codes where available, useful primary spans
-and relevant messages/type labels.
-Eight of these fixtures reject unknown/unused text arguments, duplicate names,
-malformed braces, positional placeholders and unsupported formatting.
-The module API also rejects missing/duplicate roots, enum/tuple roots, macro
-arguments and category mistakes. Core has three compile-fail doctests for generic
-Expr, opaque handle categories and unmapped data-carrying enums, plus runnable
-module-authoring, option-view and symbolic-text doctests. No complete
-compiler-wording snapshots are required.
+Executable Nix comparisons live in `tests/comparisons/` as test data. Backend
+tests import the actual Rust examples and compare their evaluated outputs with
+these modules, including native enum/assertion rejections.
+[UI expectations](../tests/ui/expected.json) register the invalid Rust cases and
+expected error counts. The harness uses Cargo with locked, offline dependencies,
+the active target/profile and inherited compiler flags. It compiles the original
+fixture files, including imports of actual example-local types and functions.
+Checks require diagnostic codes where available, useful primary spans and causal
+messages/type labels; complete compiler-wording snapshots are unnecessary.
+
+UI fixtures cover deliberately evolved policy enums, the fixture-only SSH
+setter contract, integer expressions used as boolean assertion conditions,
+PackageRef/ModuleRef category mistakes, invalid derive attributes and naming
+collisions. They also reject malformed symbolic text placeholders, unknown or
+unused arguments, duplicate names and unsupported formatting. Module fixtures
+reject missing/duplicate roots, enum/tuple roots, macro arguments and category
+mistakes. Core compile-fail doctests cover generic Expr, opaque handle categories
+and unmapped data-carrying enums, alongside runnable module-authoring, option-view
+and symbolic-text doctests.
 
 The guarantees apply to the typed API. Explicit primitive extraction, opaque
 `as_value()`, generic Config and raw IR can bypass them. Later independent NixOS

@@ -30,6 +30,7 @@ pub const NIXPKGS_REVISION: &str = "8b27c1239e5c421a2bbc2c65d52e4a6fbf2ff296";
 
 /// Minimal module-evaluation driver for staged artifacts, not a full system evaluation.
 /// Accepts `nixpkgs`, `module`, literal `selection` segments and `checkAssertions`.
+/// Interop can supply `pkgs` and request package metadata with `packageSummary`.
 /// Exposed for backend/CLI artifact inspection; ordinary evaluation uses [`NixSession`].
 pub const DRIVER: &str = include_str!("nixos-driver.nix");
 
