@@ -1,22 +1,37 @@
 # Pinned nixpkgs evaluation sources
 
-`nixpkgs/` contains unmodified upstream files from NixOS/nixpkgs release 24.11,
-commit `8b27c1239e5c421a2bbc2c65d52e4a6fbf2ff296` (the dereferenced release tag).
-The original upstream license is in `nixpkgs/COPYING`.
+`nixpkgs/` is a Git submodule of <https://github.com/NixOS/nixpkgs>, pinned to
+release 24.11 commit `8b27c1239e5c421a2bbc2c65d52e4a6fbf2ff296` (the dereferenced
+release tag). The upstream license is in `nixpkgs/COPYING`.
 
-Source archive:
-`https://codeload.github.com/NixOS/nixpkgs/tar.gz/8b27c1239e5c421a2bbc2c65d52e4a6fbf2ff296`
+From the Rusnix repository root, initialize it with:
 
-Archive SHA-256:
-`b4e794d1b935c1960e95526db7ed394f886064b4d974684dbc4a59d4012e1028`
+```bash
+git submodule update --init --depth=1
+```
 
-`nixpkgs/PIN.json` records the revision, archive digest, and individual SHA-256
-digests for all 232 upstream files (about 1 MB of content). Rusnix verifies every
-listed file once per process before copying it into each disposable session.
-The manifest itself is reviewed repository data, not an upstream signature.
+`.gitmodules` requests a shallow checkout. Initialization needs network access
+unless the pinned commit is already available locally; evaluation never downloads
+sources. A normal Rusnix clone does not include nixpkgs data. Initializing the
+submodule downloads its full source tree, without its full Git history.
 
-Selection: all of upstream `lib/`, root `.version`, `.version-suffix`, `COPYING`,
-and these four modules:
+The original Git package definition is directly browsable at
+[`nixpkgs/pkgs/applications/version-management/git/default.nix`](nixpkgs/pkgs/applications/version-management/git/default.nix),
+with patches and `update.sh` alongside it.
+
+Before staging sources, Rusnix checks that the checkout exists, HEAD matches the
+compiled-in revision, and there are no modified, untracked, or ignored files.
+Missing or mismatched submodules are tooling failures with initialization advice.
+Git must be available on PATH. Verification is cached while sessions share a
+source handle; keep the checkout unchanged while evaluation is running.
+
+`nixpkgs-pin.json` records that same revision and individual SHA-256 digests for
+232 upstream files (about 1 MB of content). The minimal module evaluator verifies
+every listed file once per process and copies it into each disposable session.
+The manifest is reviewed repository data, not an upstream signature.
+
+The minimal selection is all of upstream `lib/`, root `.version`,
+`.version-suffix`, `COPYING`, and these four modules:
 
 - `nixos/modules/services/networking/ssh/sshd.nix`
 - `nixos/modules/misc/assertions.nix`
@@ -24,27 +39,17 @@ and these four modules:
 - `nixos/modules/system/activation/top-level.nix`
 
 The last file is a reference for assertion enforcement, never an evaluated
-import. The original minimal tests do not load a package set or system builder.
-Preparation downloaded the archive using HTTPS and extracted these files as
-ordinary filesystem data; it ran no Nix fetching command and used no Nix store.
-The original module tests use this checked-in subset offline. To reproduce
-the subset, extract exactly the selection above from that archive and compare
-every file with `PIN.json`; upstream files must remain byte-for-byte unchanged.
+import. The minimal evaluator does not load a package set or system builder.
 
+Interoperability sessions link the same full checkout as `nixpkgs-full`; there is
+no archive extraction. Source files are shared, but stores are always disposable
+and private. Dropping a session leaves the submodule intact. Interop imports
+upstream `default.nix` with explicit system/config/overlays and uses the actual
+`config/system-path.nix` option declarations. Metadata evaluation can create
+`.drv` records and source paths exclusively in the disposable store. It does not
+build outputs. Import-from-derivation is disabled; substitutions and builders
+are empty. All Nix commands use the private offline helper.
 
-The interoperability experiment also vendors the **same full source archive** as
-`nixpkgs-source.tar.gz` (47,237,858 bytes compressed (about 45 MiB), 178 MB of file content). It was
-copied from the already cached archive above; this phase made no network fetch.
-The backend checks its SHA-256 before unpacking it into an ordinary temporary
-source directory. Sessions share that source tree while alive, but never share
-stores. Each session links it as `nixpkgs-full`; the last owner removes the tree.
-This retains upstream package discovery and evaluation without maintaining a
-hand-selected dependency closure or Rust package metadata. Both source copies
-have the same pin. No archive-refresh or automatic downloading step is provided.
-
-Interop imports upstream `default.nix` with explicit system/config/overlays and
-uses the actual `config/system-path.nix` option declarations. Metadata evaluation
-can create `.drv` records and source paths, exclusively in the disposable store.
-It does not build outputs. Import-from-derivation is disabled, substitutions and
-builders are empty, and all evaluation commands use the private offline helper.
-The minimal evaluator does not import the system-building top-level module.
+To update nixpkgs deliberately, update the submodule gitlink, the backend's
+`NIXPKGS_REVISION`, and this checksum manifest together, then run all repository
+checks. No automatic update or downloading step runs during evaluation.

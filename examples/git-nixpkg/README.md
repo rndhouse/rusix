@@ -3,7 +3,7 @@
 This example authors Git **2.47.0** in Rust/Rusnix, replacing the package expression
 at `pkgs/applications/version-management/git/default.nix` in nixpkgs revision
 **`8b27c1239e5c421a2bbc2c65d52e4a6fbf2ff296`**. The reference is the repository's
-checked, vendored nixpkgs archive. This is a **package definition**, complementing
+checked, pinned `vendor/nixpkgs` submodule. This is a **package definition**, complementing
 the [PostgreSQL NixOS module](../postgresql-nixos-module/README.md).
 
 - `model.rs`: ordinary Rust feature choices. `Perl` groups SVN/send-email with the

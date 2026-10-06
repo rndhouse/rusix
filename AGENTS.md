@@ -13,8 +13,8 @@ disposable local store. Never invoke Nix directly against the host store, even
 for evaluation. Do not run activation, deployment, profile, rebuild, host GC,
 privileged operations, or change host Nix configuration. Do not add network
 fetches, flakes, or builders to this POC. The explicitly requested NixOS
-experiment uses checked vendored nixpkgs sources (the minimal subset and the same pinned
-full archive for interoperability); evaluation is offline.
+experiment uses the checked, pinned `vendor/nixpkgs` Git submodule (a staged minimal
+subset and the same full checkout for interoperability); evaluation is offline.
 
 Run `cargo test --workspace --locked`, `cargo fmt --all --check`, and
 `cargo clippy --workspace --all-targets --locked -- -D warnings` after changes.
@@ -38,8 +38,8 @@ cargo run --locked --quiet -p rusnix-derive --bin check-rust-spacing
 ```
 
 After rustfmt, its `--fix` option inserts missing blank lines. The checker parses
-all repository `.rs` files except `target/` and `.git`; it checks AST item lists,
-not opaque macro tokens or strings/docs.
+all repository `.rs` files except `target/`, `.git`, and nested Git checkouts;
+it checks AST item lists, not opaque macro tokens or strings/docs.
 
 `bash scripts/check-fixtures.sh` compares the evaluator diagnostic snapshots and
 saves CLI artifacts under `target/diagnostic-fixtures/`. Snapshots live in

@@ -5,7 +5,7 @@ nixpkgs builders. Its reference is **nixpkgs
 `8b27c1239e5c421a2bbc2c65d52e4a6fbf2ff296`**, specifically
 [`pkgs/by-name/cu/curlMinimal/package.nix`](https://github.com/NixOS/nixpkgs/blob/8b27c1239e5c421a2bbc2c65d52e4a6fbf2ff296/pkgs/by-name/cu/curlMinimal/package.nix):
 227 lines, curl **8.11.0**, 53 arguments (35 required, 18 with defaults).
-The checked archive in `vendor/` supplies the reference offline.
+The checked `vendor/nixpkgs` submodule supplies the reference offline.
 
 - `model.rs` offers a small optional Rust authoring surface. `TlsBackend` makes a
   concrete choice of at most one backend; it does not replace the public Nix API.

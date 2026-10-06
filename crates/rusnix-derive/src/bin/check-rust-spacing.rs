@@ -132,7 +132,11 @@ fn rust_files(root: &Path) -> std::io::Result<Vec<std::path::PathBuf>> {
     for entry in fs::read_dir(root)? {
         let entry = entry?;
         let kind = entry.file_type()?;
-        if kind.is_dir() && entry.file_name() != "target" && entry.file_name() != ".git" {
+        if kind.is_dir()
+            && entry.file_name() != "target"
+            && entry.file_name() != ".git"
+            && !entry.path().join(".git").exists()
+        {
             files.extend(rust_files(&entry.path())?);
         } else if kind.is_file() && entry.path().extension().is_some_and(|s| s == "rs") {
             files.push(entry.path());
@@ -202,6 +206,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn upstream_submodule_rust_files_are_excluded() {
+        let root = root();
+        let files = rust_files(&root).unwrap();
+        assert!(!files.is_empty());
+        assert!(
+            files
+                .iter()
+                .all(|path| !path.starts_with(root.join("vendor")))
+        );
+    }
 
     #[test]
     fn modules_impls_traits_and_foreign_items() {

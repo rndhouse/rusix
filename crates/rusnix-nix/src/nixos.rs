@@ -24,8 +24,8 @@ use std::{fs, path::Path, sync::OnceLock};
 #[path = "nixos_context_audit.rs"]
 mod context_audit;
 
-/// Exact nixpkgs Git revision used by both local test inputs: the minimal NixOS
-/// option declarations and the full offline source archive.
+/// Exact nixpkgs submodule revision used for the minimal NixOS option
+/// declarations and full offline package evaluation.
 pub const NIXPKGS_REVISION: &str = "8b27c1239e5c421a2bbc2c65d52e4a6fbf2ff296";
 
 /// Minimal module-evaluation driver for staged artifacts, not a full system evaluation.
@@ -375,9 +375,10 @@ fn pinned_files() -> Result<&'static PinnedFiles, String> {
 
     SNAPSHOT
         .get_or_init(|| {
-            let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../vendor/nixpkgs");
+            let source = crate::interop::full_source().map_err(|e| e.reason.clone())?;
+            let root = &source.path;
             let pin: Pin = serde_json::from_slice(
-                &fs::read(root.join("PIN.json")).map_err(|e| e.to_string())?,
+                &fs::read(root.join("../nixpkgs-pin.json")).map_err(|e| e.to_string())?,
             )
             .map_err(|e| e.to_string())?;
             if pin.revision != NIXPKGS_REVISION {

@@ -4,13 +4,11 @@ use crate::{
     ast::{BinaryOp, Builtin, NixExpr, NixKind},
 };
 use rusnix_ir::interop::{AttrPath, Reference, Source};
-use sha2::{Digest, Sha256};
 use std::{
-    fs,
     path::{Path, PathBuf},
+    process::Command,
     sync::{Arc, Mutex, OnceLock, Weak},
 };
-use tempfile::TempDir;
 
 fn string(value: impl Into<String>) -> NixExpr {
     NixExpr::plain(NixKind::String(value.into()))
@@ -101,11 +99,54 @@ pub(crate) fn lower_reference(reference: &Reference) -> NixExpr {
     }
 }
 
-// Only ordinary source files are shared; each NixSession still owns its own
-// store/eval-store. Weak caching lets the last session remove the expanded tree.
+// Only the checked source checkout is shared; each NixSession still owns its
+// own store/eval-store. Revalidate when no sessions retain the source handle.
 pub(crate) struct FullSource {
-    _temporary: TempDir,
     pub(crate) path: PathBuf,
+}
+
+fn check_source(path: &Path, revision: &str) -> Result<(), String> {
+    if !path.join(".git").exists() || !path.join("default.nix").is_file() {
+        return Err(
+            "nixpkgs submodule is missing; run git submodule update --init --depth=1".into(),
+        );
+    }
+
+    let git = |args: &[&str]| -> Result<String, String> {
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(path)
+            .args(args)
+            .env_remove("GIT_DIR")
+            .env_remove("GIT_WORK_TREE")
+            .env_remove("GIT_INDEX_FILE")
+            .output()
+            .map_err(|e| format!("cannot verify nixpkgs submodule: {e}"))?;
+        if !output.status.success() {
+            return Err(format!(
+                "cannot verify nixpkgs submodule: {}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            ));
+        }
+
+        String::from_utf8(output.stdout).map_err(|e| e.to_string())
+    };
+
+    if git(&["rev-parse", "HEAD"])?.trim() != revision {
+        return Err("nixpkgs submodule revision mismatch; run git submodule update --init".into());
+    }
+    if !git(&[
+        "status",
+        "--porcelain",
+        "--untracked-files=all",
+        "--ignored",
+    ])?
+    .is_empty()
+    {
+        return Err("nixpkgs submodule has modified or untracked files".into());
+    }
+
+    Ok(())
 }
 
 pub(crate) fn full_source() -> Result<Arc<FullSource>, Box<Diagnostic>> {
@@ -120,32 +161,10 @@ pub(crate) fn full_source() -> Result<Arc<FullSource>, Box<Diagnostic>> {
         return Ok(source);
     }
 
-    let archive = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../vendor/nixpkgs-source.tar.gz");
-    let bytes = fs::read(archive).map_err(|e| Diagnostic::tooling(e.to_string()))?;
-    if format!("{:x}", Sha256::digest(&bytes))
-        != "b4e794d1b935c1960e95526db7ed394f886064b4d974684dbc4a59d4012e1028"
-    {
-        return Err(Diagnostic::tooling("full nixpkgs archive hash mismatch").into());
-    }
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../vendor/nixpkgs");
+    check_source(&path, crate::nixos::NIXPKGS_REVISION).map_err(Diagnostic::tooling)?;
 
-    let temporary = tempfile::Builder::new()
-        .prefix("rusnix-source-")
-        .tempdir()
-        .map_err(|e| Diagnostic::tooling(e.to_string()))?;
-    let mut tar = tar::Archive::new(flate2::read::GzDecoder::new(bytes.as_slice()));
-    tar.unpack(temporary.path())
-        .map_err(|e| Diagnostic::tooling(e.to_string()))?;
-    let path = temporary
-        .path()
-        .join(format!("nixpkgs-{}", crate::nixos::NIXPKGS_REVISION));
-    if !path.join("default.nix").is_file() {
-        return Err(Diagnostic::tooling("full nixpkgs archive revision/root mismatch").into());
-    }
-
-    let source = Arc::new(FullSource {
-        _temporary: temporary,
-        path,
-    });
+    let source = Arc::new(FullSource { path });
 
     *cache = Arc::downgrade(&source);
     Ok(source)
@@ -239,4 +258,54 @@ pub(crate) fn module(reference: &Reference, origin: &rusnix_ir::Origin) -> NixEx
         ]),
         origin.clone(),
     )
+}
+
+#[cfg(test)]
+mod source_tests {
+    use super::*;
+
+    #[test]
+    fn initialized_submodule_must_match_the_pinned_revision() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../vendor/nixpkgs");
+        check_source(&path, crate::nixos::NIXPKGS_REVISION).unwrap();
+        assert!(
+            check_source(&path, "0000000000000000000000000000000000000000")
+                .unwrap_err()
+                .contains("revision mismatch")
+        );
+    }
+
+    #[test]
+    fn missing_checkout_has_initialization_advice() {
+        let missing = tempfile::tempdir().unwrap();
+        assert!(
+            check_source(missing.path(), crate::nixos::NIXPKGS_REVISION)
+                .unwrap_err()
+                .contains("git submodule update --init --depth=1")
+        );
+    }
+
+    #[test]
+    fn incomplete_or_untracked_checkout_is_rejected() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../vendor/nixpkgs");
+        let checkout = tempfile::tempdir().unwrap();
+        // Share existing local objects without downloading or creating commits.
+        let clone = Command::new("git")
+            .args(["clone", "--quiet", "--shared", "--no-checkout", "--"])
+            .arg(path)
+            .arg(checkout.path())
+            .output()
+            .unwrap();
+        assert!(
+            clone.status.success(),
+            "{}",
+            String::from_utf8_lossy(&clone.stderr)
+        );
+        std::fs::write(checkout.path().join("default.nix"), "{}\n").unwrap();
+        assert!(
+            check_source(checkout.path(), crate::nixos::NIXPKGS_REVISION)
+                .unwrap_err()
+                .contains("modified or untracked files")
+        );
+    }
 }

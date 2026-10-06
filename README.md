@@ -43,10 +43,20 @@ checks; generic configuration/IR escape hatches remain explicit.
 
 ## Run
 
-Prerequisites: Rust 1.88+ and `nix` plus `nix-instantiate` on PATH. Tested here
+Prerequisites: Git, Rust 1.88+ and `nix` plus `nix-instantiate` on PATH. Tested here
 with Rust 1.97.1 and Nix 2.34.8 on Linux. The live structured-diagnostic tests
 expect the `raw_msg`/`trace` fields provided by that Nix version. Older diagnostic
 formats have adapter coverage, not a tested cross-version compatibility promise.
+
+Initialize the pinned nixpkgs submodule before testing or evaluation:
+
+```bash
+git submodule update --init --depth=1
+```
+
+The submodule is configured for shallow clones. A normal Rusnix clone contains
+only this project; initialization downloads the pinned nixpkgs source tree without
+its full history. Once initialized, evaluation is offline. See [vendor/README.md](vendor/README.md).
 
 ```bash
 cargo test --workspace --locked
@@ -384,7 +394,7 @@ The fixture script reruns snapshots and saves all CLI cases under
 `target/diagnostic-fixtures/`. Failed fixtures are expected and their diagnostic
 kinds are checked. Rust's type failure is covered by `cargo test` rather than
 being passed to Nix. The original small warm suite took under one second; the interop suite
-also expands the source archive and evaluates packages (about five seconds here).
+also verifies the pinned submodule and evaluates packages.
 Cargo's first dependency acquisition may need network access; once cached,
 append `--offline` to Cargo commands. Nix expressions never fetch network data.
 
@@ -422,8 +432,8 @@ assertions have their own origins; no Nix syntax is exposed by this API.
 
 **Evaluation surface:** pinned nixpkgs commit
 `8b27c1239e5c421a2bbc2c65d52e4a6fbf2ff296` (24.11), with its complete library
-and four modules vendored as unmodified upstream files. See `vendor/README.md`
-and `vendor/nixpkgs/PIN.json`. Every listed file is SHA-256 checked, then copied
+and four modules staged from the unmodified upstream submodule. See `vendor/README.md`
+and `vendor/nixpkgs-pin.json`. Every listed file is SHA-256 checked, then copied
 into the disposable session. The library is imported from there offline.
 
 `nixos-driver.nix` calls actual `lib.evalModules`, imports the upstream assertions
@@ -537,7 +547,7 @@ Imported runtime-frame boundaries work for listed directly imported files.
 The multi-origin experiment below also uses upstream definition filenames and
 retains external filenames when no Rust boundary matches. Transitive causal
 dependency graphs remain unproven. Hashing/staging adds a
-small dependency (`sha2`) and assumes the vendored source is available relative
+small dependency (`sha2`) and assumes the initialized submodule is available relative
 to the build workspace. The harness does not prove installed binary portability.
 Generated module source is 486–979 bytes for these fixtures, plus a shared
 1,635-byte driver; one-module-per-definition adds scaffolding but no eager
@@ -749,10 +759,11 @@ Nix owns existence, object schemas, overlay semantics, and actual package type
 checking. `NixosModule::system_packages` accepts only PackageRef; `import_ref`
 accepts only ModuleRef. Typed user-defined models can coexist with these handles.
 
-Interop uses the full **already cached and now vendored** archive at the existing
-revision, verified by SHA-256 and expanded into disposable ordinary source files.
-The original minimal tests retain their small source subset. Full package roots
-use explicit `system = "x86_64-linux"`, `config = {}`, and handle-scoped overlays;
+Interop uses the full `vendor/nixpkgs` submodule at the existing revision,
+verified against the expected Git commit and checked for modified or untracked
+files before use. Sessions link the checkout as `nixpkgs-full`; evaluation never
+fetches or updates it. The original minimal tests retain their small staged source
+subset. Full package roots use explicit `system = "x86_64-linux"`, `config = {}`, and handle-scoped overlays;
 this is not yet a platform or nixpkgs-configuration API. The evaluator imports
 upstream `config/system-path.nix` to get the real systemPackages schema, forces
 only that option's definition priority to exclude unrelated full-system defaults,

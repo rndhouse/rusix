@@ -10,8 +10,9 @@ The compatibility reference is the nixpkgs 24.11 release's Git commit
 source tree containing the original
 [postgresql.nix](https://github.com/NixOS/nixpkgs/blob/8b27c1239e5c421a2bbc2c65d52e4a6fbf2ff296/nixos/modules/services/databases/postgresql.nix),
 NixOS library and package definitions used in comparisons. It is not a PostgreSQL
-version number. Tests use the vendored source offline; its separate SHA-256 archive
-checksum is recorded in [PIN.json](../../vendor/nixpkgs/PIN.json).
+version number. Tests use the pinned `vendor/nixpkgs` submodule offline.
+The minimal staged subset retains its SHA-256 checksums in
+[nixpkgs-pin.json](../../vendor/nixpkgs-pin.json).
 
 | File | Purpose |
 |---|---|
