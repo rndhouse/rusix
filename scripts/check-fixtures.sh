@@ -27,9 +27,6 @@ for example in enum-option typed-submodule invalid-states function-contracts exh
     cargo run --locked --quiet -p rusnix-nix --example "$example"
 done
 
-# Existing generic escape-hatch/compiler example (evaluation is in roundtrip.rs).
-cargo run --locked --quiet -p rusnix-nix --example ssh
-
 # Preserve reviewable outputs from the executable harness as well.
 cargo run --locked --quiet -p rusnix-cli -- check good --out target/diagnostic-fixtures/good
 cargo run --locked --quiet -p rusnix-cli -- check selective --out target/diagnostic-fixtures/selective-good --select good

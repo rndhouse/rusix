@@ -600,9 +600,9 @@ bash scripts/check-fixtures.sh
 ```
 
 All twelve showcase examples compile and run without invoking Nix: they print generated
-source. The fixture script runs every example and the legacy generic SSH compiler
-example, integration checks and existing CLI fixtures. Only tests and CLI checks
-perform evaluation, always through the isolated-store helper.
+source. The fixture script runs every example, integration checks and existing CLI
+fixtures. Only tests and CLI checks perform evaluation, always through the
+isolated-store helper.
 
 | Example | AUTHORING kept in source | VERIFICATION in tests |
 | --- | --- | --- |

@@ -949,9 +949,8 @@ Current verification: `cargo test --workspace --locked` passes **238 tests**
 failed/ignored). The interop target has 24 tests; structured_interop has 23
 and PostgreSQL has 56.
 Formatting and all-target Clippy with warnings denied pass.
-The fixture script passes 203 integration checks, ten runnable
-showcase examples plus the legacy generic SSH compiler example, and 20 original
-CLI fixture invocations. All 14 diagnostic snapshots remain passing.
+The fixture script passes 203 integration checks, twelve runnable showcase
+examples and 20 original CLI fixture invocations. All 14 diagnostic snapshots remain passing.
 Examples print generated source without Nix evaluation, fixture construction or
 artifact writes. Tests reuse the actual authoring models for comparison,
 combined interop behavior and symbolic artifact reuse.

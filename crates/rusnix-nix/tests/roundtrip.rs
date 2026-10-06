@@ -564,18 +564,17 @@ fn attribute_selection_is_literal_data_not_source_or_cli_flags() {
     );
 }
 
-#[allow(dead_code)]
-#[path = "../examples/ssh.rs"]
-mod legacy_ssh;
-
 #[test]
-fn legacy_escape_hatch_example_evaluates_with_its_range_constraint() {
-    let generated = compile(&legacy_ssh::config()).unwrap();
+fn valid_range_constraints_preserve_values_including_bounds() {
+    use rusnix_ir::Expr;
+
+    let ports =
+        [1, 22, 65535].map(|port| Expr::int(port).in_range(1, 65535, "port must be in 1..=65535"));
+    let config = Config::new().set("ports", Vec::from(ports));
+
+    let generated = compile(&config).unwrap();
     assert_eq!(
         session().evaluate(&generated).unwrap().value,
-        serde_json::json!({
-            "services": { "openssh": { "enable": true, "ports": [22] } },
-            "logging": { "level": "normal" },
-        })
+        serde_json::json!({ "ports": [1, 22, 65535] })
     );
 }
