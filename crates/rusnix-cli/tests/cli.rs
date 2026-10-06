@@ -63,6 +63,12 @@ fn cli_nixos_fixtures_retain_module_map_and_raw_errors() {
         artifact["module"]["source"],
         fs::read_to_string(artifacts.path().join("module.nix")).unwrap()
     );
+    assert!(
+        !artifact["module"]["source"]
+            .as_str()
+            .unwrap()
+            .contains("# rn-")
+    );
     assert!(artifacts.path().join("evaluation.nix").exists());
     assert!(run("good").status.success());
     assert!(!artifacts.path().join("diagnostic.json").exists());
@@ -104,6 +110,7 @@ fn cli_retains_artifacts_and_replaces_stale_results() {
         serde_json::from_slice(&fs::read(artifacts.path().join("source-map.json")).unwrap())
             .unwrap();
     assert_eq!(map["source"], generated);
+    assert!(!generated.contains("# rn-"));
 
     let good = run("good");
     assert!(good.status.success());
@@ -133,6 +140,7 @@ fn cli_can_select_good_and_bad_from_the_same_configuration() {
 
     let generated = fs::read_to_string(artifacts.path().join("generated.nix")).unwrap();
     assert!(!generated.contains("deepSeq"));
+    assert!(!generated.contains("# rn-"));
 
     let bad = run("bad");
     assert_eq!(bad.status.code(), Some(1));

@@ -205,7 +205,7 @@ The sealed value conversion trait deliberately keeps the API small.
 | `rusnix-derive` | Structural authoring/reference macros, conversion derives, text interpolation |
 | `rusnix-nix/ast.rs` | Backend expression syntax, separate from semantic values |
 | `rusnix-nix/lib.rs` | Semantic lowering into the AST |
-| `rusnix-nix/render.rs` | Escaped Nix source, comments, contexts, byte source map |
+| `rusnix-nix/render.rs` | Escaped Nix source, optional inspection comments, contexts, byte source map |
 | `rusnix-nix/isolated.rs` | Sole Nix subprocess boundary and disposable store owner |
 | `rusnix-nix/diagnostic.rs` | JSON/text adaptation into owned Rusnix diagnostics |
 | `rusnix-cli` | Reviewable fixture artifacts and exit status |
@@ -231,9 +231,13 @@ subexpressions without duplicating their rendered source.
 ## Provenance findings
 
 Rusnix identifies source origins with IDs such as `rn-e160b9de21c72674`.
-Generated Nix includes the same ID in comments and, at selected failure
-boundaries, in `addErrorContext`. Source maps and diagnostic JSON retain that
-ID unchanged, including all 16 hexadecimal digits.
+Source maps and diagnostic JSON retain that ID unchanged, including all 16
+hexadecimal digits. Generated Nix uses it at selected `addErrorContext` failure
+boundaries and in NixOS metadata. Normal output omits fine-grained origin comments.
+For manual inspection, pass `RenderOptions { origin_comments: true }` to
+`compile_with_options`, `nixos::compile_module_with_options`, or the advanced
+`render_with_options` API. Each mode computes source spans for its own output;
+comments add observability without changing runtime contexts or NixOS metadata.
 
 Four mechanisms are exercised:
 
@@ -242,9 +246,9 @@ Four mechanisms are exercised:
    External-file positions are never mapped as though they came from this file.
    Each span also stores enclosing configuration/assignment/value origins,
    allowing an option path to survive even when its runtime context has unwound.
-2. **Comment markers:** generated comments contain stable `rn-...` origin IDs.
-   These help manual inspection and survive emission, but comments alone do not
-   survive evaluation as diagnostic metadata.
+2. **Optional inspection markers:** annotated output contains `# rn-...` comments
+   for manually matching expressions to Rust origins. Diagnostics never parse
+   these comments; each rendering has its own correctly computed source spans.
 3. **Evaluation contexts:** opaque calls/imported values, final NixOS option
    dependencies, explicit validation and prefix coercion retain
    `builtins.addErrorContext "rn-..." (...)`. Ordinary selections,
@@ -267,7 +271,6 @@ Runtime markers are now reserved for intentional failure/interop boundaries.
 A division renders without a runtime wrapper:
 
 ```nix
-# rn-...
 (builtins.div 44 0)
 ```
 
@@ -280,7 +283,8 @@ supplies its contribution and path, including across separately generated module
 
 The [runtime instrumentation audit](docs/runtime-diagnostics.md) records the
 complete policy and before/after failure matrix. Git now has 301 runtime markers
-instead of 1,226, with every origin comment retained. Prefix coercion and final
+instead of 1,226. Origin comments are available explicitly for inspection.
+Prefix coercion and final
 NixOS references retain narrow markers because live tests demonstrate missing
 or misleading generated positions in those cases. No container forcing is added.
 
@@ -567,15 +571,13 @@ For A and B, the generated definitions include:
 {
   "_file" = "rn-85c0e94174be752e";
   "config" = {
-    "services"."openssh"."authorizedKeysCommandUser" = # rn-8163424b47eca2b2
-    "root";
+    "services"."openssh"."authorizedKeysCommandUser" = "root";
   };
 }
 {
   "_file" = "rn-4da1cd4d48cf31f8";
   "config" = {
-    "services"."openssh"."authorizedKeysCommandUser" = # rn-cadcdcb6a3ef14f8
-    "nobody";
+    "services"."openssh"."authorizedKeysCommandUser" = "nobody";
   };
 }
 ```

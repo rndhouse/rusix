@@ -27,10 +27,13 @@ mod render;
 #[cfg(test)]
 mod context_audit;
 
+#[cfg(test)]
+mod render_audit;
+
 use ast::{BinaryOp, Builtin, NixExpr, NixKind};
 pub use diagnostic::{Diagnostic, DiagnosticKind, DiagnosticOrigin, OriginRole, Provenance};
 pub use isolated::{Evaluation, NixSession};
-pub use render::{Generated, SourceSpan, render};
+pub use render::{Generated, RenderOptions, SourceSpan, render, render_with_options};
 use rusnix_ir::{Config, Node, ValueKind};
 use std::{cell::Cell, rc::Rc};
 
@@ -40,6 +43,26 @@ use std::{cell::Cell, rc::Rc};
 /// References to final NixOS options or the system’s supplied package set require
 /// [`nixos::compile_module`] and are rejected by this standalone compiler.
 pub fn compile(config: &Config) -> Result<Generated, Box<Diagnostic>> {
+    compile_with_options(config, RenderOptions::default())
+}
+
+/// Generate validated Nix with optional origin comments for manual inspection.
+/// Normal [`compile`] output omits these comments. Both forms retain the same
+/// origins, ancestry and runtime boundaries, with spans for their own text.
+///
+/// ```
+/// use rusnix_ir::Config;
+/// use rusnix_nix::{RenderOptions, compile_with_options};
+/// let annotated = compile_with_options(
+///     &Config::new().set("enabled", true),
+///     RenderOptions { origin_comments: true },
+/// ).unwrap();
+/// assert!(annotated.source.contains("# rn-"));
+/// ```
+pub fn compile_with_options(
+    config: &Config,
+    options: RenderOptions,
+) -> Result<Generated, Box<Diagnostic>> {
     config
         .validate()
         .map_err(|error| Box::new(Diagnostic::validation(error.origin, error.message)))?;
@@ -54,7 +77,7 @@ pub fn compile(config: &Config) -> Result<Generated, Box<Diagnostic>> {
         }
     }
 
-    Ok(render(&lower(config)))
+    Ok(render_with_options(&lower(config), options))
 }
 
 /// Find scoped dependencies without evaluating any values.

@@ -13,7 +13,7 @@ use rusnix_ir::Origin;
 /// failures whose Nix locations point into external code.
 #[derive(Clone, Debug)]
 pub struct NixExpr {
-    /// Rust origin for generated comments and source-map entries, if available.
+    /// Rust origin for source-map entries and optional inspection comments, if available.
     pub origin: Option<Origin>,
     /// Runtime marker for intentional failure/interop boundaries, not routine structure.
     pub error_context: bool,

@@ -1,5 +1,6 @@
 //! Diagnostic comparison at assertion, downstream-override and PostgreSQL schema boundaries.
 use super::*;
+use crate::render;
 use rusnix_ir::{
     Config, Expr,
     nixos::{DefinitionPriority, OptionRef},

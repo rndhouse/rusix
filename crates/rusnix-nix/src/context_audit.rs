@@ -1,8 +1,9 @@
-//! Compare real evaluator failures under the previous and boundary-only policies.
+//! Compare real failures across runtime-boundary policies and inspection rendering.
 use super::*;
 use rusnix_ir::{
     Expr, Origin,
     interop::{InputRef, NixValue, Nixpkgs},
+    nix_text,
 };
 use std::path::Path;
 
@@ -99,6 +100,30 @@ fn empty() -> NixValue {
     NixValue::record([] as [(&str, NixValue); 0])
 }
 
+/// Compare semantic diagnostics while retaining each rendering's original Nix trace.
+pub(super) fn equivalent_diagnostics(normal: &Diagnostic, debug: &Diagnostic) {
+    let comparable = |diagnostic: &Diagnostic| {
+        let mut value = serde_json::to_value(diagnostic).unwrap();
+        value.as_object_mut().unwrap().remove("raw_nix");
+        value
+    };
+    assert_eq!(comparable(normal), comparable(debug));
+    assert!(!normal.raw_nix.is_empty());
+    assert!(!debug.raw_nix.is_empty());
+
+    // The wire reason must also agree: generated locations/excerpts may differ.
+    let reason = |diagnostic: &Diagnostic| {
+        Diagnostic::from_nix(
+            DiagnosticKind::NixEval,
+            &diagnostic.raw_nix,
+            &Generated::default(),
+            Path::new("no-generated-source"),
+        )
+        .reason
+    };
+    assert_eq!(reason(normal), reason(debug));
+}
+
 #[test]
 fn diagnostic_matrix_preserves_operations_paths_and_raw_errors() {
     let input = args::from_value(NixValue::record([("platform", empty())]));
@@ -162,7 +187,7 @@ fn diagnostic_matrix_preserves_operations_paths_and_raw_errors() {
             expected: origin(division.clone()),
             provenance: Provenance::SourceMap,
         },
-        case("division", division, Provenance::SourceMap),
+        case("division", division.clone(), Provenance::SourceMap),
         case("coercion", empty().to_text(), Provenance::SourceMap),
         case("prefix coercion", prefix, Provenance::ErrorContext),
         case("library argument", library, Provenance::ErrorContext),
@@ -177,6 +202,35 @@ fn diagnostic_matrix_preserves_operations_paths_and_raw_errors() {
         },
         case("delayed external value", delayed, Provenance::SourceMap),
         case("imported Nix", imported, Provenance::ErrorContext),
+        case(
+            "missing package",
+            Nixpkgs::new().get("rusnixMissing").into(),
+            Provenance::ErrorContext,
+        ),
+        case(
+            "missing function",
+            Nixpkgs::new().function("rusnixMissing").into(),
+            Provenance::ErrorContext,
+        ),
+        case(
+            "lazy guard",
+            Nixpkgs::new()
+                .library()
+                .throw_if_not(false, "guard rejected", empty()),
+            Provenance::ErrorContext,
+        ),
+        Case {
+            name: "nested list child",
+            value: NixValue::list([NixValue::list([division.clone()])]),
+            expected: origin(division.clone()),
+            provenance: Provenance::SourceMap,
+        },
+        Case {
+            name: "interpolation child",
+            value: nix_text!("port={port}", port = division.clone()),
+            expected: origin(division.clone()),
+            provenance: Provenance::SourceMap,
+        },
         Case {
             name: "mkDerivation finalAttrs callback",
             value: final_attrs,
@@ -188,12 +242,21 @@ fn diagnostic_matrix_preserves_operations_paths_and_raw_errors() {
 
     for case in cases {
         let config = Config::new().set("package.buildInputs", case.value);
-        let current = render(&lower(&config));
+        let ast = lower(&config);
+        let current = render(&ast);
+        let debug = render_with_options(
+            &ast,
+            RenderOptions {
+                origin_comments: true,
+            },
+        );
         let mut legacy = lower(&config);
         contexts(&mut legacy, true);
         let legacy = render(&legacy);
         let before = session.evaluate_interop(&legacy).unwrap_err();
         let after = session.evaluate_interop(&current).unwrap_err();
+        let annotated = session.evaluate_interop(&debug).unwrap_err();
+        equivalent_diagnostics(&after, &annotated);
 
         for diagnostic in [&before, &after] {
             assert_eq!(

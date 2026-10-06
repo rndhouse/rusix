@@ -9,10 +9,11 @@
 //! store and never builds packages or activates a system.
 use crate::{
     Diagnostic, DiagnosticKind, DiagnosticOrigin, Evaluation, Generated, NixSession, OriginRole,
-    Provenance,
+    Provenance, RenderOptions,
     ast::{NixExpr, NixKind},
-    lower_value, render,
+    lower_value,
     render::quote,
+    render_with_options,
 };
 use rusnix_ir::{ConfigValue, Origin, nixos::NixosModule};
 use serde::{Deserialize, Serialize};
@@ -101,8 +102,19 @@ fn attrs(bindings: Vec<(&str, NixExpr)>) -> NixExpr {
 /// references become `config.*` expressions. This runs Rusnix validation, but
 /// does not evaluate Nix or check option types against NixOS declarations.
 pub fn compile_module(module: &NixosModule) -> Result<NixosArtifact, Box<Diagnostic>> {
+    compile_module_with_options(module, RenderOptions::default())
+}
+
+/// Generate a validated module with optional origin comments for inspection.
+/// Definition, declaration, assertion and import metadata is unchanged. The
+/// module's spans correspond to the selected rendering, so save source and map
+/// together. Normal [`compile_module`] output omits fine-grained origin comments.
+pub fn compile_module_with_options(
+    module: &NixosModule,
+    options: RenderOptions,
+) -> Result<NixosArtifact, Box<Diagnostic>> {
     let (ast, mut artifact) = lower_module(module)?;
-    artifact.module = render(&ast);
+    artifact.module = render_with_options(&ast, options);
     Ok(artifact)
 }
 

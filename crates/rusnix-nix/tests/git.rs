@@ -12,7 +12,7 @@ use rusnix_ir::{
     Config,
     interop::{InputRef, NixValue, Nixpkgs},
 };
-use rusnix_nix::{Generated, NixSession, compile};
+use rusnix_nix::{Generated, NixSession, RenderOptions, compile, compile_with_options};
 use std::{
     fs,
     path::Path,
@@ -21,6 +21,14 @@ use std::{
 
 #[track_caller]
 fn artifact(fields: impl IntoIterator<Item = (&'static str, NixValue)>) -> Generated {
+    artifact_with_options(fields, RenderOptions::default())
+}
+
+#[track_caller]
+fn artifact_with_options(
+    fields: impl IntoIterator<Item = (&'static str, NixValue)>,
+    options: RenderOptions,
+) -> Generated {
     let mut args = vec![
         ("factory", lowering::factory()),
         ("nixpkgs", Nixpkgs::new().value("path")),
@@ -32,7 +40,7 @@ fn artifact(fields: impl IntoIterator<Item = (&'static str, NixValue)>) -> Gener
     )
     .function("compare")
     .call(NixValue::record(args));
-    compile(&Config::new().set("result", comparison)).unwrap()
+    compile_with_options(&Config::new().set("result", comparison), options).unwrap()
 }
 
 fn session() -> &'static Mutex<NixSession> {
@@ -86,6 +94,32 @@ fn compare(name: &str, fields: impl IntoIterator<Item = (&'static str, NixValue)
 #[test]
 fn default_git_has_identical_derivation_and_passthru() {
     compare("default", []);
+}
+
+#[test]
+fn normal_and_inspection_git_factories_have_identical_complete_projections() {
+    let artifacts = [
+        RenderOptions::default(),
+        RenderOptions {
+            origin_comments: true,
+        },
+    ]
+    .map(|options| artifact_with_options([], options));
+    assert!(!artifacts[0].source.contains("# rn-"));
+    assert_eq!(
+        artifacts[1].source.matches("# rn-").count(),
+        artifacts[1].spans.len()
+    );
+    assert_eq!(
+        artifacts[0].source.matches("addErrorContext").count(),
+        artifacts[1].source.matches("addErrorContext").count()
+    );
+    let session = session().lock().unwrap_or_else(|p| p.into_inner());
+    let [normal, debug] =
+        artifacts.map(|generated| session.evaluate_interop(&generated).unwrap().value);
+
+    assert_eq!(normal, debug);
+    assert_eq!(normal["result"]["upstream"], normal["result"]["candidate"]);
 }
 
 #[test]

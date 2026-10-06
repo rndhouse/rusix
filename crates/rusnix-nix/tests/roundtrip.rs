@@ -79,7 +79,7 @@ fn snapshot(name: &str, diagnostic: &Diagnostic) {
 #[test]
 fn valid_rust_ir_ast_nix_json_roundtrip() {
     let generated = compile(&fixtures::config("good").unwrap()).unwrap();
-    assert!(generated.source.contains("# rn-"));
+    assert!(!generated.source.contains("# rn-"));
     let evaluated = session().evaluate(&generated).unwrap();
     assert_eq!(
         evaluated.value,
@@ -95,8 +95,14 @@ fn valid_rust_ir_ast_nix_json_roundtrip() {
 }
 
 #[test]
-fn compact_comments_and_persisted_source_spans_use_the_same_origin_ids() {
-    let generated = compile(&fixtures::config("good").unwrap()).unwrap();
+fn inspection_comments_and_persisted_source_spans_use_the_same_origin_ids() {
+    let generated = rusnix_nix::compile_with_options(
+        &fixtures::config("good").unwrap(),
+        rusnix_nix::RenderOptions {
+            origin_comments: true,
+        },
+    )
+    .unwrap();
     let json = serde_json::to_string(&generated).unwrap();
     let restored: Generated = serde_json::from_str(&json).unwrap();
     assert_eq!(restored.source, generated.source);
@@ -114,7 +120,7 @@ fn compact_comments_and_persisted_source_spans_use_the_same_origin_ids() {
         );
         assert_eq!(restored.origin(&span.origin.id), Some(&span.origin));
 
-        // Byte positions change when comments shrink; persisted spans must still
+        // Inspection comments add bytes; persisted spans must still
         // select the same Rust expression at its generated start position.
         let before = &restored.source[..span.start];
         let line = before.bytes().filter(|byte| *byte == b'\n').count() + 1;

@@ -1,8 +1,9 @@
 # Runtime diagnostic boundaries
 
-Generated comments, byte spans and semantic ancestry are retained on every
-attributed expression. Runtime `addErrorContext` markers supplement that map
-only at boundaries where Nix can lose the useful Rust operation.
+Byte spans and semantic ancestry are retained on every attributed expression.
+Runtime `addErrorContext` markers supplement that map only at boundaries where
+Nix can lose the useful Rust operation. Fine-grained origin comments are optional
+human inspection aids; normal generated Nix omits them.
 
 The audit uses the existing isolated evaluator (Nix 2.34.8), pinned nixpkgs
 `8b27c1239e5c421a2bbc2c65d52e4a6fbf2ff296`, and live evaluator locations.
@@ -75,20 +76,82 @@ retained. No eager forcing is added to keep constructor contexts alive.
 ## Origin identifiers
 
 Rusnix identifies source origins with IDs such as `rn-e160b9de21c72674`.
-Generated Nix includes the same ID in comments (`# rn-e160b9de21c72674`) and,
-at selected failure boundaries, in `addErrorContext`. Source-map and diagnostic
-metadata use that ID unchanged. NixOS definition files and assertion messages
+Generated Nix includes the ID at selected failure boundaries in `addErrorContext`.
+Inspection rendering also includes comments (`# rn-e160b9de21c72674`). Source-map
+and diagnostic metadata use that ID unchanged. NixOS definition files and assertion messages
 also carry the same ID; their role is recorded separately in the artifact.
 Readers recognize only complete IDs with 16 lowercase hexadecimal digits.
 
+## Optional inspection rendering
+
+The provenance mechanisms have separate roles:
+
+- Source maps carry fine-grained machine provenance.
+- `addErrorContext` carries selected runtime provenance.
+- NixOS definition/schema/assertion metadata carries module provenance.
+- Origin comments show the same IDs to a human inspecting generated Nix.
+
+No diagnostic path consumes origin comments. Rendering calculates spans as it
+emits expressions, independently of whether a preceding comment is requested.
+Normal and inspection maps contain the same origins, ancestry and diagnostic-site
+flags, but different byte offsets. Always save a map with its own rendered source;
+removing comments afterward would invalidate its offsets.
+
+The comment dependency audit found:
+
+| Site / role | Classification | Contract |
+|---|---|---|
+| Runtime and NixOS diagnostic readers | A: none required | Consume positions, contexts and module metadata; never origin comments |
+| Renderer offsets and saved source text | B: layout-dependent | Recompute offsets for each rendering; do not edit rendered text afterward |
+| Expression comments and annotated documentation | C: human/debug aid | Available only when explicitly requested |
+| Round-trip comment presence/alignment tests | D: inspection convention | Check debug comments; normal output asserts their absence |
+| Persisted source/map tests | D: machine consistency | Both modes retain identical origins and valid per-output spans |
+| Parser rejection of IDs in source excerpts | D: diagnostic safety test | Comments cannot masquerade as runtime frames |
+| Git comment/context regression | D: output policy | Normal has no origin comments; debug has one per attributed expression |
+| Dead comment-reading logic | E: none found | No obsolete parser or migration code is needed |
+
+Normal compilation, CLI artifacts and examples use comment-free expression output.
+There is still one compiler-owned header comment. Inspection is explicit:
+
+```rust
+use rusnix_ir::Config;
+use rusnix_nix::{RenderOptions, compile_with_options};
+
+let annotated = compile_with_options(
+    &Config::new().set("enabled", true),
+    RenderOptions { origin_comments: true },
+).unwrap();
+```
+
+The same option is available through `nixos::compile_module_with_options` and,
+for backend AST authors, `render_with_options`. One renderer handles both modes.
+There is no global mode, duplicate default artifact, or CLI inspection flag.
+
+[Rendering comparisons](../crates/rusnix-nix/src/render_audit.rs) check persisted
+maps, nested structures, source-map-only failures, cloned expression occurrences,
+lazy siblings/guards, discarded priorities and eight NixOS failure cases. The
+expression matrix additionally compares both renderings for twenty demanded
+failures, including calls, lookups, interpolation and nested callbacks. Comparisons
+require identical diagnostic kind, primary/related/causal origins, option path,
+provenance and underlying reason. Raw traces retain their own generated positions
+and source excerpts, which naturally differ between renderings.
+
 ## Git output
 
-| Metric | Before boundary audit | After boundary audit | Compact origin IDs |
-|---|---:|---:|---:|
-| Lines | 2,537 | 2,537 | 2,537 |
-| UTF-8 bytes | 218,566 | 158,441 | 121,509 |
-| `addErrorContext` calls | 1,226 | 301 | 301 |
-| Origin comments | 2,337 | 2,337 | 2,337 |
+| Metric | Before boundary audit | After boundary audit | Compact IDs / inspection | Normal output |
+|---|---:|---:|---:|---:|
+| Lines | 2,537 | 2,537 | 2,537 | 200 |
+| UTF-8 bytes | 218,566 | 158,441 | 121,509 | 60,923 |
+| `addErrorContext` calls | 1,226 | 301 | 301 | 301 |
+| Origin comments | 2,337 | 2,337 | 2,337 | 0 |
 
 The boundary audit removed 925 runtime wrappers and 60,125 bytes. Compact IDs
 remove another 36,932 bytes while keeping every ID, comment and runtime boundary.
+Making inspection comments optional saves another 60,586 bytes (49.9% of the
+annotated output). Both renderings retain 2,337 source-map spans and 619 distinct
+mapped origin IDs. Normal Nix text contains 150 distinct IDs at runtime boundaries;
+inspection text shows all 619. The machine mapping loses no origins.
+
+These figures measure the printed `git-nixpkg` example, including its final newline.
+Removing comments eliminates line breaks, leaving longer expressions; this change
+does not redesign the generated-source formatter.

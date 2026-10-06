@@ -88,12 +88,13 @@ The matrix covers default/minimal/full Git; Perl/SVN/send-email/PCRE2/manual/Pyt
 translation/GUI/SSH/libsecret/check choices; Linux and Darwin on x86_64 and ARM;
 ARM, musl, MinGW and FreeBSD cross builds; dependent defaults, ordinary overrides,
 `overrideAttrs`, laziness, malformed dependencies and all three feature assertions.
-There are **40 Git tests**, including **34 full projection comparisons** (one
+There are **41 Git tests**, including **34 full projection comparisons** (one
 uses the explicit SunOS branch probe, and two check caller-supplied library
 overrides), three feature-assertion rejection cases,
 a malformed-dependency case, Solaris rejection, and focused Rust-model/laziness
 checks, plus regressions against reconstructed argument records and structural
-runtime diagnostic wrappers. The SunOS
+runtime diagnostic wrappers. A paired rendering test also compares the complete
+projection with and without inspection comments. The SunOS
 make-flags branch has an explicit host-flag probe. A real Solaris cross scope is rejected by this pinned nixpkgs's libc support in both implementations;
 the probe is not evidence of a working Solaris toolchain.
 
@@ -107,6 +108,8 @@ package internals or attribute every upstream failure to an exact Rust field.
 
 The [runtime diagnostic audit](../../docs/runtime-diagnostics.md) keeps opaque-call
 boundaries while mapping ordinary symbolic operations through source spans. It
-reduces runtime wrappers to 301 contexts. Compact origin IDs bring the generated
-Git output to 121,509 bytes; all
-2,337 origin comments remain available for inspection.
+retains 301 runtime contexts. Normal output has no fine-grained origin comments:
+60,923 bytes and 200 lines. For manual inspection,
+`rusnix_nix::compile_with_options` accepts `RenderOptions { origin_comments: true }`,
+producing 121,509 bytes and 2,537 lines with all 2,337 origin comments. Both modes
+retain the same 619 mapped origins; each source map has offsets for its own text.
