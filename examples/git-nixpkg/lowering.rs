@@ -4,7 +4,7 @@ use super::inputs::{ARGUMENTS, Inputs, args};
 use rusnix_ir::{
     Expr, IntoRusnixValue,
     interop::{NixLibrary, NixValue, PackageFunction},
-    nix_text,
+    nix_text, package,
 };
 
 /// A native Nix package function, suitable for ordinary callPackage and overrides.
@@ -15,7 +15,10 @@ pub fn factory() -> PackageFunction {
         let lib = NixLibrary::from_value(inputs.lib.as_value());
         let defaults = vec![
             ("svnSupport", false.into()),
-            ("perlSupport", inputs.native()),
+            (
+                "perlSupport",
+                package::build_host_equal(inputs.stdenv.as_value()).into(),
+            ),
             ("nlsSupport", true.into()),
             (
                 "osxkeychainSupport",
@@ -235,7 +238,7 @@ fn attributes(i: &Inputs, final_attrs: NixValue) -> NixValue {
     let make_flags = lib.concat_lists([
         NixValue::list(["prefix=${out}".into()]),
         lib.optional(
-            i.native(),
+            package::build_host_equal(i.stdenv.as_value()),
             nix_text!("SHELL_PATH={shell}", shell = i.stdenv.shell()),
         ),
         NixValue::if_else(
@@ -334,7 +337,7 @@ fn attributes(i: &Inputs, final_attrs: NixValue) -> NixValue {
                 curl = lib.as_value().clone().select("getDev").apply([i.curl()])
             )]),
             lib.optionals(
-                !i.native(),
+                !package::build_host_equal(i.stdenv.as_value()),
                 NixValue::list(
                     [
                         "ac_cv_fread_reads_directories=yes",
@@ -347,7 +350,10 @@ fn attributes(i: &Inputs, final_attrs: NixValue) -> NixValue {
         ]),
         pre_build: pre_build(),
         make_flags,
-        disallowed_references: lib.optional(!i.native(), i.stdenv.shell_package()),
+        disallowed_references: lib.optional(
+            !package::build_host_equal(i.stdenv.as_value()),
+            i.stdenv.shell_package(),
+        ),
         post_build: post_build(i),
         install_flags: vec!["NO_INSTALL_HARDLINKS=1"],
         pre_install: pre_install(i),

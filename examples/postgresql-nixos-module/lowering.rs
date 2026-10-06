@@ -9,6 +9,7 @@ use rusnix_ir::{
     interop::{NixValue, Nixpkgs, PackageRef},
     nix_record as record, nix_text,
     nixos::{self, DefinitionPriority, NixosModule},
+    package,
 };
 
 impl Clause {
@@ -720,11 +721,9 @@ fn checks() -> NixValue {
     ]);
 
     let pkgs = Nixpkgs::from_module();
-    // Upstream skips executing the configuration-check derivation for cross builds.
-    let native = pkgs
-        .value("stdenv.hostPlatform")
-        .equals(pkgs.value("stdenv.buildPlatform"));
-    let enabled = NixValue::if_else(pg.check_config(), native, false);
+    // Upstream includes this executable check only when build and host values compare equal.
+    let build_host_equal = package::build_host_equal(pkgs.value("stdenv"));
+    let enabled = NixValue::if_else(pg.check_config(), build_host_equal, false);
 
     Nixpkgs::new().library().optional(enabled, check)
 }

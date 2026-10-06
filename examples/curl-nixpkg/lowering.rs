@@ -3,7 +3,7 @@ use super::inputs::{ARGUMENTS, Inputs, args};
 use rusnix_ir::{
     IntoRusnixValue,
     interop::{NixLibrary, NixValue, PackageFunction},
-    nix_text,
+    nix_text, package,
 };
 
 /// Describe the ordinary Nix package function, including dependent lazy defaults.
@@ -20,7 +20,11 @@ pub(super) fn factory() -> PackageFunction {
                 "gssSupport",
                 (!host.is_windows())
                     .and(!host.is_static())
-                    .and(!host.is_darwin().and((!i.native()).into_expr()))
+                    .and(
+                        !host
+                            .is_darwin()
+                            .and(!package::build_host_equal(i.stdenv.as_value())),
+                    )
                     .into(),
             ),
             ("http2Support", true.into()),
@@ -335,7 +339,10 @@ fn configure_flags(i: &Inputs, lib: &NixLibrary) -> NixValue {
                 krb5 = raw.clone().select("getDev").call(i.libkrb5()),
             ),
         ),
-        lib.optional(!i.native(), "--with-random=/dev/urandom"),
+        lib.optional(
+            !package::build_host_equal(i.stdenv.as_value()),
+            "--with-random=/dev/urandom",
+        ),
         lib.optionals(
             i.stdenv.host_platform.is_darwin(),
             NixValue::list(["--without-ca-bundle".into(), "--without-ca-path".into()]),

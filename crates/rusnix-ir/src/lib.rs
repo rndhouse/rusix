@@ -18,6 +18,8 @@ pub mod interop;
 
 pub mod nixos;
 
+pub mod package;
+
 mod value;
 
 /// Turn an inline Rust module’s local types into Nix configuration values.

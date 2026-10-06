@@ -196,13 +196,13 @@ pub(super) mod args {
     }
 
     /// The caller's standard builder and its finite platform/tool dependencies.
+    /// Whole-subtree access retains the entire supplied stdenv for build/host equality.
+    #[rusnix(value)]
     struct Stdenv {
         /// Existing mkDerivation function; Rusnix does not reimplement the builder.
         mk_derivation: NixValue,
         /// Platform where Git will run.
         host_platform: Platform,
-        /// Platform running Git's build tools.
-        build_platform: Platform,
         /// Compiler metadata needed for the glibc linker workaround.
         cc: Compiler,
         /// Shell executable selected by stdenv.
@@ -327,16 +327,6 @@ pub(super) mod args {
 pub(super) use args::Inputs;
 
 impl Inputs {
-    /// Defer the upstream native-build test: build and host platform records are equal.
-    /// The result is a Nix boolean expression, not a boolean Rust can inspect.
-    #[track_caller]
-    pub(super) fn native(&self) -> NixValue {
-        self.stdenv
-            .build_platform
-            .as_value()
-            .equals(self.stdenv.host_platform.as_value())
-    }
-
     /// Refer to an asset in the pinned Git source directory, such as a patch or updater.
     /// Returns a Nix path without reading the file or fetching anything.
     #[track_caller]

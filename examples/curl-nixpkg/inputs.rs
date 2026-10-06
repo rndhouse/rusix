@@ -1,5 +1,5 @@
 //! Finite symbolic access to the pinned package arguments; Rust never reads their values.
-use rusnix_ir::{self as rusnix, interop::NixValue};
+use rusnix_ir as rusnix;
 
 /// Exact public argument names; names without defaults remain required in Nix.
 pub(super) const ARGUMENTS: &[&str] = &[
@@ -179,11 +179,11 @@ pub(super) mod args {
     }
 
     /// Existing builder and the finite compiler/platform properties this recipe needs.
+    /// Whole-subtree access retains the entire supplied stdenv for build/host equality.
+    #[rusnix(value)]
     struct Stdenv {
         /// Real mkDerivation function, including recursive finalAttrs and overrides.
         mk_derivation: NixValue,
-        /// Platform where the build tools run; whole-record equality determines cross builds.
-        build_platform: Platform,
         /// Platform where the resulting curl runs.
         host_platform: Platform,
         /// Compiler metadata for the explicit C++ command names.
@@ -342,15 +342,3 @@ pub(super) mod args {
 }
 
 pub(super) use args::Inputs;
-
-impl Inputs {
-    /// Compare the complete build and host platform records, exactly as upstream does.
-    /// Rust does not inspect the result or substitute weaker system-string equality.
-    #[track_caller]
-    pub(super) fn native(&self) -> NixValue {
-        self.stdenv
-            .build_platform
-            .as_value()
-            .equals(self.stdenv.host_platform.as_value())
-    }
-}
