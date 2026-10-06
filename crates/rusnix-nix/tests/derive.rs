@@ -1,6 +1,6 @@
 //! Derive semantics exercised through real lowering and NixOS merges.
 use rusnix_ir::{
-    Config, Expr, IntoConfig, IntoRusnixValue, ValueKind,
+    Config, Expr, IntoConfig, IntoRusnixValue, RusnixValue, ValueKind,
     interop::{InputRef, ModuleRef, NixFunction, NixValue, Nixpkgs, OverlayRef, PackageRef},
     nixos::{DefinitionPriority, NixosModule, OptionRef},
 };
@@ -766,9 +766,9 @@ fn derived_records_remain_atomic_when_used_as_opaque_nix_values() {
         package: Nixpkgs::new().get("hello"),
         literal_key: true,
     }
-    .into_value()
-    .into_nix_value()
+    .try_into_nix_value()
     .unwrap();
+    let conversion_line = line!() - 2;
     let config = Contribution {
         payload: arguments.clone(),
     }
@@ -779,6 +779,23 @@ fn derived_records_remain_atomic_when_used_as_opaque_nix_values() {
         config.assignments[0].value.kind,
         ValueKind::OpaqueRecord(_)
     ));
+    let ValueKind::OpaqueRecord(fields) = &config.assignments[0].value.kind else {
+        unreachable!()
+    };
+    let endpoint = &fields
+        .iter()
+        .find(|(name, _)| name == "endpoint")
+        .unwrap()
+        .1;
+    assert_eq!(endpoint.origin.file, file!());
+    assert_eq!(endpoint.origin.line, conversion_line);
+    assert_eq!(endpoint.origin.purpose, "record at endpoint");
+    let ValueKind::OpaqueRecord(fields) = &endpoint.kind else {
+        unreachable!()
+    };
+    let port = &fields.iter().find(|(name, _)| name == "port").unwrap().1;
+    assert_eq!(port.origin.line, conversion_line);
+    assert_eq!(port.origin.purpose, "value of endpoint.port");
 
     // An ordinary Nix function receives the complete record; package references
     // remain actual objects, and lists of structural records remain nested values.
@@ -812,19 +829,25 @@ fn structural_to_opaque_conversion_preserves_laziness_and_child_error_origin() {
         bad: Expr<i64>,
     }
 
+    #[derive(IntoRusnixValue)]
+    struct Nested {
+        deferred: Deferred,
+    }
+
     let operation_line = line!() + 1;
     let bad = Expr::int(44).divide(Expr::int(0));
-    let value = Deferred {
-        good: "unused bad field stays lazy".into(),
-        bad,
+    let value = Nested {
+        deferred: Deferred {
+            good: "unused bad field stays lazy".into(),
+            bad,
+        },
     }
-    .into_value()
-    .into_nix_value()
+    .try_into_nix_value()
     .unwrap();
     let artifact = compile(
         &Config::new()
-            .set("good", value.clone().select("good"))
-            .set("bad", value.select("bad")),
+            .set("good", value.clone().select("deferred.good"))
+            .set("bad", value.select("deferred.bad")),
     )
     .unwrap();
     let session = NixSession::new().unwrap();
@@ -849,8 +872,7 @@ fn structural_to_opaque_conversion_retains_flatten_validation() {
     }
 
     let error = Invalid { not_a_record: true }
-        .into_value()
-        .into_nix_value()
+        .try_into_nix_value()
         .unwrap_err();
     assert_eq!(error.message, "rusnix flatten requires a record value");
 
@@ -866,8 +888,7 @@ fn structural_to_opaque_conversion_retains_flatten_validation() {
             port: Port(5432),
         },
     }
-    .into_value()
-    .into_nix_value()
+    .try_into_nix_value()
     .unwrap();
     let evaluated = NixSession::new()
         .unwrap()
@@ -878,6 +899,170 @@ fn structural_to_opaque_conversion_retains_flatten_validation() {
         evaluated["result"],
         serde_json::json!({"host": "flattened.internal", "port": 5432})
     );
+}
+
+#[test]
+fn direct_value_conversion_composes_naming_nulls_omission_and_dynamic_values() {
+    #[derive(IntoRusnixValue)]
+    enum Mode {
+        ReadOnly,
+        #[rusnix(rename = "client-only")]
+        Client,
+    }
+
+    #[derive(IntoRusnixValue)]
+    #[rusnix(rename_all = "PascalCase", omit_none)]
+    struct Arguments {
+        nested_value: Endpoint,
+        modes: Vec<Mode>,
+        nullable: NixValue,
+        included: Option<String>,
+        omitted: Option<String>,
+        #[rusnix(rename = "literal.dot")]
+        dynamic: NixValue,
+        symbolic: Expr<i64>,
+    }
+
+    let dynamic: std::collections::BTreeMap<String, NixValue> = [
+        ("quoted\"key".into(), true.into()),
+        ("optional".into(), None::<String>.into()),
+    ]
+    .into();
+    let value = Arguments {
+        nested_value: Endpoint {
+            host: "nested.internal".into(),
+            port: Port(80),
+        },
+        modes: vec![Mode::ReadOnly, Mode::Client],
+        nullable: None::<String>.try_into_nix_value().unwrap(),
+        included: Some("present".into()),
+        omitted: None,
+        dynamic: dynamic.into(),
+        symbolic: Expr::int(84).divide(Expr::int(2)),
+    }
+    .try_into_nix_value()
+    .unwrap();
+    let result = NixSession::new()
+        .unwrap()
+        .evaluate(&compile(&Config::new().set("result", value)).unwrap())
+        .unwrap()
+        .value;
+    assert_eq!(
+        result["result"],
+        serde_json::json!({
+            "NestedValue": {"host": "nested.internal", "port": 80},
+            "Modes": ["readOnly", "client-only"],
+            "Nullable": null,
+            "Included": "present",
+            "literal.dot": {"quoted\"key": true, "optional": null},
+            "Symbolic": 42,
+        })
+    );
+}
+
+#[test]
+fn derived_flatten_can_fail_based_on_the_value_or_a_nested_conversion() {
+    #[derive(IntoRusnixValue)]
+    struct Flatten<T> {
+        #[rusnix(flatten)]
+        value: T,
+    }
+
+    #[derive(IntoRusnixValue)]
+    struct Nested {
+        items: Vec<Flatten<bool>>,
+    }
+
+    let present = Flatten {
+        value: Some(Endpoint {
+            host: "present.internal".into(),
+            port: Port(80),
+        }),
+    }
+    .try_into_nix_value();
+    assert!(present.is_ok());
+
+    let absent = Flatten {
+        value: None::<Endpoint>,
+    }
+    .try_into_nix_value()
+    .unwrap_err();
+    assert_eq!(absent.message, "rusnix flatten requires a record value");
+
+    // An opaque Nix record is a value, not a Rust structural record that can
+    // be expanded into configuration paths before Nix evaluation.
+    let opaque = NixValue::record([("valid", true.into())]);
+    let opaque_line = line!() - 1;
+    let error = Flatten { value: opaque }.try_into_nix_value().unwrap_err();
+    assert_eq!(error.message, absent.message);
+    assert_eq!(error.origin.line, opaque_line);
+
+    let conversion_line = line!() + 4;
+    let error = Nested {
+        items: vec![Flatten { value: true }],
+    }
+    .try_into_nix_value()
+    .unwrap_err();
+    assert_eq!(error.message, absent.message);
+    assert_eq!(error.origin.file, file!());
+    assert_eq!(error.origin.line, conversion_line);
+    assert_eq!(error.origin.purpose, "value of items.[0]");
+}
+
+#[test]
+fn direct_conversion_keeps_the_same_structure_and_origins_as_the_low_level_path() {
+    struct Custom(RusnixValue);
+
+    impl IntoRusnixValue for Custom {
+        fn into_value(self) -> RusnixValue {
+            self.0
+        }
+    }
+
+    let structural = RusnixValue::record([(
+        "nested",
+        RusnixValue::record([("port", 443_i64.into_value())]),
+    )]);
+    let direct = Custom(structural.clone()).try_into_nix_value().unwrap();
+    let legacy = structural.into_nix_value().unwrap();
+    assert_eq!(
+        format!(
+            "{:?}",
+            Config::new().set("value", direct).assignments[0].value
+        ),
+        format!(
+            "{:?}",
+            Config::new().set("value", legacy).assignments[0].value
+        )
+    );
+
+    // Invalid manual flattening returns the same error through either entry point.
+    let invalid = RusnixValue::__record(vec![(None, true.into_value())]);
+    let direct = Custom(invalid.clone()).try_into_nix_value().unwrap_err();
+    let legacy = invalid.into_nix_value().unwrap_err();
+    assert_eq!(direct.origin, legacy.origin);
+    assert_eq!(direct.message, legacy.message);
+}
+
+#[test]
+fn value_conversion_does_not_replace_compilation_validation() {
+    let invalid = [
+        RusnixValue::record([
+            ("duplicate", true.into_value()),
+            ("duplicate", false.into_value()),
+        ]),
+        RusnixValue::record([("nul", "invalid\0string".into_value())]),
+        RusnixValue::record([("float", f64::NAN.into_value())]),
+    ];
+
+    for structural in invalid {
+        // No flatten error occurs here. These values are rejected when compiled,
+        // just like records constructed directly with NixValue::record.
+        let value = structural.into_nix_value().unwrap();
+        let error = compile(&Config::new().set("result", value)).unwrap_err();
+        assert_eq!(error.kind, DiagnosticKind::Validation);
+        assert_eq!(error.primary.unwrap().file, file!());
+    }
 }
 
 #[test]

@@ -251,6 +251,11 @@ impl ConfigValue for PackageRef {
 /// result type. Nix checks field existence, function arguments and actual value
 /// types when it evaluates the expression. Rusnix also records the Rust operations
 /// that constructed it, so errors can be mapped back to source.
+/// To construct one record from a user-defined Rust struct, derive
+/// [`crate::IntoRusnixValue`] and call
+/// [`try_into_nix_value`](crate::IntoRusnixValue::try_into_nix_value).
+/// [`crate::RusnixValue`] is the structural intermediate used by custom
+/// conversions, rather than the value passed to Nix functions.
 ///
 /// ```
 /// use rusnix_ir::interop::{NixValue, Nixpkgs};

@@ -525,8 +525,7 @@ struct Environment {
 #[track_caller]
 fn opaque(value: impl IntoRusnixValue) -> NixValue {
     value
-        .into_value()
-        .into_nix_value()
+        .try_into_nix_value()
         .expect("fixed compatibility record has no structural flattening errors")
 }
 

@@ -473,8 +473,10 @@ come from Rusnix. Assertions accept deferred conditions and messages without
 changing upstream message text; no local assertion schema is needed.
 Fixed compatibility schemas (systemd properties, service definitions and Unix
 accounts) use local Rust structs so rustfmt can format their construction.
-`into_value().into_nix_value()` keeps these records atomic when applying NixOS
-wrappers or passing them to Nix functions. Open PostgreSQL settings use
+`try_into_nix_value()` keeps these records atomic when applying NixOS
+wrappers or passing them to Nix functions. It reports invalid structural
+flattening; these fixed compatibility records contain no flattening, so their
+private helper checks that invariant. Open PostgreSQL settings use
 `NixValue::record` arrays/iterators; `nix_record!` remains for tiny records.
 Systemd's `UMask`, `RemoveIPC` and `RestrictSUIDSGID` need exact renames for
 their unusual capitalization; other property names follow PascalCase.

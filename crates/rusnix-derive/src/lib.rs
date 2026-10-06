@@ -135,6 +135,9 @@ pub fn into_config(input: TokenStream) -> TokenStream {
 /// overrides. Enums carrying data need a custom conversion that decides what
 /// their contents mean. Existing Nix expressions and package handles remain
 /// expressions, not strings or evaluated Rust data.
+/// To pass the derived value as one Nix function argument, call the trait's
+/// `try_into_nix_value()` method. Invalid `flatten` values return a Rust error;
+/// the derive does not guarantee that every field produces a structural record.
 #[proc_macro_derive(IntoRusnixValue, attributes(rusnix))]
 pub fn into_value(input: TokenStream) -> TokenStream {
     expand(parse_macro_input!(input as DeriveInput), false)

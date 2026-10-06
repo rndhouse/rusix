@@ -109,7 +109,7 @@ impl OptionType {
         options: impl IntoRusnixValue,
         freeform: Option<Self>,
     ) -> Result<Self, ValidationError> {
-        let mut fields = vec![("options", options.into_value().into_nix_value()?)];
+        let mut fields = vec![("options", options.try_into_nix_value()?)];
         if let Some(ty) = freeform {
             fields.push(("freeformType", ty.0));
         }

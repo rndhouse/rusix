@@ -9,6 +9,9 @@ use crate::{Assignment, Config, ConfigValue, Node, Origin, ValidationError, Valu
 /// Prefer the derive for ordinary structs, newtypes and unit enums. Implement
 /// this trait when conversion expresses a domain decision. This is distinct
 /// from [`crate::IntoConfig`], which creates a complete configuration contribution.
+/// To pass a Rust struct to a Nix function as one record, use
+/// [`Self::try_into_nix_value`]; the intermediate [`RusnixValue`] is mainly useful
+/// when implementing custom structural conversions.
 ///
 /// An ordinary `Option<T>` maps `None` to Nix `null`. Explicit
 /// `#[rusnix(omit_none)]` changes field behavior so no definition is contributed.
@@ -19,12 +22,56 @@ pub trait IntoRusnixValue {
     /// Tracked helpers preserve the author’s call location and existing child locations.
     #[track_caller]
     fn into_value(self) -> RusnixValue;
+
+    /// Convert this Rust value into one value that Nix can use later.
+    ///
+    /// A struct becomes a Nix attribute set (a record of named values), rather
+    /// than separate configuration definitions. Use this when passing derived
+    /// data to a Nix function. Expressions and package references remain
+    /// unevaluated, and field names and Rust source locations are preserved.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a `#[rusnix(flatten)]` field does not produce a
+    /// structural record. This can happen even with a derived type: a scalar,
+    /// `None`, or an opaque [`crate::interop::NixValue`] cannot be structurally
+    /// flattened. Nested fields and list elements can contain the same error.
+    /// Duplicate keys and other IR validity checks happen during compilation;
+    /// Nix function and NixOS option types are checked later by Nix.
+    ///
+    /// ```
+    /// use rusnix_ir::{IntoRusnixValue, ValidationError, interop::NixValue};
+    ///
+    /// #[derive(IntoRusnixValue)]
+    /// struct FileArguments {
+    ///     name: String,
+    ///     text: String,
+    /// }
+    ///
+    /// fn file_arguments() -> Result<NixValue, ValidationError> {
+    ///     let arguments = FileArguments {
+    ///         name: "example.conf".into(),
+    ///         text: "workers = 4\n".into(),
+    ///     };
+    ///
+    ///     Ok(arguments.try_into_nix_value()?)
+    /// }
+    /// ```
+    #[track_caller]
+    fn try_into_nix_value(self) -> Result<crate::interop::NixValue, ValidationError>
+    where
+        Self: Sized,
+    {
+        self.into_value().into_nix_value()
+    }
 }
 
 /// Data ready to be placed inside a Rusnix configuration tree.
 /// It can contain named fields, ordered lists, literals and expressions that Nix
 /// will evaluate later. Use this as the result of a custom [`IntoRusnixValue`]
 /// implementation; it is not evaluated Nix data or raw Nix source.
+/// Ordinary derived values can use [`IntoRusnixValue::try_into_nix_value`]
+/// directly without handling this intermediate representation.
 ///
 /// Structural records become nested configuration paths. Existing Nix handles
 /// and expressions stay intact, including their Rust locations. To pass a
@@ -96,6 +143,8 @@ impl RusnixValue {
     /// wrapped with NixOS conditions and priorities. Expressions remain unevaluated
     /// and keep their Rust source locations. Invalid flattening returns a Rust error;
     /// other validation happens when the configuration is compiled.
+    /// For a Rust type implementing [`IntoRusnixValue`], prefer its direct
+    /// [`IntoRusnixValue::try_into_nix_value`] method.
     pub fn into_nix_value(self) -> Result<crate::interop::NixValue, ValidationError> {
         self.resolve(&[])
             .map(opaque_record_nodes)

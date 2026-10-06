@@ -383,9 +383,8 @@ fn attributes(i: &Inputs, final_attrs: NixValue) -> NixValue {
         ]),
         meta: metadata(i),
     }
-    .into_value()
-    .into_nix_value()
-    .unwrap()
+    .try_into_nix_value()
+    .expect("Git's fixed derivation fields contain no structural flattening")
 }
 
 /// Describe the pinned release, retaining licenses, platforms and maintainers from Nix.

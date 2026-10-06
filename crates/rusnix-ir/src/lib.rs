@@ -551,6 +551,11 @@ pub struct Config {
 /// Use the [`config`] macro for local types or derive this trait for reusable
 /// root types. [`nixos::NixosModule::add`] accepts either approach. Conversion
 /// runs in Rust now, but generated expressions and NixOS merging happen later.
+/// Derived conversion saves structural errors in the returned [`Config`] for
+/// [`Config::validate`] or compilation to report. Returning `Config` without a
+/// `Result` does not guarantee validity. By contrast,
+/// [`IntoRusnixValue::try_into_nix_value`] reports invalid flattening immediately
+/// when constructing one Nix value for a function argument.
 ///
 /// For custom implementations, `#[track_caller]` propagates the author’s call
 /// location through tracked helpers. Existing expression locations are retained;

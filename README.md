@@ -796,8 +796,13 @@ selected through `as_value().select(...)` and called. Function schemas and error
 belong to Nix. No builder or package-specific Rust code is involved.
 
 Use derived Rust structs for meaningful fixed schemas and `NixValue::record`
-arrays/iterators for open records. `into_value().into_nix_value()` converts a
-structural value to an atomic opaque value without flattening it into bindings.
+arrays/iterators for open records. A derived value's `try_into_nix_value()?`
+converts it to one Nix record without expanding it into option definitions.
+`RusnixValue` is the structural intermediate used by custom conversion
+implementations; normal authors need not handle it. Conversion can fail when a
+`flatten` field produces a scalar, null, or opaque value instead of a structural
+record, even on a derived type. Other IR checks happen during compilation, and
+Nix still checks function arguments and NixOS option types during evaluation.
 `nix_record!` stays useful for tiny records; it accepts literal keys, key variables
 or parenthesized dynamic key expressions, never raw Nix source.
 
