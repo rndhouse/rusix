@@ -41,6 +41,43 @@ missing TLS keys, back their claims. The examples explain which guarantees are
 static, which require IR checks, and which remain NixOS checks; generic
 configuration/IR escape hatches remain explicit.
 
+## Connected package authoring
+
+The [composed package example](examples/composed-packages/README.md) rewrites a
+connected region of pinned nixpkgs authoring:
+
+```text
+Rusnix OpenSSL ──► Rusnix Git
+      │
+      ▼
+Rusnix curl
+      │
+      ▼
+Rusnix MariaDB (server and client)
+```
+
+A whole dependency closure does not need to be rewritten. Each package can first
+consume ordinary nixpkgs dependencies, then accept rewritten values one by one.
+Explicit Rust `Nixpkgs::call_package` override records construct these three
+rewritten edges. For matched defaults, the OpenSSL, curl, Git and MariaDB
+server/client derivation recipes and identities match ordinary pinned nixpkgs.
+Nix still supplies evaluation and store semantics; nixpkgs supplies stdenv,
+fetchers, builders, hooks and all unreplaced dependencies. Verification only
+constructs derivations offline in disposable stores.
+
+[OpenSSL](examples/openssl-nixpkg/README.md) and
+[MariaDB](examples/mariadb-nixpkg/README.md) preserve their full pinned package
+families. Their suites cover argument interfaces, features, outputs, overrides,
+platform behavior, laziness and provenance; the composed suite additionally
+checks tagged dependency values and live override propagation.
+
+Package-operation failures retain useful child Rust origins across the graph.
+A delayed type check wholly inside stdenv can have no generated child frame:
+for example, a literal integer supplied as MariaDB's curl maps only to the outer
+`mariadb.drvPath` demand. The original diagnostic still names MariaDB's sixth
+buildInput. This limitation is tested explicitly; no broad forcing or invented
+child blame is added to compensate.
+
 ## Run
 
 Prerequisites: Git, Rust 1.88+ and `nix` plus `nix-instantiate` on PATH. Tested here

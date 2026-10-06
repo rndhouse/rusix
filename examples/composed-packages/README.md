@@ -7,7 +7,8 @@ override records. Nix still evaluates the resulting expressions; nixpkgs supplie
 fetchers, stdenv, builders, hooks and the unreplaced dependency graph.
 
 `graph.rs` is the authoring example. It constructs OpenSSL from the Rust factory,
-then supplies that deferred value explicitly to both Rust curl and Rust Git. It
+then supplies that deferred value explicitly to both Rust curl and Rust Git.
+The resulting Rust curl value is explicitly supplied to Rust MariaDB. It
 uses the existing `NixValue::function` callback bindings to share dependency values
 lazily in the generated expression. No package factory or source recipe is copied
 per dependent edge. Each package's `mod.rs` exposes its ordinary Rust factory.
@@ -17,22 +18,51 @@ let pkgs = Nixpkgs::new();
 let openssl = pkgs.call_package(&openssl::factory(Release::Preview), arguments());
 let curl = pkgs.call_package(
     &curl::factory(),
-    NixValue::record([("openssl", openssl.clone())]),
+    curl_arguments(&pkgs, openssl.clone()),
 );
 let git = pkgs.call_package(
     &git::factory(),
     git::arguments().merge_attrs(NixValue::record([("openssl", openssl)])),
+);
+let mariadb = pkgs.call_package(
+    &mariadb::factory(),
+    Release::V1011.arguments().merge_attrs(NixValue::record([("curl", curl)])),
 );
 ```
 
 `cargo test --locked -p rusnix-nix --test composed` compares exact ATerm recipe
 bytes, derivation identities and all output paths. Tags attached through the
 OpenSSL factory result's normal `overrideAttrs` interface must be observable in
-curl's OpenSSL passthru and Git's actual buildInputs; ordinary pkgs.openssl lacks
-these tags. Changing OpenSSL's `withZlib` through `.override` changes both consumer
+curl's OpenSSL passthru and Git's actual buildInputs;
+a curl tag must also appear in MariaDB's actual buildInputs; ordinary pkgs.openssl lacks
+these tags. Changing OpenSSL's `withZlib` through `.override` changes curl, Git and both MariaDB
 derivations and continues to match the equivalently wired upstream graph.
 
 An ordinary nixpkgs OpenSSL also works in the same assembly function. Excluded
 OpenSSL and an unused graph stay lazy; an invalid supplied OpenSSL maps to curl's
 Rust consuming operation and retains the original Nix diagnostic. Evaluation is
 offline in fresh disposable stores. Nothing is fetched, built or installed.
+
+
+The default graph uses the normal **pkgs.curl** flavour (IDN, PSL, Zstd and
+non-static Brotli) because that is MariaDB's actual upstream dependency. The
+independent curl suite still covers curlMinimal's native default recipe. Both
+flavours come from the same complete Rust-authored curl factory.
+
+The default graph has three explicit rewritten edges. MariaDB's *other*, direct
+OpenSSL input and Git's curl input retain normal nixpkgs injection, as do transitive
+dependencies, bootstrap fetchers and existing test graphs. Equal recipes mean
+these normal and rewritten instances have identical default store identities.
+This is selective edge substitution, rather than a global package-set overlay.
+
+Generated Nix contains one OpenSSL, one curl and one MariaDB factory body/source
+recipe; common MariaDB attributes are shared between client and server. The
+suite checks source-hash occurrence counts, lexical bindings and absence of
+broad deepSeq forcing.
+
+Child failures in OpenSSL's fetcher operation, curl consuming supplied OpenSSL,
+and MariaDB demanding a supplied, failing Rust curl retain the relevant package
+operation origin and original Nix trace. A literal integer supplied as curl is
+a separate backend-validation limitation: stdenv reports the precise buildInput
+index but offers no generated child frame, so Rust mapping reaches the outer
+mariadb.drvPath demand. See the explicit limitation test and saved diagnostic.

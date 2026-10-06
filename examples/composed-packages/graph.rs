@@ -8,6 +8,9 @@ pub mod curl;
 #[path = "../git-nixpkg/mod.rs"]
 pub mod git;
 
+#[path = "../mariadb-nixpkg/mod.rs"]
+pub mod mariadb;
+
 use rusnix_ir::interop::{NixValue, Nixpkgs};
 
 pub fn arguments() -> NixValue {
@@ -25,19 +28,53 @@ pub fn graph() -> NixValue {
 
 /// Accepting an ordinary package value keeps the replacement boundary movable.
 pub fn with_openssl(openssl: NixValue) -> NixValue {
+    compose(
+        openssl,
+        |pkgs, openssl| pkgs.call_package(&curl::factory(), curl_arguments(pkgs, openssl.clone())),
+        mariadb::model::Release::V1011.arguments(),
+    )
+}
+
+/// Match the normal pkgs.curl flavour selected by MariaDB, rather than curlMinimal.
+pub fn curl_arguments(pkgs: &Nixpkgs, openssl: NixValue) -> NixValue {
+    NixValue::record([
+        ("openssl", openssl),
+        ("idnSupport", true.into()),
+        ("pslSupport", true.into()),
+        ("zstdSupport", true.into()),
+    ])
+    .merge_attrs(NixValue::if_else(
+        !pkgs.value("stdenv.hostPlatform.isStatic"),
+        NixValue::record([("brotliSupport", true.into())]),
+        arguments(),
+    ))
+}
+
+/// Ordinary Rust callbacks allow replacing either side of the authoring boundary.
+pub fn compose(
+    openssl: NixValue,
+    make_curl: impl FnOnce(&Nixpkgs, &NixValue) -> NixValue,
+    mariadb_arguments: NixValue,
+) -> NixValue {
     let pkgs = Nixpkgs::new();
     // Existing callbacks supply lazy lexical bindings, sharing each dependency once.
     NixValue::function(|openssl| {
-        let curl = pkgs.call_package(
-            &curl::factory(),
-            NixValue::record([("openssl", openssl.clone())]),
-        );
+        let curl = make_curl(&pkgs, &openssl);
         let git = pkgs.call_package(
             &git::factory(),
             git::arguments().merge_attrs(NixValue::record([("openssl", openssl.clone())])),
         );
         NixValue::function(|curl| {
-            NixValue::record([("openssl", openssl), ("curl", curl), ("git", git)])
+            let mariadb = pkgs.call_package(
+                &mariadb::factory(),
+                mariadb_arguments.merge_attrs(NixValue::record([("curl", curl.clone())])),
+            );
+            NixValue::record([
+                ("openssl", openssl),
+                ("curl", curl),
+                ("git", git),
+                ("mariadb", mariadb),
+            ])
         })
         .call(curl)
     })
