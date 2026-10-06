@@ -11,6 +11,7 @@ cargo test --locked -p rusnix-nix --lib render::tests
 cargo test --locked -p rusnix-nix --lib render::precedence_tests
 cargo test --locked -p rusnix-nix --test roundtrip
 cargo test --locked -p rusnix-nix --test nixos
+cargo test --locked -p rusnix-nix --test session
 cargo test --locked -p rusnix-nix --test merges
 cargo test --locked -p rusnix-nix --test authoring
 cargo test --locked -p rusnix-nix --test symbolic_options

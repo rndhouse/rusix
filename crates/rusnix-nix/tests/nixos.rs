@@ -320,3 +320,36 @@ fn checked_nixpkgs_is_staged_only_inside_disposable_session() {
     let source = evaluation_source(&["${throw \"injection\"}", "--store /nix/store"], false);
     assert!(source.contains("\\${throw \\\"injection\\\"}"));
 }
+
+#[test]
+fn assertion_conditions_reject_invalid_ir_before_lowering() {
+    use rusnix_ir::{
+        ConfigValue, Origin,
+        interop::NixValue,
+        nixos::{NixosModule, OptionRef},
+    };
+
+    let mut escaped = None;
+    let _function = NixValue::function(|parameter| {
+        escaped = Some(parameter.clone());
+        parameter
+    });
+    let conditions = [
+        ("escaped", escaped.unwrap().into_expr::<bool>(), "escaped"),
+        ("path", OptionRef::<bool>::new("").into_expr(), "nonempty"),
+        ("nul", NixValue::from("\0").into_expr::<bool>(), "NUL"),
+    ];
+
+    for (name, condition, reason) in conditions {
+        let expected = condition
+            .clone()
+            .into_node(Origin::caller("test condition"))
+            .origin;
+        let module = NixosModule::empty().assertion(name, condition, "must hold");
+        let diagnostic = compile_module(&module).unwrap_err();
+        assert_eq!(diagnostic.kind, DiagnosticKind::Validation);
+        assert_eq!(diagnostic.primary, Some(expected));
+        assert!(diagnostic.reason.contains(reason), "{}", diagnostic.reason);
+        assert!(diagnostic.raw_nix.is_empty());
+    }
+}

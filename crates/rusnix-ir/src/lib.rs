@@ -220,6 +220,14 @@ pub struct Node {
     pub kind: ValueKind,
 }
 
+impl Node {
+    /// Check expression invariants without evaluating Nix or checking its actual types.
+    /// Rejects invalid strings, paths, literals and escaped callback parameters.
+    pub fn validate(&self) -> Result<(), ValidationError> {
+        validate_scoped(self, &[])
+    }
+}
+
 /// The value or operation described by a [`Node`].
 /// Variants distinguish literals, containers and computations Nix will perform
 /// later. This is an interface for backend implementation and inspection, not
@@ -649,7 +657,7 @@ impl Config {
             }
 
             seen.push(parts);
-            validate_value(&assignment.value)?;
+            assignment.value.validate()?;
         }
 
         Ok(())
@@ -665,10 +673,6 @@ fn reject_nul(text: &str, origin: &Origin) -> Result<(), ValidationError> {
     }
 
     Ok(())
-}
-
-fn validate_value(node: &Node) -> Result<(), ValidationError> {
-    validate_scoped(node, &[])
 }
 
 fn validate_scoped(node: &Node, scope: &[u64]) -> Result<(), ValidationError> {

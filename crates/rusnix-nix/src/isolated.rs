@@ -8,6 +8,7 @@ use std::{
     fs, io,
     path::Path,
     process::{Command, Output},
+    sync::{Mutex, OnceLock},
 };
 use tempfile::TempDir;
 
@@ -23,9 +24,12 @@ use tempfile::TempDir;
 /// store explicitly and removes host-selection environment settings.
 /// Dropping the session deletes its workspace; save artifacts or diagnostics
 /// elsewhere if they must remain available.
+/// Calls sharing a session are serialized across staging, parsing and evaluation.
 pub struct NixSession {
     /// Temporary directory containing the session’s local store and evaluator files.
     disposable: TempDir,
+    evaluation: Mutex<()>,
+    pub(crate) pinned_staged: OnceLock<()>,
     pub(crate) full_source: std::sync::OnceLock<std::sync::Arc<crate::interop::FullSource>>,
 }
 
@@ -53,6 +57,8 @@ impl NixSession {
 
         Ok(Self {
             disposable,
+            evaluation: Mutex::new(()),
+            pinned_staged: OnceLock::new(),
             full_source: std::sync::OnceLock::new(),
         })
     }
@@ -132,7 +138,7 @@ impl NixSession {
     /// when the expression needs pinned nixpkgs inputs. Invalid generated syntax
     /// or static bindings are reported as compiler failures.
     pub fn evaluate(&self, generated: &Generated) -> Result<Evaluation, Box<Diagnostic>> {
-        self.evaluate_selection(generated, None)
+        self.with_evaluation_lock(|| self.evaluate_staged(generated))
     }
 
     /// Evaluate one top-level field of the generated Nix result as JSON.
@@ -147,7 +153,28 @@ impl NixSession {
         if attribute.contains('\0') {
             return Err(Diagnostic::tooling("NUL is not supported in attribute selection").into());
         }
-        self.evaluate_selection(generated, Some(attribute))
+        self.with_evaluation_lock(|| self.evaluate_selection(generated, Some(attribute)))
+    }
+
+    // Public evaluation entry points hold this lock through all input staging and
+    // subprocesses. Internal workers must not call a public entry point recursively.
+    pub(crate) fn with_evaluation_lock<T>(
+        &self,
+        evaluate: impl FnOnce() -> Result<T, Box<Diagnostic>>,
+    ) -> Result<T, Box<Diagnostic>> {
+        let _guard = self
+            .evaluation
+            .lock()
+            .map_err(|_| Diagnostic::tooling("evaluation session lock is poisoned"))?;
+        evaluate()
+    }
+
+    /// Evaluate while the caller holds the session lock and has staged its inputs.
+    pub(crate) fn evaluate_staged(
+        &self,
+        generated: &Generated,
+    ) -> Result<Evaluation, Box<Diagnostic>> {
+        self.evaluate_selection(generated, None)
     }
 
     fn evaluate_selection(

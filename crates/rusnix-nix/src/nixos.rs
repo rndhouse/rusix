@@ -171,9 +171,8 @@ fn lower_module(module: &NixosModule) -> Result<(NixExpr, NixosArtifact), Box<Di
         .map(|(value, origin)| (value.clone().into_node(origin.clone()), origin))
         .collect();
 
-    for ((value, origin), (handle, _)) in generated_imports.iter().zip(&module.generated_imports) {
-        rusnix_ir::Config::new()
-            .set("module", handle.clone())
+    for (value, origin) in &generated_imports {
+        value
             .validate()
             .map_err(|error| Diagnostic::validation(error.origin, error.message))?;
         imports.push(NixExpr::attributed(
@@ -222,6 +221,11 @@ fn lower_module(module: &NixosModule) -> Result<(NixExpr, NixosArtifact), Box<Di
     }
 
     for assertion in &module.assertions {
+        assertion
+            .condition
+            .validate()
+            .map_err(|error| Diagnostic::validation(error.origin, error.message))?;
+
         if assertion.name.is_empty()
             || assertion.name.contains('\0')
             || assertion.message.contains('\0')
@@ -363,9 +367,26 @@ fn lower_module(module: &NixosModule) -> Result<(NixExpr, NixosArtifact), Box<Di
 }
 
 #[derive(Deserialize)]
-struct Pin {
-    revision: String,
+pub(crate) struct Pin {
+    pub(crate) revision: String,
     files: std::collections::BTreeMap<String, String>,
+}
+
+// Both evaluation modes use this reviewed descriptor. The revision constant
+// checks the expected upstream API; individual-file digests live in the manifest.
+pub(crate) fn pin() -> Result<&'static Pin, String> {
+    static PIN: OnceLock<Result<Pin, String>> = OnceLock::new();
+
+    PIN.get_or_init(|| {
+        let pin: Pin = serde_json::from_str(include_str!("../../../vendor/nixpkgs-pin.json"))
+            .map_err(|e| e.to_string())?;
+        if pin.revision != NIXPKGS_REVISION {
+            return Err("nixpkgs pin revision mismatch".into());
+        }
+        Ok(pin)
+    })
+    .as_ref()
+    .map_err(Clone::clone)
 }
 
 type PinnedFiles = Vec<(String, Vec<u8>)>;
@@ -377,15 +398,9 @@ fn pinned_files() -> Result<&'static PinnedFiles, String> {
         .get_or_init(|| {
             let source = crate::interop::full_source().map_err(|e| e.reason.clone())?;
             let root = &source.path;
-            let pin: Pin = serde_json::from_slice(
-                &fs::read(root.join("../nixpkgs-pin.json")).map_err(|e| e.to_string())?,
-            )
-            .map_err(|e| e.to_string())?;
-            if pin.revision != NIXPKGS_REVISION {
-                return Err("nixpkgs pin revision mismatch".into());
-            }
-            pin.files
-                .into_iter()
+            pin()?
+                .files
+                .iter()
                 .map(|(name, hash)| {
                     if Path::new(&name)
                         .components()
@@ -393,12 +408,12 @@ fn pinned_files() -> Result<&'static PinnedFiles, String> {
                     {
                         return Err("invalid snapshot path".into());
                     }
-                    let bytes = fs::read(root.join(&name))
+                    let bytes = fs::read(root.join(name))
                         .map_err(|e| format!("missing pinned {name}: {e}"))?;
-                    if format!("{:x}", Sha256::digest(&bytes)) != hash {
+                    if format!("{:x}", Sha256::digest(&bytes)) != *hash {
                         return Err(format!("pinned nixpkgs hash mismatch: {name}"));
                     }
-                    Ok((name, bytes))
+                    Ok((name.clone(), bytes))
                 })
                 .collect()
         })
@@ -408,8 +423,11 @@ fn pinned_files() -> Result<&'static PinnedFiles, String> {
 
 impl NixSession {
     pub(crate) fn stage_pinned(&self) -> Result<std::path::PathBuf, Box<Diagnostic>> {
-        let files = pinned_files().map_err(Diagnostic::tooling)?;
         let pin_root = self.root().join("nixpkgs");
+        if self.pinned_staged.get().is_some() {
+            return Ok(pin_root);
+        }
+        let files = pinned_files().map_err(Diagnostic::tooling)?;
 
         for (name, bytes) in files {
             let path = pin_root.join(name);
@@ -418,6 +436,7 @@ impl NixSession {
             fs::write(path, bytes).map_err(|e| Diagnostic::tooling(e.to_string()))?;
         }
 
+        let _ = self.pinned_staged.set(());
         Ok(pin_root)
     }
 
@@ -434,23 +453,9 @@ impl NixSession {
         artifact: &NixosArtifact,
         driver: &Generated,
     ) -> Result<Evaluation, Box<Diagnostic>> {
-        let pin_root = self.stage_pinned()?;
-        self.stage_interop()?;
-
-        let parse_stderr = self.validate_generated(&artifact.module, "module.nix")?;
-
-        self.evaluate(driver).map_err(|error| {
-            if error.kind != DiagnosticKind::NixEval {
-                return error;
-            }
-
-            let diagnostic = Diagnostic::from_nix(
-                DiagnosticKind::NixEval,
-                &format!("{parse_stderr}{}", error.raw_nix),
-                &artifact.module,
-                &self.root().join("module.nix"),
-            );
-            Box::new(translate(diagnostic, artifact, &pin_root))
+        self.with_evaluation_lock(|| {
+            let pin_root = self.stage_interop()?;
+            self.evaluate_module_driver(artifact, driver, &pin_root)
         })
     }
 
@@ -512,56 +517,69 @@ impl NixSession {
         interop: bool,
         summaries: bool,
     ) -> Result<Evaluation, Box<Diagnostic>> {
-        let pin_root = self.stage_pinned()?;
-        if interop {
-            self.stage_interop()?;
-        }
+        self.with_evaluation_lock(|| {
+            let pin_root = if interop {
+                self.stage_interop()?
+            } else {
+                self.stage_pinned()?
+            };
+            fs::write(self.root().join("nixos-driver.nix"), DRIVER)
+                .map_err(|e| Diagnostic::tooling(e.to_string()))?;
 
+            if selection.iter().any(|s| s.contains('\0')) {
+                return Err(Diagnostic::tooling("NUL in NixOS selection").into());
+            }
+
+            let source = if interop {
+                let pkgs = crate::render(&crate::interop::source(
+                    &rusnix_ir::interop::Source::Packages { overlays: vec![] },
+                ))
+                .source;
+                format!(
+                    "(import ./nixos-driver.nix) {{ nixpkgs = ./nixpkgs; module = ./module.nix; selection = [ {} ]; checkAssertions = {check_assertions}; pkgs = {pkgs}; packageSummary = {summaries}; }}\n",
+                    selection
+                        .iter()
+                        .map(|s| quote(s))
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                )
+            } else {
+                evaluation_source(selection, check_assertions)
+            };
+            let wrapper = Generated {
+                source,
+                ..Generated::default()
+            };
+
+            self.evaluate_module_driver(artifact, &wrapper, &pin_root)
+        })
+    }
+
+    // Called only while the complete evaluation holds the session lock.
+    fn evaluate_module_driver(
+        &self,
+        artifact: &NixosArtifact,
+        driver: &Generated,
+        pin_root: &Path,
+    ) -> Result<Evaluation, Box<Diagnostic>> {
         let parse_stderr = self.validate_generated(&artifact.module, "module.nix")?;
-        fs::write(self.root().join("nixos-driver.nix"), DRIVER)
-            .map_err(|e| Diagnostic::tooling(e.to_string()))?;
-
-        if selection.iter().any(|s| s.contains('\0')) {
-            return Err(Diagnostic::tooling("NUL in NixOS selection").into());
-        }
-
-        let source = if interop {
-            let pkgs = crate::render(&crate::interop::source(
-                &rusnix_ir::interop::Source::Packages { overlays: vec![] },
-            ))
-            .source;
-            format!(
-                "(import ./nixos-driver.nix) {{ nixpkgs = ./nixpkgs; module = ./module.nix; selection = [ {} ]; checkAssertions = {check_assertions}; pkgs = {pkgs}; packageSummary = {summaries}; }}\n",
-                selection
-                    .iter()
-                    .map(|s| quote(s))
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            )
-        } else {
-            evaluation_source(selection, check_assertions)
-        };
-        let wrapper = Generated {
-            source,
-            ..Generated::default()
-        };
-
-        self.evaluate(&wrapper)
+        self.evaluate_staged(driver)
             .map(|mut evaluation| {
                 evaluation.raw_nix = format!("{parse_stderr}{}", evaluation.raw_nix);
                 evaluation
             })
-            .map_err(|error| {
+            .map_err(|mut error| {
+                error.raw_nix = format!("{parse_stderr}{}", error.raw_nix);
                 if error.kind != DiagnosticKind::NixEval {
                     return error;
                 }
                 let diagnostic = Diagnostic::from_nix(
                     DiagnosticKind::NixEval,
-                    &format!("{parse_stderr}{}", error.raw_nix),
+                    &error.raw_nix,
                     &artifact.module,
                     &self.root().join("module.nix"),
                 );
-                Box::new(translate(diagnostic, artifact, &pin_root))
+                Box::new(translate(diagnostic, artifact, pin_root))
             })
     }
 }

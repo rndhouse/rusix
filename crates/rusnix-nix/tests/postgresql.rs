@@ -36,11 +36,6 @@ fn compare(case: &str) {
 
     let artifact = compile_module(&module).unwrap();
 
-    fs::write(
-        session.root().join("postgresql-module.nix"),
-        &artifact.module.source,
-    )
-    .unwrap();
     fs::copy(
         root().join("tests/fixtures/postgresql-equivalence.nix"),
         session.root().join("postgresql-driver.nix"),

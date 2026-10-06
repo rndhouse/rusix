@@ -162,7 +162,8 @@ pub(crate) fn full_source() -> Result<Arc<FullSource>, Box<Diagnostic>> {
     }
 
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../vendor/nixpkgs");
-    check_source(&path, crate::nixos::NIXPKGS_REVISION).map_err(Diagnostic::tooling)?;
+    let pin = crate::nixos::pin().map_err(Diagnostic::tooling)?;
+    check_source(&path, &pin.revision).map_err(Diagnostic::tooling)?;
 
     let source = Arc::new(FullSource { path });
 
@@ -171,8 +172,8 @@ pub(crate) fn full_source() -> Result<Arc<FullSource>, Box<Diagnostic>> {
 }
 
 impl NixSession {
-    pub(crate) fn stage_interop(&self) -> Result<(), Box<Diagnostic>> {
-        self.stage_pinned()?;
+    pub(crate) fn stage_interop(&self) -> Result<PathBuf, Box<Diagnostic>> {
+        let pin_root = self.stage_pinned()?;
         let source = if let Some(source) = self.full_source.get() {
             source.clone()
         } else {
@@ -187,7 +188,7 @@ impl NixSession {
                 .map_err(|e| Diagnostic::tooling(e.to_string()))?;
         }
 
-        Ok(())
+        Ok(pin_root)
     }
 
     /// Evaluate generated Nix that uses the pinned nixpkgs packages or library.
@@ -196,8 +197,10 @@ impl NixSession {
     /// when the object itself cannot be serialized. Nix may construct build recipes,
     /// but package outputs are never built.
     pub fn evaluate_interop(&self, generated: &Generated) -> Result<Evaluation, Box<Diagnostic>> {
-        self.stage_interop()?;
-        self.evaluate(generated)
+        self.with_evaluation_lock(|| {
+            self.stage_interop()?;
+            self.evaluate_staged(generated)
+        })
     }
 }
 
