@@ -183,6 +183,13 @@ impl Diagnostic {
                 .and_then(origin_id)
                 .is_some()
         });
+        let boundary = lines.iter().rev().find_map(|line| {
+            let trace = line
+                .trim()
+                .strip_prefix("… ")
+                .or_else(|| line.trim().strip_prefix("... "))?;
+            generated.origin(origin_id(trace)?)
+        });
         let positioned: Vec<_> = lines
             .iter()
             .enumerate()
@@ -190,14 +197,21 @@ impl Diagnostic {
             .filter_map(|(index, line)| {
                 let rest = line.trim().strip_prefix(&prefix)?;
                 let mut parts = rest.split(':');
-                let span = generated
-                    .span_at_position(parts.next()?.parse().ok()?, parts.next()?.parse().ok()?)?;
+                let line = parts.next()?.parse().ok()?;
+                let column = parts.next()?.parse().ok()?;
                 let message = lines[..index].iter().rev().find(|l| !l.trim().is_empty())?;
-                Some((
-                    span,
-                    (message.trim().starts_with("error:") || operation_frame(message))
-                        && innermost_context.is_none_or(|boundary| index > boundary),
-                ))
+                let operation = (message.trim().starts_with("error:") || operation_frame(message))
+                    && innermost_context.is_none_or(|boundary| index > boundary);
+                let span = if operation {
+                    generated.diagnostic_span_at_position(
+                        line,
+                        column,
+                        boundary.map(|origin| origin.id.as_str()),
+                    )?
+                } else {
+                    generated.span_at_position(line, column)?
+                };
+                Some((span, operation))
             })
             .collect();
         let local_spans: Vec<_> = positioned.iter().map(|(span, _)| *span).collect();
@@ -258,6 +272,9 @@ impl Diagnostic {
                 .unwrap_or("Nix failed; inspect the retained original diagnostic"),
         );
         let frames = event["trace"].as_array().map(Vec::as_slice).unwrap_or(&[]);
+        let boundary = frames
+            .iter()
+            .find_map(|frame| generated.origin(frame["raw_msg"].as_str().and_then(origin_id)?));
         let mapped = |frame: &serde_json::Value| {
             let line = usize::try_from(frame["line"].as_u64()?).ok()?;
             let column = usize::try_from(frame["column"].as_u64()?).ok()?;
@@ -266,7 +283,17 @@ impl Diagnostic {
             if reported != path && reported != format!("{path}:{line}:{column}") {
                 return None;
             }
-            generated.span_at_position(line, column)
+            if std::ptr::eq(frame, event)
+                || operation_frame(frame["raw_msg"].as_str().unwrap_or(""))
+            {
+                generated.diagnostic_span_at_position(
+                    line,
+                    column,
+                    boundary.map(|origin| origin.id.as_str()),
+                )
+            } else {
+                generated.span_at_position(line, column)
+            }
         };
         // The error's own position is more precise than lambda/call-site frames.
         let local_spans: Vec<_> = std::iter::once(event)

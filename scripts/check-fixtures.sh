@@ -8,6 +8,7 @@ cargo run --locked --quiet -p rusnix-derive --bin check-rust-spacing
 cargo test --locked -p rusnix-nix --lib context_audit
 cargo test --locked -p rusnix-nix --lib render_audit
 cargo test --locked -p rusnix-nix --lib render::tests
+cargo test --locked -p rusnix-nix --lib render::precedence_tests
 cargo test --locked -p rusnix-nix --test roundtrip
 cargo test --locked -p rusnix-nix --test nixos
 cargo test --locked -p rusnix-nix --test merges

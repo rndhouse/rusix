@@ -1,9 +1,10 @@
 # Generated Nix layout
 
 Rusnix formats its existing Nix AST with a document pretty-printer. The target is
-100 characters, with two-space indentation. It changes whitespace only: AST
-structure, expression tokens, parentheses, runtime contexts and NixOS metadata
-remain unchanged. String contents, quoted paths and numeric spelling are preserved.
+100 characters, with two-space indentation. Layout preserves the AST meaning,
+runtime contexts and NixOS metadata. A separate [precedence policy](nix-expression-rendering.md)
+now chooses necessary parentheses before layout. String contents and quoted paths
+are preserved.
 An indivisible literal may exceed the width target.
 
 ## Renderer audit and design
@@ -24,8 +25,8 @@ Nix AST → attributed documents → width-aware emission → Nix text + source 
 Documents contain text, soft breaks, mandatory breaks, concatenation, nesting,
 groups and attribution. A group stays flat if its cached width and following
 suffix fit the remaining line. Otherwise its soft breaks become newlines. Nested
-groups independently decide whether they fit. Parentheses retain their existing
-spelling and do not add indentation by themselves.
+groups independently decide whether they fit. Grammar-required and explicit AST
+parentheses do not add indentation by themselves.
 
 Each document caches its flat width once. Final emission uses an explicit command
 stack; fit lookahead stops at the first break or exhausted width and does not
@@ -45,13 +46,13 @@ No external formatter or post-render whitespace transformation is used.
 | Literal, variable, path | Unbroken text; preserve spelling and string escaping |
 | List / attribute set | Inline if the entire group fits; otherwise one item/binding per line |
 | Binding | Keep value inline when possible; otherwise indent its expression |
-| Application / builtin / runtime context | Break arguments onto indented lines; preserve all existing parentheses |
+| Application / builtin / runtime context | Break arguments onto indented lines; group arguments according to Nix grammar |
 | Lambda | Inline short bodies; indent long bodies |
 | Native function argument set | Inline short patterns; otherwise one argument per line, including dependent defaults |
 | Conditional | Inline short branches; otherwise indent branches and align `else` |
 | Let | Inline tiny bindings; otherwise separate binding, `in` and body |
 | Binary operation | Inline short operands; otherwise break before the operator |
-| Selection | Preserve parenthesized base and exact attribute syntax; base expressions can break |
+| Selection | Group complex bases; use safe attribute identifiers or quoted segments |
 | Inspection comment | Mandatory newline before the expression; outside its own attributed range |
 
 Normal and inspection modes use the same document engine. Inspection adds only
@@ -60,7 +61,9 @@ example, with byte offsets calculated for their respective output.
 
 ## Git measurements
 
-These figures include the example's final printed newline. Percentiles use the
+These historical figures record the initial layout change, before the later
+[precedence cleanup](nix-expression-rendering.md). The fragments below also show
+that stage. Figures include the example's final printed newline. Percentiles use the
 nearest-rank convention; line lengths count characters.
 
 | Metric | Normal before | Normal after | Inspection before | Inspection after |

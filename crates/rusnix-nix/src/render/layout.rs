@@ -50,14 +50,6 @@ pub(super) fn line<'a>() -> Doc<'a> {
     }
 }
 
-/// No text when flattened; permits a break inside existing parentheses.
-pub(super) fn soft() -> Doc<'static> {
-    Doc {
-        kind: Kind::Break(""),
-        flat_width: 0,
-    }
-}
-
 /// A mandatory newline, including the end of an inspection comment.
 pub(super) fn hard_line() -> Doc<'static> {
     Doc {

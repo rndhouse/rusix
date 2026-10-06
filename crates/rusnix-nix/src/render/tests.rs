@@ -1,5 +1,6 @@
 //! Exercise layout decisions and attribution without whole-package snapshots.
 use super::*;
+use crate::ast::BinaryOp;
 use crate::{Config, compile};
 
 fn plain(kind: NixKind) -> NixExpr {
@@ -50,7 +51,7 @@ fn short_expressions_and_collections_remain_inline() {
             Builtin::Div,
             vec![plain(NixKind::Int(44)), plain(NixKind::Int(2))],
         ))),
-        "(builtins.div (44) (2))\n"
+        "builtins.div 44 2\n"
     );
 }
 
@@ -86,8 +87,8 @@ fn large_native_argument_sets_preserve_lazy_defaults() {
         Box::new(plain(NixKind::Variable("dependency11".into()))),
     ));
     let rendered = source(&function);
-    assert!(rendered.starts_with("({\n  dependency0,\n  dependency1,"));
-    assert!(rendered.contains("  dependency11 ? (dependency0)\n}:\n  dependency11\n)"));
+    assert!(rendered.starts_with("{\n  dependency0,\n  dependency1,"));
+    assert!(rendered.contains("  dependency11 ? dependency0\n}:\n  dependency11"));
     assert!(rendered.lines().all(|line| line.len() <= 100));
 }
 
@@ -102,15 +103,15 @@ fn nested_groups_indent_by_two_spaces_and_fit_independently() {
 }
 
 #[test]
-fn complex_conditionals_break_branches_and_keep_parentheses() {
+fn complex_conditionals_break_branches_without_root_parentheses() {
     let expression = plain(NixKind::If(
         Box::new(plain(NixKind::Bool(true))),
         Box::new(words()),
         Box::new(plain(NixKind::String("fallback".into()))),
     ));
     let rendered = source(&expression);
-    assert!(rendered.starts_with("(if true then\n  [\n"));
-    assert!(rendered.ends_with("else\n  \"fallback\"\n)\n"));
+    assert!(rendered.starts_with("if true then\n  [\n"));
+    assert!(rendered.ends_with("else\n  \"fallback\"\n"));
 }
 
 #[test]
@@ -120,7 +121,7 @@ fn lets_and_lambdas_choose_inline_or_structured_layout() {
         Box::new(plain(NixKind::Int(1))),
         Box::new(plain(NixKind::Variable("x".into()))),
     ));
-    assert_eq!(source(&small), "(let x = 1; in x)\n");
+    assert_eq!(source(&small), "let x = 1; in x\n");
 
     let large = plain(NixKind::Let(
         "x".into(),
@@ -131,17 +132,17 @@ fn lets_and_lambdas_choose_inline_or_structured_layout() {
         ))),
     ));
     let rendered = source(&large);
-    assert!(rendered.starts_with("(let\n  x =\n    [\n"));
-    assert!(rendered.ends_with("in\n  (value: value)\n)\n"));
+    assert!(rendered.starts_with("let\n  x =\n    [\n"));
+    assert!(rendered.ends_with("in\n  value: value\n"));
 }
 
 #[test]
-fn long_applications_and_binary_operands_keep_existing_grouping() {
+fn long_applications_and_binary_operands_break_without_blanket_grouping() {
     let application = plain(NixKind::Apply(
         Box::new(plain(NixKind::Variable("identity".into()))),
         Box::new(words()),
     ));
-    assert!(source(&application).starts_with("((identity)\n  ([\n"));
+    assert!(source(&application).starts_with("identity\n  [\n"));
     let binary = plain(NixKind::Binary(
         BinaryOp::Equal,
         Box::new(words()),
@@ -168,8 +169,8 @@ fn literal_contents_signed_numbers_and_quoted_segments_are_not_reformatted() {
     assert!(rendered.contains(&quote(&literal)));
     assert!(rendered.contains("(-42)"));
     assert!(rendered.contains("(-9223372036854775807 - 1)"));
-    assert!(rendered.contains("(1.0)"));
-    assert!(rendered.contains("(value).\"a.b\".\"quoted\\\"name\""));
+    assert!(rendered.contains("1.0"));
+    assert!(rendered.contains("value.\"a.b\".\"quoted\\\"name\""));
     assert!(rendered.contains("./nixpkgs/lib"));
 }
 

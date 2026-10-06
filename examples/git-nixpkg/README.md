@@ -111,10 +111,12 @@ boundaries while mapping ordinary symbolic operations through source spans. It
 retains 301 runtime contexts. The [pretty-printer](../../docs/generated-nix-layout.md)
 uses a 100-character target, formatting functions, dependency lists and fields
 while recording their source spans. Normal output has no fine-grained origin
-comments: 169,616 bytes and 2,992 lines. For manual inspection,
+comments: 133,197 bytes and 2,136 lines. For manual inspection,
 `rusnix_nix::compile_with_options` accepts `RenderOptions { origin_comments: true }`,
-producing 336,005 bytes and 5,983 lines with all 2,337 origin comments. Both modes
+producing 293,239 bytes and 4,967 lines with all 2,337 origin comments. Both modes
 retain the same 619 mapped origins; each source map has offsets for its own text.
+[Precedence-aware rendering](../../docs/nix-expression-rendering.md) removes blanket
+application/selection parentheses while preserving explicit AST groups.
 Quoted shell fragments remain unchanged and can exceed the target width.
 
 The Rust factory now returns `PackageFunction`, identifying its native named

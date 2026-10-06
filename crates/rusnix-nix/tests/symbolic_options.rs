@@ -76,7 +76,7 @@ fn base_value_is_resolved_symbolically_and_contribution_boundaries_remain() {
         artifact
             .module
             .source
-            .contains("(config).\"services\".\"example\".\"port\"")
+            .contains("config.services.example.port")
     );
     assert!(!artifact.module.source.contains("deepSeq"));
     assert!(!artifact.module.source.contains("example --port=5432"));

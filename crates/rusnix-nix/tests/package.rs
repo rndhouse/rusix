@@ -205,7 +205,7 @@ fn generated_comparison_is_lexical_without_record_reconstruction_or_runtime_wrap
 
     let compact: String = generated.source.split_whitespace().collect();
     assert!(
-        compact.contains("((stdenv).buildPlatform==(stdenv).hostPlatform)"),
+        compact.contains("stdenv.buildPlatform==stdenv.hostPlatform"),
         "{}",
         generated.source,
     );

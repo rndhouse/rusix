@@ -80,8 +80,8 @@ fn finite_floats_keep_float_syntax_and_nix_numeric_semantics() {
     ];
 
     let artifact = generated(NixValue::list(floats.map(NixValue::from)));
-    assert!(artifact.source.contains("(1.0)"));
-    assert!(artifact.source.contains("(1.0e-100)"));
+    assert!(artifact.source.contains("1.0"));
+    assert!(artifact.source.contains("1.0e-100"));
 
     let value = NixSession::new()
         .unwrap()
@@ -505,7 +505,7 @@ fn symbolic_write_text_and_nested_attrset_calls_follow_nix_overrides_without_rel
         fs::write(&downstream, "{ module = {}; }\n").unwrap();
         let artifact = compile_module(&symbolic_module(&downstream, attrset)).unwrap();
         let original = artifact.module.source.clone();
-        assert!(original.contains("(config).\"services\".\"postgresql\".\"dataDir\""));
+        assert!(original.contains("config.services.postgresql.dataDir"));
         assert!(!original.contains("deepSeq"));
         let session = NixSession::new().unwrap();
         let selection = &["environment", "generatedFile"];
@@ -859,7 +859,7 @@ fn mixed_macros_retain_symbolic_references_and_unused_fields_stay_lazy() {
         artifact
             .module
             .source
-            .contains("(config).\"services\".\"example\".\"port\"")
+            .contains("config.services.example.port")
     );
     assert_eq!(
         session

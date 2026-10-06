@@ -1,7 +1,10 @@
 mod layout;
 
-use crate::ast::{BinaryOp, Builtin, NixExpr, NixKind};
-use layout::{Doc, attributed, concat, group, hard_line, line, nest, soft, text};
+mod precedence;
+
+use crate::ast::{Builtin, NixExpr, NixKind};
+use layout::{Doc, attributed, concat, group, hard_line, line, nest, text};
+use precedence::{Context, precedence};
 use rusnix_ir::Origin;
 use serde::{Deserialize, Serialize};
 
@@ -92,13 +95,54 @@ impl Generated {
             .filter(|span| span.start <= offset && offset < span.end)
             .min_by_key(|span| span.end - span.start)
     }
+
+    /// Without a leading parenthesis, a lookup and its variable can start at the
+    /// same byte (or be separated only by inspection comments). A failure there
+    /// belongs to the nearest consuming operation,
+    /// rather than to the variable's declaration. Keep general span lookup exact.
+    pub(crate) fn diagnostic_span_at_position(
+        &self,
+        line: usize,
+        column: usize,
+        boundary: Option<&str>,
+    ) -> Option<&SourceSpan> {
+        let smallest = self.span_at_position(line, column)?;
+        if smallest.diagnostic_site {
+            return Some(smallest);
+        }
+
+        // A known runtime boundary remains authoritative unless a more precise
+        // failing operation exists inside it. Do not promote to an outer consumer.
+        let limit = self
+            .spans
+            .iter()
+            .filter(|span| {
+                Some(span.origin.id.as_str()) == boundary
+                    && span.start <= smallest.start
+                    && span.end >= smallest.end
+            })
+            .min_by_key(|span| span.end - span.start);
+
+        self.spans
+            .iter()
+            .filter(|span| {
+                span.diagnostic_site
+                    && span.start <= smallest.start
+                    && span.end >= smallest.end
+                    && limit.is_none_or(|limit| span.start >= limit.start && span.end <= limit.end)
+            })
+            .min_by_key(|span| span.end - span.start)
+            .or(Some(smallest))
+    }
 }
 
 /// Render advanced backend syntax into escaped Nix source and attribution ranges.
 /// Does not validate or evaluate the AST; ordinary callers should use [`crate::compile`]
 /// or [`crate::nixos::compile_module`] to validate semantic IR first.
-/// Layout uses a 100-character target and two-space indentation. Indivisible
-/// literals can exceed that target; string contents are never reformatted.
+/// Parentheses follow Nix precedence and preserve explicit AST groups and distinct
+/// attributed lookup boundaries. Layout uses a 100-character target and two-space
+/// indentation. Indivisible literals can exceed that target; string contents are
+/// never reformatted.
 pub fn render(ast: &NixExpr) -> Generated {
     render_with_options(ast, RenderOptions::default())
 }
@@ -113,39 +157,66 @@ pub fn render_with_options(ast: &NixExpr, options: RenderOptions) -> Generated {
 
 /// Preserve an expression's attribution until the final layout writes its bytes.
 fn expression(expr: &NixExpr, options: RenderOptions) -> Doc<'_> {
-    let mut body = syntax(&expr.kind, options);
-    let Some(origin) = &expr.origin else {
-        return body;
-    };
+    in_context(expr, options, Context::Expression)
+}
 
-    if expr.error_context {
+/// Keep intrinsic attribution separate from parentheses owned by the parent syntax.
+fn in_context(expr: &NixExpr, options: RenderOptions, context: Context) -> Doc<'_> {
+    let mut body = syntax(&expr.kind, options);
+    let runtime_context = expr.error_context && expr.origin.is_some();
+    if let Some(origin) = &expr.origin
+        && runtime_context
+    {
         body = application(
-            "(builtins.addErrorContext",
-            vec![text(quote(&origin.id)), parens(body)],
+            text("builtins.addErrorContext"),
+            vec![
+                text(quote(&origin.id)),
+                group_for(body, precedence::kind(&expr.kind), Context::Simple),
+            ],
         );
     }
-    let diagnostic_site = !expr.error_context
-        && matches!(
-            expr.kind,
-            NixKind::Call(..)
+    if let Some(origin) = &expr.origin {
+        let diagnostic_site = !expr.error_context
+            && match &expr.kind {
+                NixKind::Call(..)
                 | NixKind::Apply(..)
                 | NixKind::Binary(..)
                 | NixKind::If(..)
-                | NixKind::Assert(..)
-                | NixKind::Select(..)
-                | NixKind::ArgumentSelect(..)
-        );
-    body = attributed(origin, diagnostic_site, body);
+                | NixKind::Assert(..) => true,
+                // Empty view roots render only their child, with no lookup.
+                NixKind::Select(_, path) | NixKind::ArgumentSelect(_, path) => !path.is_empty(),
+                _ => false,
+            };
+        body = attributed(origin, diagnostic_site, body);
 
-    if options.origin_comments {
-        // Comments are an inspection aid, outside this expression's own span.
-        concat(vec![text(format!("# {}", origin.id)), hard_line(), body])
+        if options.origin_comments {
+            // Comments are an inspection aid, outside this expression's own span.
+            body = concat(vec![text(format!("# {}", origin.id)), hard_line(), body]);
+        }
+    }
+
+    // Implicit parentheses belong to the enclosing syntax, outside the child's
+    // own span. This distinguishes an outer missing selection from its base.
+    if context.requires_parentheses(precedence(expr))
+        || matches!(context, Context::SelectionBase)
+            && (precedence::path_base(expr) || precedence::selection_boundary(expr))
+    {
+        parens(body)
     } else {
         body
     }
 }
 
-/// Keep existing parentheses while letting the child choose its layout.
+/// Group only where the enclosing Nix grammar cannot accept this expression.
+fn group_for(body: Doc<'_>, precedence: precedence::Precedence, context: Context) -> Doc<'_> {
+    if context.requires_parentheses(precedence) {
+        parens(body)
+    } else {
+        body
+    }
+}
+
+/// Explicit groups and grammar-required parentheses retain the child layout.
 fn parens(body: Doc<'_>) -> Doc<'_> {
     // Parentheses preserve syntax; only the expression inside owns indentation.
     concat(vec![text("("), body, text(")")])
@@ -178,12 +249,11 @@ fn collection<'a>(open: &str, items: Vec<Doc<'a>>, close: &str) -> Doc<'a> {
     ]))
 }
 
-fn application<'a>(head: &str, arguments: Vec<Doc<'a>>) -> Doc<'a> {
-    let mut parts = vec![text(head)];
+fn application<'a>(head: Doc<'a>, arguments: Vec<Doc<'a>>) -> Doc<'a> {
+    let mut parts = vec![head];
     for argument in arguments {
         parts.push(nest(concat(vec![line(), argument])));
     }
-    parts.extend([soft(), text(")")]);
 
     group(concat(parts))
 }
@@ -201,7 +271,6 @@ fn syntax(kind: &NixKind, options: RenderOptions) -> Doc<'_> {
     match kind {
         NixKind::Bool(v) => text(if *v { "true" } else { "false" }),
         NixKind::Int(i64::MIN) => text("(-9223372036854775807 - 1)"),
-        NixKind::Int(v) if *v < 0 => text(format!("({v})")),
         NixKind::Int(v) => text(v.to_string()),
         NixKind::Float(v) => {
             // Preserve floating types and Rust's shortest round-trip precision.
@@ -211,22 +280,17 @@ fn syntax(kind: &NixKind, options: RenderOptions) -> Doc<'_> {
             {
                 literal.insert_str(exponent, ".0");
             }
-            text(format!("({literal})"))
+            text(literal)
         }
         NixKind::Null => text("null"),
         NixKind::String(v) => text(quote(v)),
         NixKind::Path(v) | NixKind::Variable(v) => text(v.clone()),
-        NixKind::Select(value, path) => {
-            let mut parts = vec![parens(child(value))];
-            parts.extend(path.iter().map(|part| text(format!(".{}", quote(part)))));
-            concat(parts)
-        }
-        NixKind::ArgumentSelect(value, path) => {
+        NixKind::Select(value, path) | NixKind::ArgumentSelect(value, path) => {
             if path.is_empty() {
                 return child(value);
             }
 
-            let mut parts = vec![parens(child(value))];
+            let mut parts = vec![in_context(value, options, Context::SelectionBase)];
             parts.extend(path.iter().map(|part| {
                 let attribute = if attribute_identifier(part) {
                     part.clone()
@@ -238,10 +302,8 @@ fn syntax(kind: &NixKind, options: RenderOptions) -> Doc<'_> {
             concat(parts)
         }
         NixKind::Lambda(argument, body) => group(concat(vec![
-            text(format!("({argument}:")),
+            text(format!("{argument}:")),
             nest(concat(vec![line(), child(body)])),
-            soft(),
-            text(")"),
         ])),
         NixKind::Function(arguments, body) => {
             let mut parameters: Vec<_> = arguments.iter().map(|name| text(name.clone())).collect();
@@ -260,14 +322,21 @@ fn syntax(kind: &NixKind, options: RenderOptions) -> Doc<'_> {
                     None => text(name.clone()),
                     Some(value) => group(concat(vec![
                         text(format!("{name} ?")),
-                        nest(concat(vec![line(), parens(child(value))])),
+                        nest(concat(vec![line(), child(value)])),
                     ])),
                 })
                 .collect();
             function(parameters, child(body))
         }
         NixKind::Group(value) => parens(child(value)),
-        NixKind::List(items) => collection("[", items.iter().map(child).collect(), "]"),
+        NixKind::List(items) => collection(
+            "[",
+            items
+                .iter()
+                .map(|item| in_context(item, options, Context::Simple))
+                .collect(),
+            "]",
+        ),
         NixKind::AttrSet(bindings) => collection(
             "{",
             bindings
@@ -284,72 +353,55 @@ fn syntax(kind: &NixKind, options: RenderOptions) -> Doc<'_> {
             "}",
         ),
         NixKind::Call(builtin, args) => application(
-            match builtin {
-                Builtin::Div => "(builtins.div",
-                Builtin::Throw => "(builtins.throw",
-                Builtin::Import => "(builtins.import",
-                Builtin::GetAttr => "(builtins.getAttr",
-                Builtin::ToPath => "(builtins.toPath",
-                Builtin::ToString => "(builtins.toString",
-            },
-            args.iter().map(|arg| parens(child(arg))).collect(),
+            text(match builtin {
+                Builtin::Div => "builtins.div",
+                Builtin::Throw => "builtins.throw",
+                Builtin::Import => "builtins.import",
+                Builtin::GetAttr => "builtins.getAttr",
+                Builtin::ToPath => "builtins.toPath",
+                Builtin::ToString => "builtins.toString",
+            }),
+            args.iter()
+                .map(|arg| in_context(arg, options, Context::Simple))
+                .collect(),
         ),
         NixKind::Binary(op, left, right) => {
-            let operator = match op {
-                BinaryOp::Equal => "==",
-                BinaryOp::GreaterEqual => ">=",
-                BinaryOp::LessEqual => "<=",
-                BinaryOp::And => "&&",
-                BinaryOp::Add => "+",
-                BinaryOp::AttrMerge => "//",
-            };
+            let (operator, left_context, right_context) = precedence::binary(*op);
             group(concat(vec![
-                text("("),
-                child(left),
+                in_context(left, options, left_context),
                 nest(concat(vec![
                     line(),
                     text(format!("{operator} ")),
-                    child(right),
+                    in_context(right, options, right_context),
                 ])),
-                soft(),
-                text(")"),
             ]))
         }
         NixKind::If(condition, yes, no) => group(concat(vec![
-            text("(if "),
+            text("if "),
             child(condition),
             text(" then"),
             nest(concat(vec![line(), child(yes)])),
             line(),
             text("else"),
             nest(concat(vec![line(), child(no)])),
-            soft(),
-            text(")"),
         ])),
         NixKind::Assert(condition, value) => group(concat(vec![
-            text("(assert "),
+            text("assert "),
             child(condition),
             text(";"),
             nest(concat(vec![line(), child(value)])),
-            soft(),
-            text(")"),
         ])),
         NixKind::Let(name, value, body) => group(concat(vec![
-            text("(let"),
+            text("let"),
             nest(concat(vec![line(), binding(name.clone(), child(value))])),
             line(),
             text("in"),
             nest(concat(vec![line(), child(body)])),
-            soft(),
-            text(")"),
         ])),
-        NixKind::Apply(function, argument) => group(concat(vec![
-            text("("),
-            parens(child(function)),
-            nest(concat(vec![line(), parens(child(argument))])),
-            soft(),
-            text(")"),
-        ])),
+        NixKind::Apply(function, argument) => application(
+            in_context(function, options, Context::ApplicationFunction),
+            vec![in_context(argument, options, Context::Simple)],
+        ),
     }
 }
 
@@ -367,13 +419,7 @@ fn function<'a>(parameters: Vec<Doc<'a>>, body: Doc<'a>) -> Doc<'a> {
             text("}:"),
         ]))
     };
-    group(concat(vec![
-        text("("),
-        pattern,
-        nest(concat(vec![line(), body])),
-        soft(),
-        text(")"),
-    ]))
+    group(concat(vec![pattern, nest(concat(vec![line(), body]))]))
 }
 
 /// Quoting is required for literal punctuation, interpolation and reserved words.
@@ -413,3 +459,6 @@ pub(crate) fn quote(value: &str) -> String {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod precedence_tests;

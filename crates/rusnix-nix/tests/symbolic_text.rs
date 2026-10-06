@@ -188,7 +188,7 @@ fn same_artifact_interpolation_follows_ordinary_and_force_overrides() {
     )
     .unwrap();
     let source = artifact.module.source.clone();
-    assert!(source.contains("(config).\"services\".\"example\".\"port\""));
+    assert!(source.contains("config.services.example.port"));
     assert!(!source.contains("deepSeq"));
 
     let session = NixSession::new().unwrap();

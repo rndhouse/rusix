@@ -152,21 +152,29 @@ fn generated_git_contexts_cover_boundaries_not_routine_expression_structure() {
         .spans
         .iter()
         .filter(|span| {
-            generated.source[span.start..span.end].starts_with("(builtins.addErrorContext")
+            generated.source[span.start..span.end]
+                .trim_start_matches('(')
+                .strip_prefix("builtins.addErrorContext")
+                .is_some_and(|arguments| {
+                    arguments
+                        .trim_start()
+                        .starts_with(&format!("{:?}", span.origin.id))
+                })
         })
         .collect();
 
     assert!(!boundaries.is_empty());
     for span in boundaries {
         let arguments = generated.source[span.start..span.end]
-            .strip_prefix("(builtins.addErrorContext")
+            .trim_start_matches('(')
+            .strip_prefix("builtins.addErrorContext")
             .unwrap()
             .trim_start();
         let value = arguments
             .strip_prefix(&format!("{:?}", span.origin.id))
             .unwrap();
         assert!(value.starts_with(char::is_whitespace));
-        assert!(value.trim_start().starts_with('('));
+        assert!(!value.trim_start().is_empty());
         let purpose = &span.origin.purpose;
         assert!(
             purpose == "opaque Nix function call"

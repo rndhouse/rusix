@@ -478,10 +478,18 @@ fn generated_defaults_are_lexical_and_contexts_remain_selective() {
     let compact: String = generated.source.split_whitespace().collect();
     assert!(!compact.contains("let__rusnix_arg_"));
     assert!(!compact.contains("deepSeq"));
-    assert!(compact.contains("(stdenv).hostPlatform.isSunOS"));
-    assert!(compact.contains("(stdenv).buildPlatform"));
+    assert!(compact.contains("stdenv.hostPlatform.isSunOS"));
+    assert!(compact.contains("stdenv.buildPlatform"));
     for span in &generated.spans {
-        if generated.source[span.start..span.end].starts_with("(builtins.addErrorContext") {
+        if generated.source[span.start..span.end]
+            .trim_start_matches('(')
+            .strip_prefix("builtins.addErrorContext")
+            .is_some_and(|arguments| {
+                arguments
+                    .trim_start()
+                    .starts_with(&format!("{:?}", span.origin.id))
+            })
+        {
             assert!(
                 span.origin.purpose == "opaque Nix function call"
                     || span.origin.purpose == "Nix attribute-set union"
