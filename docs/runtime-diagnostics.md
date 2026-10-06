@@ -25,6 +25,9 @@ No generated-source rewriting, fetching or building is involved.
 | Function application (caller function, lib, builder, fetcher, override) | Yes | Function/schema/external implementation failure | Not reliably: positions can identify the function lookup instead of the call | Retain application boundary |
 | Curried application with one Rust caller identity | Every partial application | Intermediate or final call may fail | One outer marker covers partial applications while demanded | One marker; keep all spans |
 | Imported opaque value / nixpkgs lookup | Yes | Imported code can fail outside generated source | Not reliably for arbitrary external code | Retain interop boundary |
+| Native attribute-set union (`//`) | New curl operation | An operand may not be an attribute set | No in tested cases: Nix reports only the enclosing field | Retain a narrow union boundary; child failures keep their own origins |
+| Native expression assertion | New curl operation | False/wrong-type condition | Yes for the native assertion position; distinct from NixOS assertions | Spans only |
+| Builtin function lookup | New curl operation | Missing builtin or later argument-type failure | A builtin definition position must not override its consuming call boundary | Lookup spans; runtime context only on application |
 | Pinned source path construction | Yes | Validated literal path construction has no external computation | IR validation covers path data | Spans only |
 | Explicit range validation | Yes | Constraint can reject | Positions work, but explicit validation is a useful diagnostic boundary | Retain validation marker |
 | Imported-module category check | Yes | Handle can have wrong category | Explicit validation/import boundary | Retain marker |

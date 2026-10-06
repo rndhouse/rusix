@@ -245,6 +245,10 @@ pub enum ValueKind {
     Reference(interop::Reference),
     /// One deferred application of a function to its argument.
     Apply(Box<Node>, Box<Node>),
+    /// Native shallow attribute-set union; right-hand fields replace left-hand fields.
+    AttrMerge(Box<Node>, Box<Node>),
+    /// Native expression assertion; only a true condition permits demanding the result.
+    Assert(Box<Node>, Box<Node>),
     /// A deferred lookup through literal attribute segments.
     Select(Box<Node>, interop::AttrPath),
     /// Scoped callbacks at the opaque Nix boundary, not Rust-side evaluation.
@@ -695,6 +699,8 @@ fn validate_scoped(node: &Node, scope: &[u64]) -> Result<(), ValidationError> {
         }
         ValueKind::Divide(left, right)
         | ValueKind::Apply(left, right)
+        | ValueKind::AttrMerge(left, right)
+        | ValueKind::Assert(left, right)
         | ValueKind::Equal(left, right) => {
             validate_value(left)?;
             validate_value(right)?;

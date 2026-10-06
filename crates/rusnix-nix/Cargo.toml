@@ -57,3 +57,7 @@ path = "../../examples/postgresql-nixos-module/main.rs"
 [[example]]
 name = "git-nixpkg"
 path = "../../examples/git-nixpkg/main.rs"
+
+[[example]]
+name = "curl-nixpkg"
+path = "../../examples/curl-nixpkg/main.rs"

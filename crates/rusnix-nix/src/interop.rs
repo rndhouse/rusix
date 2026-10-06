@@ -27,6 +27,7 @@ pub(crate) fn source(source: &Source) -> NixExpr {
     let imported = |path| NixExpr::plain(NixKind::Call(Builtin::Import, vec![path]));
 
     match source {
+        Source::Builtins => NixExpr::plain(NixKind::Variable("builtins".into())),
         Source::Packages { overlays } => NixExpr::plain(NixKind::Apply(
             Box::new(imported(NixExpr::plain(NixKind::Path(
                 "./nixpkgs-full".into(),
@@ -86,7 +87,12 @@ pub(crate) fn lower_reference(reference: &Reference) -> NixExpr {
         None => root,
     };
 
-    if matches!(reference.source, Source::PinnedPath { .. }) {
+    if matches!(reference.source, Source::Builtins) {
+        // A builtin's definition location can appear in its later argument-type
+        // failure. Keep lookup spans, but treat the consuming application as the
+        // operation; a definition span must not override that runtime boundary.
+        NixExpr::attributed(NixKind::Group(Box::new(value)), reference.origin.clone())
+    } else if matches!(reference.source, Source::PinnedPath { .. }) {
         // Appending validated literal path data introduces no external evaluation.
         NixExpr::attributed(value.kind, reference.origin.clone())
     } else {

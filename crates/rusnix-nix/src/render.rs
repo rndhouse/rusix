@@ -156,6 +156,7 @@ fn emit(
                         | NixKind::Apply(..)
                         | NixKind::Binary(..)
                         | NixKind::If(..)
+                        | NixKind::Assert(..)
                         | NixKind::Select(..)
                         | NixKind::ArgumentSelect(..)
                 ),
@@ -298,6 +299,7 @@ fn emit_kind(
                 BinaryOp::LessEqual => " <= ",
                 BinaryOp::And => " && ",
                 BinaryOp::Add => " + ",
+                BinaryOp::AttrMerge => " // ",
             });
             emit(right, out, depth, enclosing, options);
             out.source.push(')');
@@ -309,6 +311,13 @@ fn emit_kind(
             emit(yes, out, depth, enclosing, options);
             out.source.push_str(" else ");
             emit(no, out, depth, enclosing, options);
+            out.source.push(')');
+        }
+        NixKind::Assert(condition, value) => {
+            out.source.push_str("(assert ");
+            emit(condition, out, depth, enclosing, options);
+            out.source.push_str("; ");
+            emit(value, out, depth, enclosing, options);
             out.source.push(')');
         }
         NixKind::Let(name, value, body) => {

@@ -54,6 +54,7 @@ pub(super) fn contexts(expr: &mut NixExpr, legacy: bool) {
         | NixKind::Lambda(_, value)
         | NixKind::Function(_, value) => contexts(value, legacy),
         NixKind::Apply(left, right)
+        | NixKind::Assert(left, right)
         | NixKind::Binary(_, left, right)
         | NixKind::Let(_, left, right) => {
             contexts(left, legacy);

@@ -250,10 +250,12 @@ Four mechanisms are exercised:
    for manually matching expressions to Rust origins. Diagnostics never parse
    these comments; each rendering has its own correctly computed source spans.
 3. **Evaluation contexts:** opaque calls/imported values, final NixOS option
-   dependencies, explicit validation and prefix coercion retain
+   dependencies, explicit validation, prefix coercion and shallow record union retain
    `builtins.addErrorContext "rn-..." (...)`. Ordinary selections,
    conditions, equality, division and `toString` use generated positions instead.
-   Literals, lists, attribute sets and assignments have no runtime context.
+   Record union retains a boundary because Nix can blame only the containing field
+   for an invalid operand. Literals, lists, record construction and assignments
+   have no runtime context.
    Static ancestry supplies the enclosing option path independently of demand.
 4. **Structured diagnostics:** `--log-format internal-json --show-trace` on
    Nix 2.34.8 provides a message, underlying `raw_msg`, and structured `trace`.

@@ -104,6 +104,8 @@ fn scoped_reference(node: &Node, packages_only: bool) -> Option<&Node> {
             fields.iter().find_map(|(_, node)| option_reference(node))
         }
         ValueKind::Apply(left, right)
+        | ValueKind::AttrMerge(left, right)
+        | ValueKind::Assert(left, right)
         | ValueKind::Divide(left, right)
         | ValueKind::Equal(left, right) => {
             option_reference(left).or_else(|| option_reference(right))
@@ -181,12 +183,15 @@ enum DiagnosticBoundary {
     Coercion,
     /// A merged option can force a foreign definition without a generated lookup frame.
     FinalOption,
+    /// Nix's union type error can report only the enclosing field, not the // operation.
+    RecordUnion,
 }
 
 /// Ordinary expression failures use generated positions and static span ancestry.
 fn runtime_boundary(kind: &ValueKind) -> Option<DiagnosticBoundary> {
     match kind {
         ValueKind::Apply(..) => Some(DiagnosticBoundary::OpaqueCall),
+        ValueKind::AttrMerge(..) => Some(DiagnosticBoundary::RecordUnion),
         ValueKind::InRange { .. } => Some(DiagnosticBoundary::Validation),
         ValueKind::StringPrefix { .. } => Some(DiagnosticBoundary::Coercion),
         ValueKind::OptionReference(_) => Some(DiagnosticBoundary::FinalOption),
@@ -300,6 +305,15 @@ fn lower_scoped(node: &Node, scope: &[ParameterScope<'_>]) -> NixExpr {
             Box::new(lower_value(condition)),
             Box::new(lower_value(yes)),
             Box::new(lower_value(no)),
+        ),
+        ValueKind::AttrMerge(left, right) => NixKind::Binary(
+            BinaryOp::AttrMerge,
+            Box::new(lower_value(left)),
+            Box::new(lower_value(right)),
+        ),
+        ValueKind::Assert(condition, value) => NixKind::Assert(
+            Box::new(lower_value(condition)),
+            Box::new(lower_value(value)),
         ),
         ValueKind::Equal(left, right) => NixKind::Binary(
             crate::ast::BinaryOp::Equal,

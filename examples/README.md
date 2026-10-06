@@ -40,12 +40,13 @@ configuration, while keeping Nix's ecosystem and final checks underneath.
 | [Layered validation](layered-validation.rs) | Clear division of validation responsibility |
 | [Nix interop](nix-interop.rs) | Existing ecosystem works without generated bindings |
 | [Symbolic option](symbolic-option.rs) | Explicit typed dependencies follow ordinary Nix overrides |
+| [curl package](curl-nixpkg/README.md) | Complete curl recipe with interacting features, TLS validation and recursive package checks |
 | [Git package](git-nixpkg/README.md) | Real package definition with exact derivation compatibility and typed feature choices |
 | [PostgreSQL NixOS module](postgresql-nixos-module/README.md) | Real module implementation with typed provisioning and NixOS compatibility |
 
 The nine small showcases each use **one Rust file** for user models, structural
-placement and lightweight source generation. Git and PostgreSQL are substantial
-multi-file exceptions. Git separates its model, opaque inputs, package lowering
+placement and lightweight source generation. Git, curl and PostgreSQL are substantial
+multi-file exceptions. Git and curl separate their models, symbolic inputs, package lowering
 and entry point. PostgreSQL uses five files, separating the model, public schema,
 symbolic dependencies, lowering and entry point. Examples invoke no Nix evaluator
 and write no artifacts; integration tests prove the behavioral claims. There is
@@ -80,7 +81,7 @@ permits whole-subtree access. It does not create schemas, global bindings or
 read final values into Rust.
 
 `#[rusnix::args]` supplies the analogous finite view over an existing deferred Nix
-function argument record. Git's `inputs.rs` binds it with `args::from_value`;
+function argument record. Git and curl bind it in `inputs.rs` with `args::from_value`;
 navigation and leaf accessors remain symbolic and Nix owns actual argument types.
 
 For local configuration, one inline module boundary supplies structural lowering:
@@ -598,7 +599,7 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 bash scripts/check-fixtures.sh
 ```
 
-All ten examples compile and run without invoking Nix: they print generated
+All twelve showcase examples compile and run without invoking Nix: they print generated
 source. The fixture script runs every example and the legacy generic SSH compiler
 example, integration checks and existing CLI fixtures. Only tests and CLI checks
 perform evaluation, always through the isolated-store helper.

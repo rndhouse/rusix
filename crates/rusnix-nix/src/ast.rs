@@ -53,6 +53,8 @@ pub enum NixKind {
     Binary(BinaryOp, Box<NixExpr>, Box<NixExpr>),
     /// Condition, then branch and else branch, with ordinary Nix laziness.
     If(Box<NixExpr>, Box<NixExpr>, Box<NixExpr>),
+    /// Native expression assertion, leaving the result unused when the condition is false.
+    Assert(Box<NixExpr>, Box<NixExpr>),
     /// One local binding name, its value and the body using it.
     Let(String, Box<NixExpr>, Box<NixExpr>),
     /// A compiler-selected identifier; the renderer does not escape or validate it.
@@ -104,6 +106,8 @@ pub enum BinaryOp {
     And,
     /// Native addition, also used for string/path concatenation (`+`).
     Add,
+    /// Shallow attribute-set union (`//`), with right-hand fields taking precedence.
+    AttrMerge,
 }
 
 impl NixExpr {

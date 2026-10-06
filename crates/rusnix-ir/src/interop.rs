@@ -57,6 +57,8 @@ impl AttrPath {
 /// chooses a source through [`Nixpkgs`] or [`InputRef`] instead.
 #[derive(Clone, Debug)]
 pub enum Source {
+    /// The Nix language's own builtin namespace, independent of nixpkgs or caller libraries.
+    Builtins,
     /// The pinned standalone package set, with Nix applying overlays in order.
     Packages {
         /// Deferred overlay functions, ordered as supplied by the author.
@@ -148,7 +150,7 @@ impl Reference {
                     });
                 }
             }
-            Source::Library => {}
+            Source::Library | Source::Builtins => {}
         }
 
         Ok(())
@@ -287,6 +289,46 @@ impl ConfigValue for NixValue {
 impl NixValue {
     pub(crate) fn from_node(node: Node) -> Self {
         Self(node)
+    }
+
+    /// Refer to a function or value supplied by the Nix language, such as `replaceStrings`.
+    /// This represents `builtins.<name>`, separately from nixpkgs' caller-supplied `lib`.
+    /// Rust does not execute the builtin; use [`Self::apply`] to describe its arguments.
+    /// The name is one literal attribute, checked for existence later by Nix.
+    #[track_caller]
+    pub fn builtin(name: &str) -> Self {
+        Self(
+            Reference {
+                source: Source::Builtins,
+                path: Some(AttrPath::segments([name])),
+                origin: Origin::caller(format!("Nix builtin lookup {name}")),
+            }
+            .node(),
+        )
+    }
+
+    /// Combine two Nix attribute sets, with right-hand fields replacing left-hand fields.
+    /// This represents `left // right`; replacement is shallow and selected values stay lazy.
+    /// Nix checks both operands when needed. This is distinct from NixOS definition merging.
+    #[track_caller]
+    pub fn merge_attrs(self, right: impl Into<Self>) -> Self {
+        Self(Node {
+            origin: Origin::caller("Nix attribute-set union"),
+            kind: ValueKind::AttrMerge(Box::new(self.0), Box::new(right.into().0)),
+        })
+    }
+
+    /// Require a Nix condition before returning a value: `assert condition; value`.
+    /// Rust constructs the expression without checking the condition. Nix evaluates it
+    /// when the result is demanded, and a false condition leaves `value` unevaluated.
+    /// This uses Nix's assertion syntax, independent of `lib.throwIfNot`, and does not
+    /// contribute to the NixOS module assertion list.
+    #[track_caller]
+    pub fn assert(condition: impl Into<Self>, value: impl Into<Self>) -> Self {
+        Self(Node {
+            origin: Origin::caller("Nix expression assertion"),
+            kind: ValueKind::Assert(Box::new(condition.into().0), Box::new(value.into().0)),
+        })
     }
 
     /// Describe a Nix function that takes one argument and computes a result.
