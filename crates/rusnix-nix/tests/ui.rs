@@ -1,7 +1,12 @@
 //! Compile the actual example-owned types and check stable rustc codes and
 //! causal primary spans, not full wording. Example mains are never evaluated.
 use serde::Deserialize;
-use std::{fs, path::Path, process::Command};
+use std::{
+    collections::BTreeSet,
+    fs,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 #[derive(Deserialize)]
 struct Case {
@@ -15,76 +20,6 @@ struct Case {
 #[test]
 fn documented_compile_fail_cases_fail_for_the_stated_reasons() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-
-    // Use the same Cargo target/profile directory as this integration test.
-    // Multiple cached artifacts may exist; Cargo's current build is newest.
-    let executable = std::env::current_exe().unwrap();
-    let deps = executable.parent().unwrap();
-    let library = |name: &str| {
-        fs::read_dir(deps)
-            .unwrap()
-            .map(|e| e.unwrap().path())
-            .filter(|p| {
-                p.file_name()
-                    .unwrap()
-                    .to_string_lossy()
-                    .starts_with(&format!("lib{name}-"))
-                    && p.extension().is_some_and(|s| s == "rlib")
-            })
-            .max_by_key(|p| p.metadata().unwrap().modified().unwrap())
-            .unwrap_or_else(|| panic!("Cargo-built {name} library"))
-    };
-
-    let scratch = tempfile::tempdir().unwrap();
-    let nix_library = library("rusnix_nix");
-
-    // Cargo can cache differently feature-unified IR artifacts. Newest-by-mtime
-    // alone can select a different crate identity than the backend actually uses.
-    let probe = scratch.path().join("compatible.rs");
-    fs::write(
-        &probe,
-        "fn main() { let _ = rusnix_nix::compile(&rusnix_ir::Config::new()); }",
-    )
-    .unwrap();
-    let mut ir_candidates: Vec<_> = fs::read_dir(deps)
-        .unwrap()
-        .map(|entry| entry.unwrap().path())
-        .filter(|path| {
-            path.file_name()
-                .unwrap()
-                .to_string_lossy()
-                .starts_with("librusnix_ir-")
-                && path.extension().is_some_and(|s| s == "rlib")
-        })
-        .collect();
-    ir_candidates
-        .sort_by_key(|path| std::cmp::Reverse(path.metadata().unwrap().modified().unwrap()));
-    let ir_library = ir_candidates
-        .into_iter()
-        .find(|path| {
-            Command::new(std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into()))
-                .arg(&probe)
-                .args(["--edition=2024", "--emit=metadata"])
-                .arg("--extern")
-                .arg(format!("rusnix_ir={}", path.display()))
-                .arg("--extern")
-                .arg(format!("rusnix_nix={}", nix_library.display()))
-                .arg("-L")
-                .arg(format!("dependency={}", deps.display()))
-                .arg("--out-dir")
-                .arg(scratch.path())
-                .output()
-                .unwrap()
-                .status
-                .success()
-        })
-        .expect("Cargo-built IR compatible with the backend");
-
-    let libraries = [
-        ("rusnix_ir", ir_library),
-        ("rusnix_nix", nix_library),
-        ("serde_json", library("serde_json")),
-    ];
 
     let cases: Vec<Case> =
         serde_json::from_str(include_str!("../../../tests/ui/expected.json")).unwrap();
@@ -106,37 +41,68 @@ fn documented_compile_fail_cases_fail_for_the_stated_reasons() {
     let artifacts = root.join("target/typed-examples/ui");
     fs::create_dir_all(&artifacts).unwrap();
 
+    let metadata = cargo_metadata(&root);
+    let scratch = tempfile::tempdir().unwrap();
+    let manifest = fixture_manifest(&root, scratch.path(), &cases, &metadata);
+    let target_dir = Path::new(metadata["target_directory"].as_str().unwrap());
+    let executable = std::env::current_exe().unwrap();
+    let relative: Vec<_> = executable
+        .strip_prefix(target_dir)
+        .unwrap()
+        .components()
+        .collect();
+    assert!(
+        matches!(relative.len(), 3 | 4),
+        "unexpected Cargo executable path: {}",
+        executable.display()
+    );
+    let profile = relative[relative.len() - 3].as_os_str();
+
     for case in cases {
-        let mut command = Command::new(std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into()));
-
-        for (name, path) in &libraries {
-            command
-                .arg("--extern")
-                .arg(format!("{name}={}", path.display()));
-        }
-
-        let output = command
-            .arg(root.join("tests/ui").join(&case.file))
+        let mut command = Command::new(env!("CARGO"));
+        command
+            .current_dir(&root)
             .args([
-                "--edition=2024",
-                "--emit=metadata",
-                "--error-format=json",
-                "--cap-lints=allow",
+                "check",
+                "--locked",
+                "--offline",
+                "--message-format=json",
+                "--color=never",
             ])
-            .arg("-L")
-            .arg(format!("dependency={}", deps.display()))
-            .arg("--out-dir")
-            .arg(scratch.path())
-            .output()
-            .unwrap();
-
+            .arg("--manifest-path")
+            .arg(&manifest)
+            .arg("--target-dir")
+            .arg(target_dir.join("ui-fixtures"))
+            .arg("--profile")
+            .arg(if profile == "debug" {
+                std::ffi::OsStr::new("dev")
+            } else {
+                profile
+            })
+            .arg("--bin")
+            .arg(Path::new(&case.file).file_stem().unwrap());
+        if relative.len() == 4 {
+            command.arg("--target").arg(relative[0].as_os_str());
+        }
+        let output = command.output().unwrap();
         assert!(!output.status.success(), "{} compiled", case.file);
 
-        let raw = String::from_utf8(output.stderr).unwrap();
-        fs::write(artifacts.join(format!("{}.jsonl", case.file)), &raw).unwrap();
-        let errors: Vec<serde_json::Value> = raw
+        let messages: Vec<serde_json::Value> = String::from_utf8(output.stdout)
+            .unwrap()
             .lines()
-            .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+            .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+            .filter(|event| event["reason"] == "compiler-message")
+            .map(|event| event["message"].clone())
+            .collect();
+        let raw = messages
+            .iter()
+            .map(|message| serde_json::to_string(message).unwrap())
+            .collect::<Vec<_>>()
+            .join("\n");
+        fs::write(artifacts.join(format!("{}.jsonl", case.file)), &raw).unwrap();
+        let raw = format!("{raw}\n{}", String::from_utf8_lossy(&output.stderr));
+        let errors: Vec<serde_json::Value> = messages
+            .into_iter()
             .filter(|d| {
                 d["level"] == "error"
                     && (d["code"]["code"].is_string()
@@ -181,4 +147,107 @@ fn documented_compile_fail_cases_fail_for_the_stated_reasons() {
             }
         }
     }
+}
+
+fn cargo_metadata(root: &Path) -> serde_json::Value {
+    let output = Command::new(env!("CARGO"))
+        .current_dir(root)
+        .args(["metadata", "--locked", "--offline", "--format-version=1"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    serde_json::from_slice(&output.stdout).unwrap()
+}
+
+// The scratch package uses the actual fixture files and the workspace's exact
+// locked dependency closure. Cargo owns artifact selection and compiler flags.
+fn fixture_manifest(
+    root: &Path,
+    scratch: &Path,
+    cases: &[Case],
+    metadata: &serde_json::Value,
+) -> PathBuf {
+    let quoted = |path: &Path| serde_json::to_string(path.to_str().unwrap()).unwrap();
+    let mut manifest = format!(
+        "[package]\nname = \"rusnix-ui-fixtures\"\nversion = \"0.0.0\"\nedition = \"2024\"\n\n[workspace]\nresolver = \"3\"\n\n[dependencies]\nrusnix-ir = {{ path = {} }}\nrusnix-nix = {{ path = {} }}\n",
+        quoted(&root.join("crates/rusnix-ir")),
+        quoted(&root.join("crates/rusnix-nix")),
+    );
+    for case in cases {
+        manifest.push_str(&format!(
+            "\n[[bin]]\nname = {}\npath = {}\n",
+            quoted(Path::new(&case.file).file_stem().map(Path::new).unwrap()),
+            quoted(&root.join("tests/ui").join(&case.file)),
+        ));
+    }
+    let path = scratch.join("Cargo.toml");
+    fs::write(&path, manifest).unwrap();
+
+    let packages = metadata["packages"].as_array().unwrap();
+    let nodes = metadata["resolve"]["nodes"].as_array().unwrap();
+    let backend = packages
+        .iter()
+        .find(|package| package["name"] == "rusnix-nix")
+        .unwrap();
+    let mut pending = vec![backend["id"].as_str().unwrap()];
+    let mut selected = BTreeSet::new();
+    while let Some(id) = pending.pop() {
+        if selected.insert(id) {
+            let node = nodes.iter().find(|node| node["id"] == id).unwrap();
+            for dependency in node["deps"].as_array().unwrap() {
+                if dependency["dep_kinds"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|kind| kind["kind"] != "dev")
+                {
+                    pending.push(dependency["pkg"].as_str().unwrap());
+                }
+            }
+        }
+    }
+
+    let source = fs::read_to_string(root.join("Cargo.lock")).unwrap();
+    let (header, _) = source.split_once("[[package]]").unwrap();
+    let mut blocks: Vec<_> = source
+        .split("[[package]]")
+        .skip(1)
+        .filter(|block| {
+            packages.iter().any(|package| {
+                selected.contains(package["id"].as_str().unwrap())
+                    && lock_field(block, "name").as_deref() == package["name"].as_str()
+                    && lock_field(block, "version").as_deref() == package["version"].as_str()
+                    && lock_field(block, "source").as_deref() == package["source"].as_str()
+            })
+        })
+        .map(str::to_owned)
+        .collect();
+    blocks.push("\nname = \"rusnix-ui-fixtures\"\nversion = \"0.0.0\"\ndependencies = [\n \"rusnix-ir\",\n \"rusnix-nix\",\n]\n\n".into());
+    blocks.sort_by_key(|block| {
+        (
+            lock_field(block, "name"),
+            lock_field(block, "version"),
+            lock_field(block, "source"),
+        )
+    });
+    fs::write(
+        scratch.join("Cargo.lock"),
+        format!("{header}[[package]]{}", blocks.join("[[package]]")),
+    )
+    .unwrap();
+    path
+}
+
+// Cargo's package identity fields are quoted ASCII strings; retain every other
+// lockfile field verbatim, including checksums and dependency version qualifiers.
+fn lock_field(block: &str, name: &str) -> Option<String> {
+    let prefix = format!("{name} = ");
+    block
+        .lines()
+        .find_map(|line| line.strip_prefix(&prefix))
+        .map(|value| serde_json::from_str(value).unwrap())
 }
