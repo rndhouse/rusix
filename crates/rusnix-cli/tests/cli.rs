@@ -160,3 +160,46 @@ fn cli_can_select_good_and_bad_from_the_same_configuration() {
         fs::read_to_string(artifacts.path().join("nix.stderr")).unwrap()
     );
 }
+
+#[test]
+fn switching_commands_clears_all_owned_artifacts_and_preserves_unrelated_files() {
+    let artifacts = tempfile::tempdir().unwrap();
+    fs::write(artifacts.path().join("notes.txt"), "keep me").unwrap();
+    let run = |command: &str, fixture: &str| {
+        Command::new(env!("CARGO_BIN_EXE_rusnix-cli"))
+            .args([command, fixture, "--out"])
+            .arg(artifacts.path())
+            .output()
+            .unwrap()
+    };
+
+    assert!(run("check", "good").status.success());
+    assert!(artifacts.path().join("generated.nix").exists());
+    assert!(run("check-nixos", "good").status.success());
+    assert!(!artifacts.path().join("generated.nix").exists());
+    assert!(!artifacts.path().join("source-map.json").exists());
+    assert!(artifacts.path().join("module.nix").exists());
+
+    assert!(run("emit", "good").status.success());
+    for name in [
+        "module.nix",
+        "module-map.json",
+        "nixos-driver.nix",
+        "evaluation.nix",
+        "value.json",
+        "nix.stderr",
+    ] {
+        assert!(!artifacts.path().join(name).exists(), "stale {name}");
+    }
+    assert!(artifacts.path().join("generated.nix").exists());
+    assert_eq!(
+        fs::read_to_string(artifacts.path().join("notes.txt")).unwrap(),
+        "keep me"
+    );
+
+    // Reject unknown fixtures before clearing a previously valid artifact set.
+    for command in ["check", "check-nixos"] {
+        assert_eq!(run(command, "missing").status.code(), Some(1));
+        assert!(artifacts.path().join("generated.nix").exists());
+    }
+}

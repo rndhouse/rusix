@@ -7,7 +7,7 @@ mod merge_fixtures;
 
 mod nixos_fixtures;
 
-use rusnix_nix::{Diagnostic, Generated, NixSession, compile};
+use rusnix_nix::{Diagnostic, Evaluation, Generated, NixSession, compile};
 use std::{
     env, fs,
     path::{Path, PathBuf},
@@ -44,46 +44,21 @@ fn run() -> Result<(), String> {
         return Err("usage: rusnix-cli <emit|check> <good|bad-port|nested|conflict|selective|codegen-bug|unmapped> --out <artifact-directory> [--select <attribute>]\n       rusnix-cli version".into());
     }
 
-    let out = PathBuf::from(&args[3]);
-    fs::create_dir_all(&out).map_err(|e| e.to_string())?;
-
-    // These are compiler-owned outputs. A rerun must not leave an old successful
-    // value alongside a new failure, or an old failure alongside a new value.
-    for name in [
-        "generated.nix",
-        "source-map.json",
-        "value.json",
-        "diagnostic.json",
-        "diagnostic.txt",
-        "nix.stderr",
-    ] {
-        match fs::remove_file(out.join(name)) {
-            Ok(()) => {}
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-            Err(e) => return Err(e.to_string()),
-        }
-    }
-
     let generated = match args[1].as_str() {
         // Fault injections live in the CLI harness, never the configuration API.
-        "codegen-bug" => Generated {
+        "codegen-bug" => Ok(Generated {
             source: "{ broken = ; }\n".into(),
             spans: vec![],
-        },
-        "unmapped" => Generated {
+        }),
+        "unmapped" => Ok(Generated {
             source: "builtins.throw \"backend failure without metadata\"\n".into(),
             spans: vec![],
-        },
-        name => match compile(
-            &fixtures::config(name).ok_or_else(|| format!("unknown fixture: {name}"))?,
-        ) {
-            Ok(generated) => generated,
-            Err(diagnostic) => {
-                save_diagnostic(&out, &diagnostic)?;
-                return Err(diagnostic.render(Path::new(".")));
-            }
-        },
+        }),
+        name => compile(&fixtures::config(name).ok_or_else(|| format!("unknown fixture: {name}"))?),
     };
+    let out = PathBuf::from(&args[3]);
+    prepare_output(&out)?;
+    let generated = retain_compilation(&out, generated)?;
 
     fs::write(out.join("generated.nix"), &generated.source).map_err(|e| e.to_string())?;
     write_json(&out.join("source-map.json"), &generated)?;
@@ -100,25 +75,7 @@ fn run() -> Result<(), String> {
         session.evaluate(&generated)
     };
 
-    match result {
-        Ok(evaluation) => {
-            write_json(&out.join("value.json"), &evaluation.value)?;
-            fs::write(out.join("nix.stderr"), evaluation.raw_nix).map_err(|e| e.to_string())?;
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&evaluation.value).unwrap()
-            );
-            Ok(())
-        }
-        Err(diagnostic) => {
-            save_diagnostic(&out, &diagnostic)?;
-            Err(format!(
-                "{}\nOriginal Nix diagnostic: {}",
-                diagnostic.render(Path::new(".")),
-                out.join("nix.stderr").display()
-            ))
-        }
-    }
+    retain_evaluation(&out, result)
 }
 
 fn run_nixos(args: &[String]) -> Result<(), String> {
@@ -136,22 +93,8 @@ fn run_nixos(args: &[String]) -> Result<(), String> {
         .ok_or_else(|| format!("unknown NixOS fixture: {}", args[1]))?;
 
     let out = PathBuf::from(&args[3]);
-    fs::create_dir_all(&out).map_err(|e| e.to_string())?;
-
-    for name in [
-        "value.json",
-        "diagnostic.json",
-        "diagnostic.txt",
-        "nix.stderr",
-    ] {
-        match fs::remove_file(out.join(name)) {
-            Ok(()) => {}
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-            Err(e) => return Err(e.to_string()),
-        }
-    }
-
-    let artifact = compile_module(&module).map_err(|d| d.render(Path::new(".")))?;
+    prepare_output(&out)?;
+    let artifact = retain_compilation(&out, compile_module(&module))?;
     fs::write(out.join("module.nix"), &artifact.module.source).map_err(|e| e.to_string())?;
     write_json(&out.join("module-map.json"), &artifact)?;
     fs::write(out.join("nixos-driver.nix"), DRIVER).map_err(|e| e.to_string())?;
@@ -175,18 +118,64 @@ fn run_nixos(args: &[String]) -> Result<(), String> {
 
     let session = NixSession::new().map_err(|e| e.to_string())?;
 
-    match session.evaluate_nixos(&artifact, &selection, assertions) {
+    retain_evaluation(
+        &out,
+        session.evaluate_nixos(&artifact, &selection, assertions),
+    )
+}
+
+fn prepare_output(out: &Path) -> Result<(), String> {
+    fs::create_dir_all(out).map_err(|e| e.to_string())?;
+
+    // Both commands own this artifact set. Reusing a directory across modes must
+    // not retain sources, maps or results from a previous compilation.
+    for name in [
+        "generated.nix",
+        "source-map.json",
+        "module.nix",
+        "module-map.json",
+        "nixos-driver.nix",
+        "evaluation.nix",
+        "value.json",
+        "diagnostic.json",
+        "diagnostic.txt",
+        "nix.stderr",
+    ] {
+        match fs::remove_file(out.join(name)) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.to_string()),
+        }
+    }
+    Ok(())
+}
+
+fn retain_compilation<T>(out: &Path, result: Result<T, Box<Diagnostic>>) -> Result<T, String> {
+    match result {
+        Ok(artifact) => Ok(artifact),
+        Err(diagnostic) => {
+            save_diagnostic(out, &diagnostic)?;
+            Err(diagnostic.render(Path::new(".")))
+        }
+    }
+}
+
+fn retain_evaluation(
+    out: &Path,
+    result: Result<Evaluation, Box<Diagnostic>>,
+) -> Result<(), String> {
+    match result {
         Ok(evaluation) => {
             write_json(&out.join("value.json"), &evaluation.value)?;
             fs::write(out.join("nix.stderr"), evaluation.raw_nix).map_err(|e| e.to_string())?;
             println!(
                 "{}",
-                serde_json::to_string_pretty(&evaluation.value).unwrap()
+                serde_json::to_string_pretty(&evaluation.value).map_err(|e| e.to_string())?
             );
             Ok(())
         }
         Err(diagnostic) => {
-            save_diagnostic(&out, &diagnostic)?;
+            save_diagnostic(out, &diagnostic)?;
             Err(format!(
                 "{}\nOriginal Nix diagnostic: {}",
                 diagnostic.render(Path::new(".")),
@@ -209,4 +198,36 @@ fn save_diagnostic(out: &Path, diagnostic: &Diagnostic) -> Result<(), String> {
         diagnostic.render(Path::new(".")),
     )
     .map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rusnix_ir::{Config, nixos::NixosModule};
+    use rusnix_nix::nixos::compile_module;
+
+    #[test]
+    fn module_compilation_failures_replace_stale_artifacts_with_diagnostics() {
+        let out = tempfile::tempdir().unwrap();
+        for name in ["module.nix", "module-map.json", "value.json"] {
+            fs::write(out.path().join(name), "stale").unwrap();
+        }
+        prepare_output(out.path()).unwrap();
+        let module = NixosModule::new(Config::new().set("", true));
+        assert!(retain_compilation(out.path(), compile_module(&module)).is_err());
+
+        let diagnostic: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.path().join("diagnostic.json")).unwrap()).unwrap();
+        assert_eq!(diagnostic["kind"], "Validation");
+        assert!(diagnostic["primary"].is_object());
+        assert!(
+            fs::read_to_string(out.path().join("diagnostic.txt"))
+                .unwrap()
+                .contains("nonempty")
+        );
+        assert!(fs::read(out.path().join("nix.stderr")).unwrap().is_empty());
+        for name in ["module.nix", "module-map.json", "value.json"] {
+            assert!(!out.path().join(name).exists());
+        }
+    }
 }
