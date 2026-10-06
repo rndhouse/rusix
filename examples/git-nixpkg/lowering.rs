@@ -71,6 +71,9 @@ pub fn factory() -> NixValue {
                 "svnSupport requires perlSupport",
             ),
         ];
+
+        // Build guards inside out so Nix checks them in source order when the
+        // package is demanded. The first failure leaves later checks unused.
         let body = checks
             .into_iter()
             .rev()

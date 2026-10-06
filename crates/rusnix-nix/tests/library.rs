@@ -331,6 +331,122 @@ fn throw_if_not_preserves_lazy_branches_and_reports_the_validation_call() {
     assert!(!diagnostic.raw_nix.is_empty());
 }
 
+// A test-only reproduction of Git's three-rule composition, not a public helper.
+fn ordered_guards(
+    lib: &NixLibrary,
+    checks: [(NixValue, NixValue); 3],
+    value: NixValue,
+) -> NixValue {
+    checks
+        .into_iter()
+        .rev()
+        .fold(value, |body, (condition, message)| {
+            lib.throw_if_not(condition, message, body)
+        })
+}
+
+#[test]
+fn ordered_guards_stop_at_the_first_failure_without_forcing_later_values() {
+    let lib = Nixpkgs::new().library();
+    let session = NixSession::new().unwrap();
+    let unused: NixValue = Expr::int(1).divide(Expr::int(0)).into();
+
+    for rejected in 0..3 {
+        let checks = std::array::from_fn(|index| {
+            if index < rejected {
+                (true.into(), unused.clone())
+            } else if index == rejected {
+                (false.into(), format!("rule {index} rejected").into())
+            } else {
+                (unused.clone(), unused.clone())
+            }
+        });
+        let guarded = ordered_guards(&lib, checks, unused.clone());
+        let diagnostic = session
+            .evaluate_interop(&compile(&Config::new().set("result", guarded.clone())).unwrap())
+            .unwrap_err();
+        assert!(
+            diagnostic
+                .reason
+                .contains(&format!("rule {rejected} rejected"))
+        );
+        assert!(!diagnostic.reason.contains("division by zero"));
+        assert_eq!(diagnostic.primary.as_ref().unwrap().file, file!());
+        assert!(!diagnostic.raw_nix.is_empty());
+
+        assert_eq!(
+            evaluate(
+                NixValue::record([("good", 42_i64.into()), ("unused", guarded)]).select("good")
+            ),
+            42,
+        );
+    }
+
+    // Passing guards return the result, leaving unused messages and fields lazy.
+    let result = NixValue::record([("good", 42_i64.into()), ("unused", unused.clone())]);
+    let guarded = ordered_guards(
+        &lib,
+        std::array::from_fn(|_| (true.into(), unused.clone())),
+        result,
+    );
+    assert_eq!(evaluate(guarded.select("good")), 42);
+}
+
+#[test]
+fn ordered_guards_retain_failing_condition_and_message_origins() {
+    let lib = Nixpkgs::new().library();
+    let session = NixSession::new().unwrap();
+
+    for failing_message in [false, true] {
+        let line = line!() + 1;
+        let failure: NixValue = Expr::int(1).divide(Expr::int(0)).into();
+        let rule = if failing_message {
+            (false.into(), failure.clone())
+        } else {
+            (failure.clone(), "unused message".into())
+        };
+        let guarded = ordered_guards(
+            &lib,
+            [
+                (true.into(), failure.clone()),
+                rule,
+                (false.into(), failure.clone()),
+            ],
+            failure,
+        );
+        let diagnostic = session
+            .evaluate_interop(&compile(&Config::new().set("result", guarded)).unwrap())
+            .unwrap_err();
+        assert_eq!(diagnostic.reason, "division by zero");
+        assert_eq!(diagnostic.primary.as_ref().unwrap().file, file!());
+        assert_eq!(diagnostic.primary.as_ref().unwrap().line, line);
+        assert!(!diagnostic.raw_nix.is_empty());
+    }
+}
+
+#[test]
+fn ordered_guards_use_the_supplied_throw_function_at_every_level() {
+    let lib = NixLibrary::from_value(NixValue::record([(
+        "throwIfNot",
+        NixValue::function(|_| {
+            NixValue::function(|message| {
+                NixValue::function(move |value| NixValue::list([message, value]))
+            })
+        }),
+    )]));
+    let guarded = ordered_guards(
+        &lib,
+        ["first", "second", "third"].map(|message| (false.into(), message.into())),
+        42_i64.into(),
+    );
+
+    // This supplied function deliberately ignores conditions instead of throwing.
+    assert_eq!(
+        evaluate(guarded),
+        serde_json::json!(["first", ["second", ["third", 42]]]),
+    );
+}
+
 #[test]
 fn symbolic_negation_reports_its_caller_for_invalid_backend_boolean_types() {
     let line = line!() + 1;

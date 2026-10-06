@@ -476,6 +476,25 @@ fn invalid_public_feature_combinations_reject_and_retain_rust_provenance() {
             vec![("perlSupport", false), ("svnSupport", true)],
             "svnSupport",
         ),
+        (
+            "all-feature-checks-fail-first-wins",
+            vec![
+                ("osxkeychainSupport", true),
+                ("perlSupport", false),
+                ("sendEmailSupport", true),
+                ("svnSupport", true),
+            ],
+            "osxkeychainSupport",
+        ),
+        (
+            "email-and-svn-checks-fail-second-wins",
+            vec![
+                ("perlSupport", false),
+                ("sendEmailSupport", true),
+                ("svnSupport", true),
+            ],
+            "sendEmailSupport",
+        ),
     ] {
         let mut errors = Vec::new();
 
