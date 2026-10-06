@@ -7,7 +7,7 @@ use rusnix_ir::{
     nix_text, package,
 };
 
-/// A native Nix package function, suitable for ordinary callPackage and overrides.
+/// Creates a native Nix package function compatible with `callPackage` and argument overrides.
 pub fn factory() -> PackageFunction {
     PackageFunction::from_function_attrs(ARGUMENTS.iter().copied(), |args| {
         let inputs = args::from_value(args);
