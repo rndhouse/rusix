@@ -1102,18 +1102,21 @@ Nix overrides of the same artifact; UI fixtures check the compile-time boundary.
 `lib` is nixpkgs' utility library, a record of functions separate from the Nix
 language's `builtins`. Bind its supported Rust helpers to a caller's library with
 `NixLibrary::from_value(inputs.lib.as_value())`. The `optional`, `optionals`,
-`optional_text`, `all`, `concat_lists` and `throw_if_not` methods call that exact
-library, including caller overrides. `throw_if_not(condition, message, value)`
+`optional_text`, `all`, `concat_lists`, `version_at_least` and `throw_if_not` methods
+call that exact library, including caller overrides. `throw_if_not(condition, message, value)`
 validates an expression when Nix evaluates it; it is separate from the NixOS
 assertion collection. Arbitrary functions remain accessible through
 `lib.as_value().clone().select("getDev").apply([package])`.
 Named helpers grow from demonstrated real-world usage; arbitrary nixpkgs `lib`
 access remains available through the generic `NixValue` escape hatch.
 For the pinned library, explicitly choose `Nixpkgs::library()`.
-Boolean `!` works on `Expr<bool>` and opaque NixValue; `Expr<bool>::and` provides
-lazy conjunction independent of library overrides. Both stay deferred and
-check actual boolean types in Nix. These operations preserve child origins,
-laziness and Nix string dependency context rather than computing in Rust.
+Boolean `!` and `.and()` work on both `Expr<bool>` and opaque `NixValue`, providing
+lazy boolean operations independent of library overrides. Both stay deferred and
+check actual boolean types in Nix. `NixValue::concat_lists` joins lists through
+`builtins.concatLists`, keeping element values lazy and remaining independent of
+`lib.concatLists`. `lib.version_at_least(version, minimum)` instead calls the
+supplied library's version comparison. These operations preserve child origins
+and Nix string dependency context rather than computing in Rust.
 
 For package-function adapters, `#[rusnix::args]` provides the same finite structural
 navigation over a supplied deferred argument record. Bind it with

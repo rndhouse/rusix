@@ -50,6 +50,18 @@ fn standard_helpers_handle_concrete_values_empty_lists_and_false_conditions() {
                 lib.concat_lists([values, NixValue::list([3_i64.into()])])
             ),
             ("emptyLists", lib.concat_lists([])),
+            (
+                "nativeLists",
+                NixValue::concat_lists([
+                    NixValue::list([]),
+                    NixValue::list([1_i64.into(), 2_i64.into()]),
+                    NixValue::list([3_i64.into()]),
+                ]),
+            ),
+            ("emptyNativeLists", NixValue::concat_lists([])),
+            ("newerVersion", lib.version_at_least("10.10", "10.9")),
+            ("equalVersion", lib.version_at_least("10.9", "10.9")),
+            ("olderVersion", lib.version_at_least("10.9", "10.10")),
             ("not", !NixValue::from(true)),
             ("typedNot", (!Expr::boolean(false)).into()),
             (
@@ -64,6 +76,8 @@ fn standard_helpers_handle_concrete_values_empty_lists_and_false_conditions() {
             "optional": [42], "absent": [], "optionals": [1, 2], "noOptionals": [],
             "text": "exact\n text", "noText": "", "all": true, "notAll": false,
             "emptyAll": true, "lists": [1, 2, 3], "emptyLists": [],
+            "nativeLists": [1, 2, 3], "emptyNativeLists": [],
+            "newerVersion": true, "equalVersion": true, "olderVersion": false,
             "not": false, "typedNot": true, "curried": "a/b",
         }),
     );
@@ -137,10 +151,15 @@ fn standard_conditionals_and_all_leave_excluded_or_short_circuited_values_lazy()
                     .select("length")
                     .apply([lib.optional(true, failure.clone())])
             ),
+            (
+                "nativeHeadOnly",
+                NixValue::builtin("length")
+                    .call(NixValue::concat_lists([NixValue::list([failure.clone()])]))
+            ),
         ])),
         serde_json::json!({
             "optional": [], "optionals": [], "text": "", "not": [], "typedNot": [], "all": false,
-            "lists": [], "headOnly": 1,
+            "lists": [], "headOnly": 1, "nativeHeadOnly": 1,
         }),
     );
 
@@ -207,6 +226,7 @@ fn every_library_helper_uses_the_supplied_record_including_overridden_functions(
             }),
         ),
         ("custom", replacement("custom")),
+        ("versionAtLeast", replacement("versionAtLeast")),
     ]);
     let lib = NixLibrary::from_value(library);
     let values = NixValue::list([42_i64.into()]);
@@ -217,7 +237,10 @@ fn every_library_helper_uses_the_supplied_record_including_overridden_functions(
             ("optionals", lib.optionals(false, values.clone())),
             ("text", lib.optional_text(false, "caller text")),
             ("all", lib.all([false])),
-            ("lists", lib.concat_lists([values])),
+            ("lists", lib.concat_lists([values.clone()])),
+            ("nativeLists", NixValue::concat_lists([values])),
+            ("nativeAnd", NixValue::from(true).and(false)),
+            ("version", lib.version_at_least("10.9", "10.10")),
             (
                 "validated",
                 lib.throw_if_not(false, "caller message", 7_i64)
@@ -236,6 +259,8 @@ fn every_library_helper_uses_the_supplied_record_including_overridden_functions(
             "text": {"function":"optionalString", "condition":false, "value":"caller text"},
             "all": {"function":"all", "identityResult":true, "conditions":[false]},
             "lists": {"function":"concatLists", "lists":[[42]]},
+            "nativeLists": [42], "nativeAnd": false,
+            "version": {"function":"versionAtLeast", "condition":"10.9", "value":"10.10"},
             "validated": {"condition":false, "message":"caller message", "value":7},
             "custom": {"function":"custom", "condition":true, "value":7},
         }),
@@ -254,6 +279,7 @@ fn helper_failures_capture_the_public_call_site_and_keep_the_nix_trace() {
         (lib.optional_text(true, "text"), line!()),
         (lib.all([true]), line!()),
         (lib.concat_lists([]), line!()),
+        (lib.version_at_least("10.9", "10.10"), line!()),
         (lib.throw_if_not(true, "unused", 42_i64), line!()),
     ];
 
@@ -281,6 +307,10 @@ fn child_expression_failures_remain_more_precise_than_helper_boundaries() {
         lib.optional_text(true, failure.clone()),
         lib.all([failure.clone()]),
         lib.concat_lists([NixValue::list([failure.clone()])]),
+        NixValue::concat_lists([NixValue::list([failure.clone()])]),
+        lib.version_at_least(failure.clone(), "10.10"),
+        lib.version_at_least("10.9", failure.clone()),
+        NixValue::from(true).and(failure.clone()),
         lib.throw_if_not(true, "unused", failure.clone()),
         lib.throw_if_not(failure.clone(), "unused", 42_i64),
         !failure.clone(),
@@ -467,12 +497,14 @@ fn boolean_conjunction_short_circuits_and_reports_operand_and_call_origins() {
     let unused = Expr::boolean(false).and(failure.clone().into_expr());
 
     assert_eq!(evaluate(unused.into()), false);
+    assert_eq!(evaluate(NixValue::from(false).and(failure.clone())), false);
     for left in [false, true] {
         for right in [false, true] {
             assert_eq!(
                 evaluate(Expr::boolean(left).and(Expr::boolean(right)).into()),
                 left && right,
             );
+            assert_eq!(evaluate(NixValue::from(left).and(right)), left && right);
         }
     }
 
@@ -487,20 +519,49 @@ fn boolean_conjunction_short_circuits_and_reports_operand_and_call_origins() {
     // A declared bool expectation is not proof of the backend value's type.
     // Even the right operand is checked as a boolean, matching Nix &&.
     for left in [false, true] {
-        let right = NixValue::from("not a boolean").into_expr();
-        let call_line = line!() + 1;
-        let invalid = Expr::boolean(left).and(right);
-        let artifact = compile(&Config::new().set("result", invalid)).unwrap();
-        let result = NixSession::new().unwrap().evaluate_interop(&artifact);
+        let right = NixValue::from("not a boolean");
+        let typed_line = line!() + 1;
+        let typed = Expr::boolean(left).and(right.clone().into_expr()).into();
+        let opaque_line = line!() + 1;
+        let opaque = NixValue::from(left).and(right);
+        let cases = [(typed, typed_line), (opaque, opaque_line)];
+        for (invalid, call_line) in cases {
+            let artifact = compile(&Config::new().set("result", invalid)).unwrap();
+            let result = NixSession::new().unwrap().evaluate_interop(&artifact);
 
-        if left {
-            let diagnostic = result.unwrap_err();
-            assert_eq!(diagnostic.primary.as_ref().unwrap().line, call_line);
-            assert!(diagnostic.reason.to_lowercase().contains("boolean"));
-            assert!(!diagnostic.raw_nix.is_empty());
-        } else {
-            assert_eq!(result.unwrap().value["result"], false);
+            if left {
+                let diagnostic = result.unwrap_err();
+                assert_eq!(diagnostic.primary.as_ref().unwrap().line, call_line);
+                assert_eq!(diagnostic.primary.as_ref().unwrap().file, file!());
+                assert!(diagnostic.reason.to_lowercase().contains("boolean"));
+                assert!(!diagnostic.raw_nix.is_empty());
+            } else {
+                assert_eq!(result.unwrap().value["result"], false);
+            }
         }
+    }
+}
+
+#[test]
+fn native_helpers_report_type_errors_at_the_public_call_site() {
+    let failure: NixValue = Expr::int(1).divide(Expr::int(0)).into();
+    let boolean_line = line!() + 1;
+    let invalid_boolean = NixValue::from("not a boolean").and(failure);
+    let cases = [
+        (invalid_boolean, "boolean", boolean_line),
+        (NixValue::concat_lists([42_i64.into()]), "list", line!()),
+    ];
+
+    for (value, expected_type, line) in cases {
+        let diagnostic = NixSession::new()
+            .unwrap()
+            .evaluate_interop(&compile(&Config::new().set("result", value)).unwrap())
+            .unwrap_err();
+        assert_eq!(diagnostic.primary.as_ref().unwrap().file, file!());
+        assert_eq!(diagnostic.primary.as_ref().unwrap().line, line);
+        assert!(diagnostic.reason.to_lowercase().contains(expected_type));
+        assert!(!diagnostic.reason.contains("division by zero"));
+        assert!(!diagnostic.raw_nix.is_empty());
     }
 }
 

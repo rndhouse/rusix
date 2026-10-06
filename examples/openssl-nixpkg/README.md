@@ -13,6 +13,10 @@ including unused upstream parameters. Naming annotations cover exceptions such
 as `enableSSL2`; ordinary names use the default lowerCamelCase mapping.
 Fixed opaque records use `nix_record!`, with iterators retained for release families
 and dynamic target tables.
+Boolean conjunction and native list concatenation use `NixValue::and` and
+`NixValue::concat_lists`; version comparisons use the supplied
+`NixLibrary::version_at_least`. These shared helpers preserve lazy evaluation
+and Rust call locations without local copies of their implementations.
 
 All package policy is Rust authored. The backend remains the caller's nixpkgs
 library, fetchurl, stdenv.mkDerivation, outputs, wrappers, setup hooks and tests.

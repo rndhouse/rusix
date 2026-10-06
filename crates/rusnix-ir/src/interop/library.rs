@@ -138,10 +138,23 @@ impl NixLibrary {
         )
     }
 
+    /// Test whether `version` is at least `minimum` using `lib.versionAtLeast`.
+    /// Rust constructs the comparison; the wrapped library compares the version
+    /// strings when Nix evaluates it. A caller's replacement remains authoritative.
+    #[track_caller]
+    pub fn version_at_least(
+        &self,
+        version: impl Into<NixValue>,
+        minimum: impl Into<NixValue>,
+    ) -> NixValue {
+        self.apply("versionAtLeast", [version.into(), minimum.into()])
+    }
+
     /// Join several Nix lists into one, preserving their element order.
     /// For example, `[[1], [2, 3]]` becomes `[1, 2, 3]` through `lib.concatLists`.
     /// The standard function returns an empty list for no inputs and evaluates
     /// element values only when they are needed.
+    /// Use [`NixValue::concat_lists`] for builtin concatenation independent of `lib`.
     #[track_caller]
     pub fn concat_lists(&self, lists: impl IntoIterator<Item = NixValue>) -> NixValue {
         self.apply("concatLists", [NixValue::list(lists)])

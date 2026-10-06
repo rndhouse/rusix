@@ -242,7 +242,7 @@ fn attributes(i: &Inputs, final_attrs: NixValue) -> NixValue {
 /// Preserve upstream's dependency sequence; excluded optional packages remain lazy.
 /// Native concatenation must not consult an overridden lib.concatLists: upstream uses ++.
 fn dependencies(i: &Inputs, lib: &NixLibrary) -> NixValue {
-    NixValue::builtin("concatLists").call(NixValue::list([
+    NixValue::concat_lists([
         lib.optional(i.brotli_support(), i.brotli()),
         lib.optional(i.c_ares_support(), i.c_ares_minimal()),
         lib.optional(i.gnutls_support(), i.gnutls()),
@@ -268,7 +268,7 @@ fn dependencies(i: &Inputs, lib: &NixLibrary) -> NixValue {
                 i.darwin.apple_sdk.frameworks.system_configuration(),
             ]),
         ),
-    ]))
+    ])
 }
 
 /// Call the supplied library's configure helpers; disabled output arguments stay deferred.
@@ -327,7 +327,7 @@ fn configure_flags(i: &Inputs, lib: &NixLibrary) -> NixValue {
         ]));
     }
 
-    NixValue::builtin("concatLists").call(NixValue::list([
+    NixValue::concat_lists([
         NixValue::list(flags),
         lib.optional(
             i.gss_support(),
@@ -359,7 +359,7 @@ fn configure_flags(i: &Inputs, lib: &NixLibrary) -> NixValue {
             i.gnutls_support().and(!i.stdenv.host_platform.is_darwin()),
             NixValue::list(["--with-ca-path=/etc/ssl/certs".into()]),
         ),
-    ]))
+    ])
 }
 
 /// Prepare checks without running them during expression evaluation.

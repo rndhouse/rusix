@@ -150,10 +150,9 @@ fn default_package() -> NixValue {
         ("24.11", Nixpkgs::from_module().get("postgresql_16").into()),
     ] {
         package = NixValue::if_else(
-            Nixpkgs::new().function("versionAtLeast").apply([
-                options::root().system.state_version().into(),
-                state_version.into(),
-            ]),
+            Nixpkgs::new()
+                .library()
+                .version_at_least(options::root().system.state_version(), state_version),
             candidate,
             package,
         );
@@ -567,8 +566,8 @@ fn service_config() -> NixValue {
     let pg = options::root().services.postgresql;
     let package = effective_package();
     let group_access = Nixpkgs::new()
-        .function("versionAtLeast")
-        .apply([package.clone().select("version"), "11.0".into()]);
+        .library()
+        .version_at_least(package.clone().select("version"), "11.0");
 
     let data = NixValue::from(pg.data_dir());
     let standard_data = nix_text!(
@@ -582,8 +581,8 @@ fn service_config() -> NixValue {
 
         r#type: NixValue::if_else(
             Nixpkgs::new()
-                .function("versionAtLeast")
-                .apply([pg.package().select("version"), "9.6".into()]),
+                .library()
+                .version_at_least(pg.package().select("version"), "9.6"),
             "notify",
             "simple",
         ),

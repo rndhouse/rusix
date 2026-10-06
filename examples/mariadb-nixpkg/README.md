@@ -17,6 +17,10 @@ family forwarders. The four lazy defaults are declared once and shared by both
 interfaces. Only exceptional names such as `CoreServices`, `pkg-config`,
 `linux-pam` and `fmt_8` need explicit naming annotations. Fixed common/client/server
 refinements use `nix_record!`; dynamic fields retain ordinary Rust iteration.
+Boolean conjunction and native list concatenation use `NixValue::and` and
+`NixValue::concat_lists`; version comparisons use the supplied
+`NixLibrary::version_at_least`. These shared helpers preserve lazy evaluation
+and Rust call locations without local copies of their implementations.
 
 The common attributes are shared lazily using an existing NixValue callback
 binding. This is ordinary Rust composition and Nix interop: no new derivation,

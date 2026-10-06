@@ -503,6 +503,17 @@ impl NixValue {
         })
     }
 
+    /// Construct boolean AND for Nix to evaluate later.
+    /// Both operands must evaluate to booleans, but Nix evaluates the right operand
+    /// only when the left is true. This shares [`crate::Expr::and`] semantics and
+    /// uses Nix conditionals independently of nixpkgs `lib`.
+    #[track_caller]
+    pub fn and(self, other: impl Into<Self>) -> Self {
+        self.into_expr::<bool>()
+            .and(other.into().into_expr::<bool>())
+            .into()
+    }
+
     /// Compare two values using Nix’s `==` operation when they are evaluated.
     /// The result represents a Nix boolean; no comparison happens in Rust.
     #[track_caller]
@@ -576,6 +587,16 @@ impl NixValue {
             origin: Origin::caller("opaque Nix list"),
             kind: ValueKind::List(items.into_iter().map(|value| value.0).collect()),
         })
+    }
+
+    /// Join several deferred Nix lists, preserving their element order.
+    /// Uses `builtins.concatLists`, independently of nixpkgs `lib`. No inputs
+    /// produce an empty list; individual element values remain lazy. Nix checks
+    /// that each input evaluates to a list when the result is needed.
+    /// Use [`NixLibrary::concat_lists`] to call the supplied library's function.
+    #[track_caller]
+    pub fn concat_lists(lists: impl IntoIterator<Item = Self>) -> Self {
+        Self::builtin("concatLists").call(Self::list(lists))
     }
 
     /// Pass one argument to a Nix function when Nix evaluates the expression.

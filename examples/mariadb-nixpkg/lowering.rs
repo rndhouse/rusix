@@ -64,34 +64,17 @@ fn host(i: &Inputs, field: &str) -> NixValue {
     i.stdenv().select("hostPlatform").select(field)
 }
 
-#[track_caller]
-fn both(a: impl Into<NixValue>, b: impl Into<NixValue>) -> NixValue {
-    NixValue::if_else(a, b, false)
-}
-
-#[track_caller]
-fn concat(parts: impl IntoIterator<Item = NixValue>) -> NixValue {
-    NixValue::builtin("concatLists").call(NixValue::list(parts))
-}
-
-#[track_caller]
-fn at_least(i: &Inputs, version: NixValue, minimum: &str) -> NixValue {
-    i.lib()
-        .select("versionAtLeast")
-        .apply([version, minimum.into()])
-}
-
 fn file(name: &str) -> NixValue {
     Nixpkgs::new().source_path(&format!("pkgs/servers/sql/mariadb/patch/{name}"))
 }
 
 fn common(i: &Inputs, lib: &NixLibrary) -> NixValue {
-    let native = concat([
+    let native = NixValue::concat_lists([
         NixValue::list([i.cmake(), i.pkg_config()]),
         lib.optional(host(i, "isDarwin"), i.fix_darwin_dylib_names()),
         lib.optional(!host(i, "isDarwin"), i.make_wrapper()),
     ]);
-    let inputs = concat([
+    let inputs = NixValue::concat_lists([
         NixValue::list([
             i.libiconv(),
             i.ncurses(),
@@ -102,7 +85,7 @@ fn common(i: &Inputs, lib: &NixLibrary) -> NixValue {
         ]),
         lib.optionals(
             host(i, "isLinux"),
-            concat([
+            NixValue::concat_lists([
                 NixValue::list([i.libkrb5(), i.systemd()]),
                 NixValue::if_else(
                     i.lib()
@@ -119,7 +102,7 @@ fn common(i: &Inputs, lib: &NixLibrary) -> NixValue {
         ),
         lib.optionals(!host(i, "isDarwin"), NixValue::list([i.jemalloc()])),
     ]);
-    let cmake_flags = concat([
+    let cmake_flags = NixValue::concat_lists([
         NixValue::list(
             [
                 "-DBUILD_CONFIG=mysql_release",
@@ -163,7 +146,7 @@ fn common(i: &Inputs, lib: &NixLibrary) -> NixValue {
             ]),
         ),
         lib.optionals(
-            both(host(i, "isDarwin"), at_least(i, i.version(), "10.6")),
+            host(i, "isDarwin").and(lib.version_at_least(i.version(), "10.6")),
             NixValue::list(["-Dhave_C__Wl___as_needed=".into()]),
         ),
         lib.optionals(
@@ -222,10 +205,10 @@ fn common(i: &Inputs, lib: &NixLibrary) -> NixValue {
         native_build_inputs: native,
         build_inputs: inputs,
         pre_patch: scripts::pre_patch(),
-        patches: concat([
+        patches: NixValue::concat_lists([
             NixValue::list([file("cmake-includedir.patch")]),
             lib.optional(
-                both(!host(i, "isLinux"), at_least(i, i.version(), "10.6")),
+                (!host(i, "isLinux")).and(lib.version_at_least(i.version(), "10.6")),
                 file("macos-MDEV-26769-regression-fix.patch"),
             ),
         ]),
@@ -244,7 +227,7 @@ fn common(i: &Inputs, lib: &NixLibrary) -> NixValue {
             "description": "Enhanced, drop-in replacement for MySQL",
             "homepage": "https://mariadb.org/",
             "license": i.lib().select("licenses.gpl2Plus"),
-            "maintainers": concat([
+            "maintainers": NixValue::concat_lists([
                 NixValue::list([i.lib().select("maintainers.thoughtpolice")]),
                 i.lib().select("teams.helsinki-systems.members"),
             ]),
@@ -260,18 +243,18 @@ fn client(i: &Inputs, lib: &NixLibrary, common: &NixValue) -> NixValue {
         .select("mkDerivation")
         .call(common.clone().merge_attrs(nix_record! {
             "pname": "mariadb-client",
-            "patches": concat([
+            "patches": NixValue::concat_lists([
                 common.clone().select("patches"),
                 NixValue::list([file("cmake-plugin-includedir.patch")]),
             ]),
-            "buildInputs": concat([
+            "buildInputs": NixValue::concat_lists([
                 common.clone().select("buildInputs"),
                 lib.optionals(
-                    at_least(i, common.clone().select("version"), "10.7"),
+                    lib.version_at_least(common.clone().select("version"), "10.7"),
                     NixValue::list([i.fmt_8()]),
                 ),
             ]),
-            "cmakeFlags": concat([
+            "cmakeFlags": NixValue::concat_lists([
                 common.clone().select("cmakeFlags"),
                 NixValue::list([
                     "-DPLUGIN_AUTH_PAM=NO".into(),
@@ -299,7 +282,7 @@ fn server(i: &Inputs, lib: &NixLibrary, common: &NixValue) -> NixValue {
                 p.select("TermReadKey"),
             ])
         }));
-    let inputs = concat([
+    let inputs = NixValue::concat_lists([
         common.clone().select("buildInputs"),
         NixValue::list([
             i.bzip2(),
@@ -321,11 +304,11 @@ fn server(i: &Inputs, lib: &NixLibrary, common: &NixValue) -> NixValue {
             NixValue::list([i.kytea(), i.libsodium(), i.msgpack(), i.zeromq()]),
         ),
         lib.optionals(
-            at_least(i, common.clone().select("version"), "10.7"),
+            lib.version_at_least(common.clone().select("version"), "10.7"),
             NixValue::list([i.fmt_8()]),
         ),
     ]);
-    let flags = concat([
+    let flags = NixValue::concat_lists([
         common.clone().select("cmakeFlags"),
         NixValue::list([
             "-DMYSQL_DATADIR=/var/lib/mysql".into(),
@@ -353,7 +336,7 @@ fn server(i: &Inputs, lib: &NixLibrary, common: &NixValue) -> NixValue {
             NixValue::list(["-DWITHOUT_ROCKSDB=1".into()]),
         ),
         lib.optionals(
-            both(!host(i, "isDarwin"), i.with_storage_rocks()),
+            (!host(i, "isDarwin")).and(i.with_storage_rocks()),
             NixValue::list(["-DWITH_ROCKSDB_JEMALLOC=ON".into()]),
         ),
         lib.optionals(
@@ -374,7 +357,7 @@ fn server(i: &Inputs, lib: &NixLibrary, common: &NixValue) -> NixValue {
         .select("mkDerivation")
         .call(common.clone().merge_attrs(nix_record! {
             "pname": "mariadb-server",
-            "nativeBuildInputs": concat([
+            "nativeBuildInputs": NixValue::concat_lists([
                 common.clone().select("nativeBuildInputs"),
                 NixValue::list([i.bison(), i.boost().select("dev"), i.flex()]),
             ]),
@@ -389,9 +372,8 @@ fn server(i: &Inputs, lib: &NixLibrary, common: &NixValue) -> NixValue {
                 scripts::post_install_server(),
                 lib.optional_text(i.with_storage_mroonga(), scripts::install_mroonga()),
                 lib.optional_text(
-                    both(
-                        !host(i, "isDarwin"),
-                        at_least(i, common.clone().select("version"), "10.4"),
+                    (!host(i, "isDarwin")).and(
+                        lib.version_at_least(common.clone().select("version"), "10.4"),
                     ),
                     scripts::install_pam(),
                 ),

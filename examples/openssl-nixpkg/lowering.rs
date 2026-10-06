@@ -50,24 +50,6 @@ fn host(i: &Inputs, field: &str) -> NixValue {
     i.stdenv().select("hostPlatform").select(field)
 }
 
-#[track_caller]
-fn at_least(lib: &NixLibrary, version: &NixValue, minimum: &str) -> NixValue {
-    lib.as_value()
-        .clone()
-        .select("versionAtLeast")
-        .apply([version.clone(), minimum.into()])
-}
-
-#[track_caller]
-fn both(a: impl Into<NixValue>, b: impl Into<NixValue>) -> NixValue {
-    NixValue::if_else(a, b, false)
-}
-
-#[track_caller]
-fn concat(parts: impl IntoIterator<Item = NixValue>) -> NixValue {
-    NixValue::builtin("concatLists").call(NixValue::list(parts))
-}
-
 fn common(i: &Inputs, release: Release) -> NixValue {
     let lib = NixLibrary::from_value(i.lib());
     let version: NixValue = release.version().into();
@@ -131,8 +113,8 @@ fn attributes(
     extra_meta: NixValue,
     final_attrs: NixValue,
 ) -> NixValue {
-    let modern = at_least(lib, &version, "1.1.1");
-    let v3 = at_least(lib, &version, "3.0.0");
+    let modern = lib.version_at_least(version.clone(), "1.1.1");
+    let v3 = lib.version_at_least(version.clone(), "3.0.0");
     let old = i
         .lib()
         .select("versionOlder")
@@ -157,7 +139,7 @@ fn attributes(
         ),
         "hash": hash,
     });
-    let flags = concat([
+    let flags = NixValue::concat_lists([
         NixValue::list([
             "shared".into(),
             "--libdir=lib".into(),
@@ -174,21 +156,18 @@ fn attributes(
         lib.optional(i.enable_md2(), "enable-md2"),
         lib.optional(i.enable_ssl2(), "enable-ssl2"),
         lib.optional(i.enable_ssl3(), "enable-ssl3"),
-        lib.optional(both(v3.clone(), i.enable_ktls()), "enable-ktls"),
-        lib.optional(both(modern.clone(), host(i, "isAarch64")), "no-afalgeng"),
-        lib.optional(both(modern.clone(), i.static_build()), "no-shared"),
-        lib.optional(both(v3, i.static_build()), "no-module"),
+        lib.optional(v3.clone().and(i.enable_ktls()), "enable-ktls"),
+        lib.optional(modern.clone().and(host(i, "isAarch64")), "no-afalgeng"),
+        lib.optional(modern.clone().and(i.static_build()), "no-shared"),
+        lib.optional(v3.and(i.static_build()), "no-module"),
         lib.optional(i.static_build(), "no-ct"),
         lib.optional(i.with_zlib(), "zlib"),
         lib.optional(host(i, "isOpenBSD"), "no-devcryptoeng"),
         lib.optionals(
-            both(
-                host(i, "isMips"),
-                both(
-                    NixValue::builtin("hasAttr")
-                        .apply(["gcc".into(), i.stdenv().select("hostPlatform")]),
-                    NixValue::builtin("hasAttr").apply(["arch".into(), host(i, "gcc")]),
-                ),
+            host(i, "isMips").and(
+                NixValue::builtin("hasAttr")
+                    .apply(["gcc".into(), i.stdenv().select("hostPlatform")])
+                    .and(NixValue::builtin("hasAttr").apply(["arch".into(), host(i, "gcc")])),
             ),
             NixValue::list([nix_text!(
                 "CFLAGS=-march={arch}",
@@ -208,33 +187,30 @@ fn attributes(
                 modern.clone(),
                 scripts::patch_env(i.build_packages().select("coreutils")),
             ),
-            lib.optional_text(both(modern, host(i, "isMusl")), scripts::patch_musl()),
+            lib.optional_text(modern.and(host(i, "isMusl")), scripts::patch_musl()),
             lib.optional_text(i.static_build(), scripts::patch_static_engines()),
         ]),
-        outputs: concat([
+        outputs: NixValue::concat_lists([
             NixValue::list(["bin".into(), "dev".into(), "out".into(), "man".into()]),
             lib.optional(with_docs, "doc"),
             lib.optional(i.static_build(), "etc"),
         ]),
         set_output_flags: false,
-        separate_debug_info: both(
-            !host(i, "isDarwin"),
-            both(
-                !NixValue::if_else(
-                    NixValue::builtin("hasAttr")
-                        .apply(["useLLVM".into(), i.stdenv().select("hostPlatform")]),
-                    host(i, "useLLVM"),
-                    false,
-                ),
-                i.stdenv().select("cc.isGNU"),
-            ),
+        separate_debug_info: (!host(i, "isDarwin")).and(
+            (!NixValue::if_else(
+                NixValue::builtin("hasAttr")
+                    .apply(["useLLVM".into(), i.stdenv().select("hostPlatform")]),
+                host(i, "useLLVM"),
+                false,
+            ))
+            .and(i.stdenv().select("cc.isGNU")),
         ),
-        native_build_inputs: concat([
+        native_build_inputs: NixValue::concat_lists([
             lib.optional(!host(i, "isWindows"), i.make_binary_wrapper()),
             NixValue::list([i.perl()]),
             lib.optionals(i.static_build(), NixValue::list([i.remove_references_to()])),
         ]),
-        build_inputs: concat([
+        build_inputs: NixValue::concat_lists([
             lib.optional(i.with_cryptodev(), i.cryptodev()),
             lib.optional(i.with_zlib(), i.zlib()),
         ]),
@@ -263,7 +239,10 @@ fn attributes(
                 !host(i, "isWindows"),
                 scripts::fixup_perl(i.build_packages().select("perl")),
             ),
-            lib.optional_text(at_least(lib, &version, "3.3.0"), scripts::fixup_cmake()),
+            lib.optional_text(
+                lib.version_at_least(version.clone(), "3.3.0"),
+                scripts::fixup_cmake(),
+            ),
         ]),
         passthru: nix_record! {
             "tests": nix_record! {
@@ -281,7 +260,7 @@ fn attributes(
             "description": "Cryptographic library that implements the SSL and TLS protocols",
             "license": i.lib().select("licenses.openssl"),
             "mainProgram": "openssl",
-            "maintainers": concat([
+            "maintainers": NixValue::concat_lists([
                 NixValue::list([i.lib().select("maintainers.thillux")]),
                 i.lib().select("teams.stridtech.members"),
             ]),
@@ -375,7 +354,7 @@ fn configure_script(i: &Inputs, lib: &NixLibrary, version: &NixValue) -> NixValu
     targets.push((
         "riscv32-linux",
         NixValue::if_else(
-            at_least(lib, version, "3.2"),
+            lib.version_at_least(version.clone(), "3.2"),
             "./Configure linux32-riscv32",
             "./Configure linux-latomic",
         ),
