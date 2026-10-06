@@ -108,8 +108,11 @@ package internals or attribute every upstream failure to an exact Rust field.
 
 The [runtime diagnostic audit](../../docs/runtime-diagnostics.md) keeps opaque-call
 boundaries while mapping ordinary symbolic operations through source spans. It
-retains 301 runtime contexts. Normal output has no fine-grained origin comments:
-60,923 bytes and 200 lines. For manual inspection,
+retains 301 runtime contexts. The [pretty-printer](../../docs/generated-nix-layout.md)
+uses a 100-character target, formatting functions, dependency lists and fields
+while recording their source spans. Normal output has no fine-grained origin
+comments: 169,616 bytes and 2,992 lines. For manual inspection,
 `rusnix_nix::compile_with_options` accepts `RenderOptions { origin_comments: true }`,
-producing 121,509 bytes and 2,537 lines with all 2,337 origin comments. Both modes
+producing 336,005 bytes and 5,983 lines with all 2,337 origin comments. Both modes
 retain the same 619 mapped origins; each source map has offsets for its own text.
+Quoted shell fragments remain unchanged and can exceed the target width.

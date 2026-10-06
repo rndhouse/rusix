@@ -236,7 +236,9 @@ hexadecimal digits. Generated Nix uses it at selected `addErrorContext` failure
 boundaries and in NixOS metadata. Normal output omits fine-grained origin comments.
 For manual inspection, pass `RenderOptions { origin_comments: true }` to
 `compile_with_options`, `nixos::compile_module_with_options`, or the advanced
-`render_with_options` API. Each mode computes source spans for its own output;
+`render_with_options` API. The [width-aware pretty-printer](docs/generated-nix-layout.md)
+uses a 100-character target and records spans while emitting formatted text.
+Each mode computes source spans for its own output;
 comments add observability without changing runtime contexts or NixOS metadata.
 
 Four mechanisms are exercised:

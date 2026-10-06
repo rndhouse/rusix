@@ -477,7 +477,7 @@ fn generated_defaults_are_lexical_and_contexts_remain_selective() {
     assert!(compact.contains("(stdenv).hostPlatform.isSunOS"));
     assert!(compact.contains("(stdenv).buildPlatform"));
     for span in &generated.spans {
-        if generated.source[span.start..span.end].starts_with("(builtins.addErrorContext ") {
+        if generated.source[span.start..span.end].starts_with("(builtins.addErrorContext") {
             assert!(
                 span.origin.purpose == "opaque Nix function call"
                     || span.origin.purpose == "Nix attribute-set union"

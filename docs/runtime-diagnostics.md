@@ -139,7 +139,7 @@ require identical diagnostic kind, primary/related/causal origins, option path,
 provenance and underlying reason. Raw traces retain their own generated positions
 and source excerpts, which naturally differ between renderings.
 
-## Git output
+## Git output before width-aware layout
 
 | Metric | Before boundary audit | After boundary audit | Compact IDs / inspection | Normal output |
 |---|---:|---:|---:|---:|
@@ -158,3 +158,7 @@ inspection text shows all 619. The machine mapping loses no origins.
 These figures measure the printed `git-nixpkg` example, including its final newline.
 Removing comments eliminates line breaks, leaving longer expressions; this change
 does not redesign the generated-source formatter.
+
+The [source-map-aware pretty-printer](generated-nix-layout.md) subsequently changes
+layout in both modes. Its measurements distinguish structural lines from
+indivisible literals; origin, source-span and runtime-context counts are unchanged.
