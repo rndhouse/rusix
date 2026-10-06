@@ -42,10 +42,13 @@ configuration, while keeping Nix's ecosystem and final checks underneath.
 | [Symbolic option](symbolic-option.rs) | Explicit typed dependencies follow ordinary Nix overrides |
 | [curl package](curl-nixpkg/README.md) | Complete curl recipe with interacting features, TLS validation and recursive package checks |
 | [Git package](git-nixpkg/README.md) | Real package definition with exact derivation compatibility and typed feature choices |
+| [OpenSSL family](openssl-nixpkg/README.md) | Shared release policy and complete bootstrap-safe recipes |
+| [MariaDB family](mariadb-nixpkg/README.md) | Shared client/server policy across four releases |
+| [Composed package graph](composed-packages/README.md) | Explicit dependency edges and incremental replacement boundaries |
 | [PostgreSQL NixOS module](postgresql-nixos-module/README.md) | Real module implementation with typed provisioning and NixOS compatibility |
 
 The nine small showcases each use **one Rust file** for user models, structural
-placement and lightweight source generation. Git, curl and PostgreSQL are substantial
+placement and lightweight source generation. Git, curl, OpenSSL, MariaDB and PostgreSQL are substantial
 multi-file exceptions. Git and curl separate their models, symbolic inputs, package lowering
 and entry point. PostgreSQL uses five files, separating the model, public schema,
 symbolic dependencies, lowering and entry point. Examples invoke no Nix evaluator
@@ -618,6 +621,9 @@ isolated-store helper.
 | postgresql-nixos-module | Domain provisioning, symbolic derivation and real nixpkgs builders | postgresql.rs; full NixOS equivalence, overrides and failures |
 | git-nixpkg | Native package function, overrides and reusable derivation model | git.rs; ordinary Nix equivalence and override behavior |
 | curl-nixpkg | Native package function, typed flags and symbolic package dependencies | curl.rs; ordinary Nix equivalence and override behavior |
+| openssl-nixpkg | Shared release policy and complete native factories | openssl.rs; exact recipes, platforms, overrides and bootstrap constraints |
+| mariadb-nixpkg | Shared client/server recipe and version policy | mariadb.rs; exact recipes, features, platforms and backend rejection cases |
+| composed-packages | Explicit Rust-authored package graph and movable dependency boundary | composed.rs; exact graph recipes, tags, reverse consumers, laziness and provenance |
 
 DOCUMENTATION stays here: comparisons, expected outcomes, test links and limitations.
 Tests retain reviewable generated Nix/results under `target/typed-examples/` and

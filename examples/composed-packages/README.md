@@ -1,5 +1,8 @@
 # Incrementally replacing package authoring
 
+See the [verified report](REPORT.md) for the source matrix, exact derivation
+identities, boundary/provenance results and full verification.
+
 Rusnix does not require a whole dependency closure to be rewritten. A package can
 first be rewritten while all dependencies remain normal pinned nixpkgs. Rewritten
 dependency values can then be supplied one by one through explicit callPackage
@@ -15,7 +18,7 @@ per dependent edge. Each package's `mod.rs` exposes its ordinary Rust factory.
 
 ```rust
 let pkgs = Nixpkgs::new();
-let openssl = pkgs.call_package(&openssl::factory(Release::Preview), arguments());
+let openssl = pkgs.call_package(&openssl::factory(openssl::model::Release::Preview), arguments());
 let curl = pkgs.call_package(
     &curl::factory(),
     curl_arguments(&pkgs, openssl.clone()),
@@ -26,7 +29,7 @@ let git = pkgs.call_package(
 );
 let mariadb = pkgs.call_package(
     &mariadb::factory(),
-    Release::V1011.arguments().merge_attrs(NixValue::record([("curl", curl)])),
+    mariadb::model::Release::V1011.arguments().merge_attrs(NixValue::record([("curl", curl)])),
 );
 ```
 

@@ -453,9 +453,10 @@ append `--offline` to Cargo commands. Nix expressions never fetch network data.
 
 The selective-evaluation experiment proved local operation provenance without
 eagerly forcing enclosing values; the module experiment extends it to NixOS
-definitions, assertion messages, and a specific imported-module boundary. No full NixOS API,
-broad package bindings, flake APIs, derivation building, deployment, or alternate backend is
-implemented.
+definitions, assertion messages, and a specific imported-module boundary. Core
+provides generic package interop; package policy lives in the examples. A full
+NixOS API, package-specific core bindings, flake APIs, derivation building,
+deployment and alternate backends remain outside this experiment.
 
 ## NixOS module experiment
 
