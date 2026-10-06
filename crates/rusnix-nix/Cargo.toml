@@ -67,3 +67,7 @@ path = "../../examples/openssl-nixpkg/main.rs"
 [[example]]
 name = "composed-packages"
 path = "../../examples/composed-packages/main.rs"
+
+[[example]]
+name = "mariadb-nixpkg"
+path = "../../examples/mariadb-nixpkg/main.rs"
