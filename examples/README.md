@@ -686,3 +686,14 @@ Named holes stay symbolic; NixOS resolves the final option after merging. Use
 [symbolic_text.rs](../crates/rusnix-nix/tests/symbolic_text.rs) verifies
 string dependency contexts, caller provenance, lazy evaluation and artifact reuse;
 the full PostgreSQL suite verifies unchanged scripts, SQL and derivation inputs.
+
+
+## Connected package definitions
+
+The [composed package graph](composed-packages/README.md) constructs
+OpenSSL → curl → MariaDB and OpenSSL → Git using explicit Rust-authored
+dependency values. The rest of the graph remains ordinary pinned nixpkgs.
+[OpenSSL](openssl-nixpkg/README.md) and [MariaDB](mariadb-nixpkg/README.md)
+preserve their shared release families and full upstream recipes. Independent
+and composed suites compare exact derivations offline, including normal Nix
+consumers of Rust-authored dependencies and incremental replacement boundaries.

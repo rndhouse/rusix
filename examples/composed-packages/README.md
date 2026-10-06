@@ -66,3 +66,26 @@ operation origin and original Nix trace. A literal integer supplied as curl is
 a separate backend-validation limitation: stdenv reports the precise buildInput
 index but offers no generated child frame, so Rust mapping reaches the outer
 mariadb.drvPath demand. See the explicit limitation test and saved diagnostic.
+
+
+The stress suite covers seven distinct boundary configurations:
+
+| Configuration | Authoring boundary |
+| --- | --- |
+| A | nixpkgs OpenSSL → Rust curl → Rust MariaDB |
+| B | Rust OpenSSL → Rust curl → Rust MariaDB |
+| C | Rust OpenSSL → Rust Git, with curl/MariaDB unforced |
+| D | nixpkgs curl → Rust MariaDB |
+| E | Rust OpenSSL → ordinary Nix curl |
+| F | Rust curl (itself consuming Rust OpenSSL) → ordinary Nix MariaDB |
+| G | Rust OpenSSL → ordinary Nix Git |
+
+The reverse consumers also expose the tags, so fallback is detectable in both
+directions. Two OpenSSL releases are crossed with all four MariaDB releases in
+the connected graph. Normal MariaDB `.override` remains live. A throwing OpenSSL
+node excluded by curl's TLS choice remains unforced even while MariaDB's server
+and client recipes are evaluated.
+
+The standalone assembly uses the existing `Nixpkgs::new()` x86_64-linux scope.
+Independent factories are tested with caller-provided native/cross scopes. This
+experiment does not add a general package-set/platform configuration API.

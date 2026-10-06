@@ -248,3 +248,13 @@ fn native_lookups_ignore_unrelated_library_overrides() {
         )],
     );
 }
+
+#[test]
+fn legacy_unused_ktls_default_remains_lazy() {
+    let bad = NixValue::builtin("throw").call("irrelevant KTLS platform default");
+    compare(
+        "legacy-lazy-ktls",
+        Release::Legacy,
+        [("hostFlags", NixValue::record([("isLinux", bad)]))],
+    );
+}
