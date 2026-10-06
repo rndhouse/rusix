@@ -14,7 +14,11 @@ use std::path::{Component, PathBuf};
 
 mod library;
 
+mod typed;
+
 pub use library::NixLibrary;
+
+pub use typed::{NixAttrs, NixCallable, NixExpression, NixList, Package, Stdenv};
 
 /// A sequence of field names to look up in Nix attribute sets.
 /// For example, `["services", "example", "port"]` describes
@@ -231,16 +235,19 @@ infer that a function returns a package or module."
 /// Native defaults and `builtins.functionArgs` are preserved. The instantiated
 /// result supports nixpkgs' `.override` machinery where Nix permits it.
 ///
-/// This type identifies a package-style function interface. Rust does not
-/// validate nixpkgs dependencies or prove that the body returns a derivation;
+/// The result parameter preserves the body's declared expression interface.
+/// Its default is NixValue for dynamic interop; a Package result describes a
+/// package, while `NixAttrs<Package>` can describe a family. Rust does not
+/// validate external nixpkgs dependencies or prove that they return a derivation;
 /// Nix checks the actual arguments and behavior. It wraps the existing function
 /// expression, whereas [`NixFunction`] is a reference to an existing function.
 #[derive(Clone, Debug)]
-pub struct PackageFunction {
+pub struct PackageFunction<R: NixExpression = NixValue> {
     function: NixValue,
+    result: std::marker::PhantomData<R>,
 }
 
-impl PackageFunction {
+impl<R: NixExpression> PackageFunction<R> {
     /// Define named dependencies/options, optional lazy defaults, and a body.
     /// This uses [`NixValue::function_attrs`]: Rust constructs the expression once
     /// with placeholders, and Nix supplies arguments and evaluates the body later.
@@ -258,11 +265,22 @@ impl PackageFunction {
     #[track_caller]
     pub fn from_function_attrs<K: Into<String>>(
         arguments: impl IntoIterator<Item = impl Into<String>>,
-        build: impl FnOnce(NixValue) -> (Vec<(K, NixValue)>, NixValue),
+        build: impl FnOnce(NixValue) -> (Vec<(K, NixValue)>, R),
     ) -> Self {
         Self {
-            function: NixValue::function_attrs(arguments, build),
+            function: NixValue::function_attrs(arguments, |args| {
+                let (defaults, result) = build(args);
+                (defaults, result.as_expression())
+            }),
+            result: std::marker::PhantomData,
         }
+    }
+
+    /// Call this definition directly, preserving its declared result interface.
+    /// For dependency injection and override support, prefer Nixpkgs::call_package.
+    #[track_caller]
+    pub fn call(&self, arguments: impl ConfigValue) -> R {
+        R::from_expression(self.function.clone().call(arguments))
     }
 
     /// Use this function in ordinary Nix calls, records or `functionArgs` inspection.
@@ -272,16 +290,36 @@ impl PackageFunction {
     }
 }
 
-impl sealed::Sealed for PackageFunction {}
+impl<R: NixExpression> NixExpression for PackageFunction<R> {
+    fn from_expression(function: NixValue) -> Self {
+        Self {
+            function,
+            result: std::marker::PhantomData,
+        }
+    }
 
-impl ConfigValue for PackageFunction {
+    fn as_expression(&self) -> NixValue {
+        self.function.clone()
+    }
+}
+
+impl<R: NixExpression> crate::IntoRusnixValue for PackageFunction<R> {
+    #[track_caller]
+    fn into_value(self) -> crate::RusnixValue {
+        crate::RusnixValue::leaf(self)
+    }
+}
+
+impl<R: NixExpression> sealed::Sealed for PackageFunction<R> {}
+
+impl<R: NixExpression> ConfigValue for PackageFunction<R> {
     fn into_node(self, _: Origin) -> Node {
         self.function.0
     }
 }
 
-impl From<PackageFunction> for NixValue {
-    fn from(value: PackageFunction) -> Self {
+impl<R: NixExpression> From<PackageFunction<R>> for NixValue {
+    fn from(value: PackageFunction<R>) -> Self {
         value.function
     }
 }
@@ -851,6 +889,12 @@ impl From<std::collections::BTreeMap<String, NixValue>> for NixValue {
 }
 
 impl NixFunction {
+    /// Declare the expected result interface of an external callable reference.
+    /// This does not inspect its Nix implementation or evaluate its result.
+    pub fn returning<R: NixExpression>(&self) -> NixCallable<R> {
+        NixCallable::from_expression(self.as_value())
+    }
+
     /// Describe a call to this Nix function with one argument.
     /// Nix executes the call later and checks the argument. If the result is another
     /// function, continue with [`NixValue::call`] or use [`Self::apply`].
@@ -1158,18 +1202,32 @@ impl Nixpkgs {
     /// override attribute set takes precedence. Native defaults remain lazy.
     /// Lookups follow this set's overlays or NixOS-supplied package scope.
     ///
-    /// Nix checks missing arguments and the package body. The result stays an
-    /// arbitrary [`NixValue`]; Rust does not prove it is a derivation. Where
+    /// Nix checks missing arguments and the package body. The factory's declared
+    /// result interface is preserved; external expectations are not evaluated. Where
     /// supported by nixpkgs, use `result.select("override").call(arguments)`
     /// to change function arguments after instantiation.
     #[track_caller]
-    pub fn call_package(
+    pub fn call_package<R: NixExpression>(
         &self,
-        function: &PackageFunction,
+        function: &PackageFunction<R>,
         overrides: impl Into<NixValue>,
-    ) -> NixValue {
-        self.pkgs_function("callPackage")
-            .apply([function.as_value(), overrides.into()])
+    ) -> R {
+        R::from_expression(
+            self.pkgs_function("callPackage")
+                .call(function.clone())
+                .call(overrides.into()),
+        )
+    }
+
+    /// Instantiate with a structured Rust override record, lowering at this boundary.
+    /// Structural conversion errors are returned without evaluating any Nix values.
+    #[track_caller]
+    pub fn try_call_package<R: NixExpression>(
+        &self,
+        function: &PackageFunction<R>,
+        overrides: impl crate::IntoRusnixValue,
+    ) -> Result<R, ValidationError> {
+        Ok(self.call_package(function, overrides.try_into_nix_value()?))
     }
 
     /// Refer to an arbitrary function in the package set, such as `writeText` or

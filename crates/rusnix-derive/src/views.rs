@@ -15,6 +15,7 @@ struct View {
 enum Leaf {
     Scalar,
     Opaque,
+    Expression,
     Branch(Ident),
 }
 
@@ -40,7 +41,8 @@ fn classify(ty: &Type, locals: &BTreeSet<String>) -> syn::Result<Leaf> {
         let expected_namespace = match last.ident.to_string().as_str() {
             "bool" | "i64" => "std::primitive",
             "String" => "std::string",
-            "NixValue" => "rusnix_ir::interop",
+            "NixValue" | "Package" | "NixCallable" | "NixAttrs" | "NixList" | "Stdenv"
+            | "NixLibrary" | "PackageFunction" => "rusnix_ir::interop",
             "Option" => "std::option",
             "Vec" => "std::vec",
             "BTreeMap" | "HashMap" => "std::collections",
@@ -55,6 +57,14 @@ fn classify(ty: &Type, locals: &BTreeSet<String>) -> syn::Result<Leaf> {
                 }
                 "NixValue" if matches!(last.arguments, PathArguments::None) => {
                     return Ok(Leaf::Opaque);
+                }
+                "Package" | "Stdenv" | "NixLibrary"
+                    if matches!(last.arguments, PathArguments::None) =>
+                {
+                    return Ok(Leaf::Expression);
+                }
+                "NixCallable" | "NixAttrs" | "NixList" | "PackageFunction" => {
+                    return Ok(Leaf::Expression);
                 }
                 "Option" | "Vec" | "BTreeMap" | "HashMap" => {
                     if let PathArguments::AngleBracketed(args) = &last.arguments {
@@ -441,6 +451,7 @@ fn expand_from(mut module: ItemMod, source: Source) -> syn::Result<TokenStream> 
                 leaf => {
                     let (result, conversion) = match leaf {
                         Leaf::Scalar => (quote!(::rusnix_ir::Expr<#ty>), quote!(into_expr)),
+                        Leaf::Expression => (quote!(#ty), quote!(into_value)),
                         _ => (quote!(::rusnix_ir::interop::NixValue), quote!(into_value)),
                     };
                     let selection = match source {
@@ -455,6 +466,11 @@ fn expand_from(mut module: ItemMod, source: Source) -> syn::Result<TokenStream> 
                                 self.__rusnix_source.clone().select_segments(path) #convert
                             })
                         }
+                    };
+                    let selection = if matches!(leaf, Leaf::Expression) {
+                        quote!(<#ty as ::rusnix_ir::interop::NixExpression>::from_expression(#selection))
+                    } else {
+                        selection
                     };
                     methods.push(quote_spanned!(field.span()=>
                         #(#docs)*
@@ -477,11 +493,15 @@ fn expand_from(mut module: ItemMod, source: Source) -> syn::Result<TokenStream> 
                     )
                     .into_value()
                 ),
-                Source::Arguments => quote!(
-                    self.__rusnix_source
-                        .clone()
-                        .select_segments(self.__rusnix_path.clone())
-                ),
+                Source::Arguments => quote!({
+                    if self.__rusnix_path.is_empty() {
+                        self.__rusnix_source.clone()
+                    } else {
+                        self.__rusnix_source
+                            .clone()
+                            .select_segments(self.__rusnix_path.clone())
+                    }
+                }),
             };
 
             quote!(
@@ -490,6 +510,27 @@ fn expand_from(mut module: ItemMod, source: Source) -> syn::Result<TokenStream> 
                 #[track_caller]
                 pub fn as_value(&self) -> ::rusnix_ir::interop::NixValue {
                     #selection
+                }
+            )
+        });
+
+        let expression_impl = (view.value && matches!(source, Source::Arguments)).then(|| {
+            quote!(
+                impl ::rusnix_ir::interop::NixExpression for #name {
+                    fn from_expression(value: ::rusnix_ir::interop::NixValue) -> Self {
+                        Self::__rusnix_at(value, ::std::vec::Vec::new())
+                    }
+
+                    fn as_expression(&self) -> ::rusnix_ir::interop::NixValue {
+                        self.as_value()
+                    }
+                }
+
+                impl ::rusnix_ir::IntoRusnixValue for #name {
+                    #[track_caller]
+                    fn into_value(self) -> ::rusnix_ir::RusnixValue {
+                        ::rusnix_ir::RusnixValue::leaf(self.as_value())
+                    }
                 }
             )
         });
@@ -513,6 +554,8 @@ fn expand_from(mut module: ItemMod, source: Source) -> syn::Result<TokenStream> 
 
                 #as_value
             }
+
+            #expression_impl
         ));
     }
 

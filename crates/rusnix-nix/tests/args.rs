@@ -124,7 +124,7 @@ fn declared_argument_names_preserve_mapping_and_native_dependent_defaults() {
         |value| {
             let input = interface::from_value(value);
 
-            (vec![("Label", input.name().into())], input.label().into())
+            (vec![("Label", input.name().into())], input.label())
         },
     );
     assert_eq!(

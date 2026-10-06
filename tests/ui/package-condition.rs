@@ -1,0 +1,8 @@
+use rusnix_ir::{Expr, interop::{Nixpkgs, Package}};
+
+fn dependency(_: Package) {}
+
+fn main() {
+    let _ = Nixpkgs::new();
+    dependency(Expr::boolean(true));
+}

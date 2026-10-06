@@ -596,5 +596,45 @@
       "PackageFunction",
       "NixValue"
     ]
+  },
+  {
+    "file": "package-condition.rs",
+    "code": "E0308",
+    "count": 1,
+    "source": "Expr::boolean(true)",
+    "reason_tokens": [
+      "Package",
+      "Expr<bool>"
+    ]
+  },
+  {
+    "file": "package-factory-result.rs",
+    "code": "E0308",
+    "count": 1,
+    "source": "Expr::boolean(true)",
+    "reason_tokens": [
+      "Package",
+      "Expr<bool>"
+    ]
+  },
+  {
+    "file": "package-list-element.rs",
+    "code": "E0308",
+    "count": 1,
+    "source": "NixList::new([Expr::boolean(true)])",
+    "reason_tokens": [
+      "Package",
+      "Expr<bool>"
+    ]
+  },
+  {
+    "file": "package-bind-parameter.rs",
+    "code": "E0631",
+    "count": 1,
+    "source": "bind",
+    "reason_tokens": [
+      "closure arguments",
+      "expected due to this"
+    ]
   }
 ]
