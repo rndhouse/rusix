@@ -1,7 +1,7 @@
 //! Native package function interfaces reuse scoped callbacks and the isolated evaluator.
 use rusnix_ir::{
     Config, Expr,
-    interop::{NixValue, Nixpkgs},
+    interop::{NixValue, Nixpkgs, PackageFunction},
 };
 use rusnix_nix::{NixSession, compile};
 
@@ -557,4 +557,159 @@ fn ordinary_deferred_records_still_use_opaque_attribute_selection() {
     let value = NixValue::record([("known", true.into())]).select("known");
     assert!(generated(value.clone()).source.contains("builtins.getAttr"));
     assert_eq!(evaluate(value), true);
+}
+
+#[test]
+fn typed_package_function_emits_and_composes_as_an_ordinary_value() {
+    let definition_line = line!() + 1;
+    let factory = PackageFunction::from_function_attrs(["name", "label"], |args| {
+        (
+            vec![("label", args.clone().select("name"))],
+            args.select("label"),
+        )
+    });
+    let config = Config::new().set("factory", factory.clone());
+    let artifact = compile(&config).unwrap();
+    assert!(artifact.spans.iter().any(|span| {
+        span.origin.line == definition_line && span.origin.purpose == "Nix argument-set function"
+    }));
+    assert_eq!(
+        artifact.source,
+        compile(&Config::new().set("factory", factory.as_value()))
+            .unwrap()
+            .source
+    );
+
+    // Emission never evaluates the function; explicit value conversion permits ordinary calls.
+    let value: NixValue = factory.clone().into();
+    assert_eq!(
+        evaluate(value.call(NixValue::record([("name", "ordinary caller".into())]))),
+        "ordinary caller"
+    );
+    assert_eq!(
+        evaluate(Nixpkgs::new().function("functionArgs").call(factory)),
+        serde_json::json!({"name":false,"label":true})
+    );
+}
+
+#[test]
+fn real_call_package_supplies_dependencies_defaults_and_authoritative_overrides() {
+    let factory = PackageFunction::from_function_attrs(["curl", "derived", "unused"], |args| {
+        (
+            vec![
+                ("derived", args.clone().select("curl.pname")),
+                ("unused", Expr::int(1).divide(Expr::int(0)).into()),
+            ],
+            NixValue::record([
+                ("name", args.clone().select("curl.pname")),
+                ("derived", args.select("derived")),
+            ]),
+        )
+    });
+    let pkgs = Nixpkgs::new();
+    let base = pkgs.call_package(&factory, NixValue::record([] as [(&str, NixValue); 0]));
+    let supplied = pkgs.call_package(
+        &factory,
+        NixValue::record([("curl", NixValue::record([("pname", "caller curl".into())]))]),
+    );
+    let explicit_default = pkgs.call_package(
+        &factory,
+        NixValue::record([("derived", "explicit default".into())]),
+    );
+    let overridden = base.clone().select("override").call(NixValue::record([(
+        "curl",
+        NixValue::record([("pname", "overridden curl".into())]),
+    )]));
+    assert_eq!(
+        evaluate(NixValue::record([
+            ("base", base.select("derived")),
+            ("caller", supplied.select("derived")),
+            ("explicit", explicit_default.select("derived")),
+            ("override", overridden.select("derived")),
+        ])),
+        serde_json::json!({
+            "base":"curl", "caller":"caller curl", "explicit":"explicit default",
+            "override":"overridden curl",
+        })
+    );
+}
+
+#[test]
+fn call_package_wires_deferred_package_results_between_factories() {
+    let dependency = PackageFunction::from_function_attrs(["lib"], |args| {
+        (
+            Vec::<(&str, NixValue)>::new(),
+            NixValue::record([("version", args.select("lib.version"))]),
+        )
+    });
+    let consumer = PackageFunction::from_function_attrs(["rusnixDependency"], |args| {
+        (
+            Vec::<(&str, NixValue)>::new(),
+            args.select("rusnixDependency.version"),
+        )
+    });
+    let pkgs = Nixpkgs::new();
+    let result = pkgs.call_package(
+        &consumer,
+        NixValue::record([(
+            "rusnixDependency",
+            pkgs.call_package(&dependency, NixValue::record([] as [(&str, NixValue); 0])),
+        )]),
+    );
+    assert_eq!(evaluate(result), evaluate(pkgs.lib_value("version")));
+}
+
+#[test]
+fn missing_call_package_dependency_recovers_the_rust_call_boundary() {
+    let factory = PackageFunction::from_function_attrs(["rusnixMissingDependency"], |args| {
+        (
+            Vec::<(&str, NixValue)>::new(),
+            args.select("rusnixMissingDependency"),
+        )
+    });
+    let call_line = line!() + 2;
+    let result =
+        Nixpkgs::new().call_package(&factory, NixValue::record([] as [(&str, NixValue); 0]));
+    let error = NixSession::new()
+        .unwrap()
+        .evaluate_interop(&generated(result))
+        .unwrap_err();
+    assert_eq!(error.primary.as_ref().unwrap().line, call_line);
+    assert_eq!(error.primary.as_ref().unwrap().file, file!());
+    assert!(error.reason.contains("rusnixMissingDependency"));
+    assert!(!error.raw_nix.is_empty());
+}
+
+#[test]
+fn typed_package_body_and_caller_override_failures_keep_child_provenance() {
+    let mut body_line = 0;
+    let factory = PackageFunction::from_function_attrs(["curl"], |args| {
+        body_line = line!() + 1;
+        let body = args.select("curl.rusnixMissingField");
+        (Vec::<(&str, NixValue)>::new(), body)
+    });
+    let result =
+        Nixpkgs::new().call_package(&factory, NixValue::record([] as [(&str, NixValue); 0]));
+    let error = NixSession::new()
+        .unwrap()
+        .evaluate_interop(&generated(result))
+        .unwrap_err();
+    assert_eq!(error.primary.as_ref().unwrap().line, body_line);
+    assert!(error.reason.contains("rusnixMissingField"));
+    assert!(!error.raw_nix.is_empty());
+
+    let factory = PackageFunction::from_function_attrs(["curl"], |args| {
+        (Vec::<(&str, NixValue)>::new(), args.select("curl"))
+    });
+    let override_line = line!() + 1;
+    let failing = Expr::int(1).divide(Expr::int(0));
+    let result =
+        Nixpkgs::new().call_package(&factory, NixValue::record([("curl", failing.into())]));
+    let error = NixSession::new()
+        .unwrap()
+        .evaluate_interop(&generated(result))
+        .unwrap_err();
+    assert_eq!(error.primary.as_ref().unwrap().line, override_line);
+    assert!(error.reason.contains("division by zero"));
+    assert!(!error.raw_nix.is_empty());
 }

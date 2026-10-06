@@ -380,9 +380,9 @@ Tests use offline pinned nixpkgs in the isolated store, evaluate package metadat
 without building, and retain the current fixed x86_64-linux root, handle-scoped
 overlays and partial NixOS harness. InputRef is not a general flake resolver.
 
-The example also calls `pkgs.package_function("writeTextFile")` with a structured
+The example also calls `pkgs.pkgs_function("writeTextFile")` with a structured
 `NixValue::record`: literals and a real package handle share one opaque argument.
-`function("toUpper")` refers to lib; `package_function` refers to the package set.
+`function("toUpper")` refers to lib; `pkgs_function` refers to the package set.
 Chained `.call` operations support curried functions such as writeText.
 [structured_interop.rs](../crates/rusnix-nix/tests/structured_interop.rs) verifies
 writeText/writeTextFile/runCommand without building, nested lists/maps and native

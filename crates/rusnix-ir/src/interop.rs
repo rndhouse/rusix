@@ -218,6 +218,74 @@ Nix checks the arguments, and the result is a [`NixValue`]; Rusnix does not
 infer that a function returns a package or module."
 );
 
+/// A nixpkgs package definition with named dependencies and feature options.
+///
+/// A package is commonly defined by a Nix function such as:
+/// ```nix
+/// { stdenv, lib, openssl, ... }: stdenv.mkDerivation { /* recipe */ }
+/// ```
+/// [`Nixpkgs::call_package`] examines its argument names and supplies matching
+/// dependencies from nixpkgs, with explicit caller arguments taking precedence.
+/// Construct one with [`Self::from_function_attrs`]; it stays deferred and can
+/// also be emitted or called as an ordinary Nix value through [`Self::as_value`].
+/// Native defaults and `builtins.functionArgs` are preserved. The instantiated
+/// result supports nixpkgs' `.override` machinery where Nix permits it.
+///
+/// This type identifies a package-style function interface. Rust does not
+/// validate nixpkgs dependencies or prove that the body returns a derivation;
+/// Nix checks the actual arguments and behavior. It wraps the existing function
+/// expression, whereas [`NixFunction`] is a reference to an existing function.
+#[derive(Clone, Debug)]
+pub struct PackageFunction {
+    function: NixValue,
+}
+
+impl PackageFunction {
+    /// Define named dependencies/options, optional lazy defaults, and a body.
+    /// This uses [`NixValue::function_attrs`]: Rust constructs the expression once
+    /// with placeholders, and Nix supplies arguments and evaluates the body later.
+    /// Defaults may depend on other arguments and remain unforced until needed.
+    ///
+    /// ```
+    /// use rusnix_ir::{Config, interop::{NixValue, Nixpkgs, PackageFunction}};
+    ///
+    /// let factory = PackageFunction::from_function_attrs(["lib", "label"], |args| {
+    ///     (vec![("label", "example".into())], args.select("label"))
+    /// });
+    /// let result = Nixpkgs::new().call_package(&factory, NixValue::record([] as [(&str, NixValue); 0]));
+    /// let output = Config::new().set("factory", factory).set("result", result);
+    /// ```
+    #[track_caller]
+    pub fn from_function_attrs<K: Into<String>>(
+        arguments: impl IntoIterator<Item = impl Into<String>>,
+        build: impl FnOnce(NixValue) -> (Vec<(K, NixValue)>, NixValue),
+    ) -> Self {
+        Self {
+            function: NixValue::function_attrs(arguments, build),
+        }
+    }
+
+    /// Use this function in ordinary Nix calls, records or `functionArgs` inspection.
+    /// The expression and its construction provenance are preserved without evaluation.
+    pub fn as_value(&self) -> NixValue {
+        self.function.clone()
+    }
+}
+
+impl sealed::Sealed for PackageFunction {}
+
+impl ConfigValue for PackageFunction {
+    fn into_node(self, _: Origin) -> Node {
+        self.function.0
+    }
+}
+
+impl From<PackageFunction> for NixValue {
+    fn from(value: PackageFunction) -> Self {
+        value.function
+    }
+}
+
 handle!(
     OverlayRef,
     "A reference to a Nix function that extends or replaces packages in nixpkgs.
@@ -667,7 +735,7 @@ impl NixFunction {
     ///
     /// ```
     /// use rusnix_ir::interop::Nixpkgs;
-    /// let file = Nixpkgs::new().package_function("writeText")
+    /// let file = Nixpkgs::new().pkgs_function("writeText")
     ///     .apply(["example.conf".into(), "workers=4\n".into()]);
     /// // Nix will describe a generated file; constructing this call does not build it.
     /// ```
@@ -764,9 +832,10 @@ macro_rules! nix_record {
 /// attributes into a *derivation*: a recipe with inputs and output paths, not a
 /// completed build.
 ///
-/// Use [`Self::get`] for a package, [`Self::package_function`] for a build helper,
+/// Use [`Self::get`] for a package, [`Self::pkgs_function`] for a build helper,
 /// and [`Self::function`] for a function in nixpkgs’ separate `lib` utility library.
-/// These methods construct expressions for Nix to evaluate later. They do not
+/// Use [`Self::call_package`] to instantiate a [`PackageFunction`] with automatic
+/// dependency selection. These methods construct expressions for Nix to evaluate later. They do not
 /// fetch, build or inspect packages in Rust, and no package-specific Rust bindings
 /// are generated.
 ///
@@ -882,7 +951,7 @@ impl Nixpkgs {
     /// Refer to a function in nixpkgs’ `lib` utility library.
     /// For example, `function("concatStringsSep")` selects `lib.concatStringsSep`.
     /// Nix checks the function and arguments later. Build helpers such as `writeText`
-    /// belong to the package set; select those with [`Self::package_function`].
+    /// belong to the package set; select those with [`Self::pkgs_function`].
     #[track_caller]
     pub fn function(&self, path: &str) -> NixFunction {
         NixFunction(Reference {
@@ -952,12 +1021,34 @@ impl Nixpkgs {
         )
     }
 
-    /// Refer to a function in the package set, such as `writeText` or
+    /// Instantiate a package function using nixpkgs' dependency scope.
+    /// This represents `pkgs.callPackage packageFunction overrides`: the real
+    /// pinned nixpkgs helper supplies matching dependencies, and the caller's
+    /// override attribute set takes precedence. Native defaults remain lazy.
+    /// Lookups follow this set's overlays or NixOS-supplied package scope.
+    ///
+    /// Nix checks missing arguments and the package body. The result stays an
+    /// arbitrary [`NixValue`]; Rust does not prove it is a derivation. Where
+    /// supported by nixpkgs, use `result.select("override").call(arguments)`
+    /// to change function arguments after instantiation.
+    #[track_caller]
+    pub fn call_package(
+        &self,
+        function: &PackageFunction,
+        overrides: impl Into<NixValue>,
+    ) -> NixValue {
+        self.pkgs_function("callPackage")
+            .apply([function.as_value(), overrides.into()])
+    }
+
+    /// Refer to an arbitrary function in the package set, such as `writeText` or
     /// `stdenv.mkDerivation`. These helpers describe generated files or builds.
     /// Lookups follow this set’s package overlays. Use [`Self::function`] for
     /// the separate `lib` utility library; Nix checks function arguments later.
+    /// This selector returns a generic function reference, not a [`PackageFunction`].
+    /// Use [`Self::call_package`] to instantiate a package definition.
     #[track_caller]
-    pub fn package_function(&self, path: &str) -> NixFunction {
+    pub fn pkgs_function(&self, path: &str) -> NixFunction {
         NixFunction(Reference {
             source: self.package_source(),
             path: Some(AttrPath::dotted(path)),

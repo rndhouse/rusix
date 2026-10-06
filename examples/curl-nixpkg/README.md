@@ -109,3 +109,16 @@ nixpkgs compiler setup rejects the real Solaris target in both implementations.
 This proves evaluation/derivation compatibility, not successful curl builds,
 protocol behavior, package tests or service execution. Upstream test/dependency
 packages remain existing nixpkgs packages, exactly as in the reference recipe.
+
+The Rust factory now returns `PackageFunction`, identifying its native named
+argument interface. Instantiation uses the explicit nixpkgs operation:
+
+```rust
+let factory: PackageFunction = lowering::factory();
+let curl = Nixpkgs::new().call_package(&factory, model::model().arguments());
+```
+
+The result remains `NixValue`; Nix validates the arguments and package body.
+`Config::set("factory", factory)` accepts the function directly. Explicit
+`factory.as_value()` or conversion to `NixValue` permits ordinary Nix function
+calls and inspection, preserving lazy defaults and provenance.

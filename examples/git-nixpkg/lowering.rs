@@ -3,13 +3,13 @@
 use super::inputs::{ARGUMENTS, Inputs, args};
 use rusnix_ir::{
     Expr, IntoRusnixValue,
-    interop::{NixLibrary, NixValue},
+    interop::{NixLibrary, NixValue, PackageFunction},
     nix_text,
 };
 
 /// A native Nix package function, suitable for ordinary callPackage and overrides.
-pub fn factory() -> NixValue {
-    NixValue::function_attrs(ARGUMENTS.iter().copied(), |args| {
+pub fn factory() -> PackageFunction {
+    PackageFunction::from_function_attrs(ARGUMENTS.iter().copied(), |args| {
         let inputs = args::from_value(args);
         // All helper calls use the lib supplied by this Nix function's caller.
         let lib = NixLibrary::from_value(inputs.lib.as_value());

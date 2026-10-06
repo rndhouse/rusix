@@ -116,3 +116,16 @@ comments: 169,616 bytes and 2,992 lines. For manual inspection,
 producing 336,005 bytes and 5,983 lines with all 2,337 origin comments. Both modes
 retain the same 619 mapped origins; each source map has offsets for its own text.
 Quoted shell fragments remain unchanged and can exceed the target width.
+
+The Rust factory now returns `PackageFunction`, identifying its native named
+argument interface. Instantiation uses the explicit nixpkgs operation:
+
+```rust
+let factory: PackageFunction = lowering::factory();
+let git = Nixpkgs::new().call_package(&factory, inputs::arguments(model::model()));
+```
+
+The result remains `NixValue`; Nix validates the arguments and package body.
+`Config::set("factory", factory)` accepts the function directly. Explicit
+`factory.as_value()` or conversion to `NixValue` permits ordinary Nix function
+calls and inspection, preserving lazy defaults and provenance.

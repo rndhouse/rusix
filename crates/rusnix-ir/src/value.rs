@@ -355,6 +355,7 @@ macro_rules! opaque {
 opaque!(
     crate::interop::ModuleRef,
     crate::interop::NixFunction,
+    crate::interop::PackageFunction,
     crate::interop::OverlayRef
 );
 

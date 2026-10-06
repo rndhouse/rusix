@@ -214,7 +214,7 @@ fn configuration_file() -> NixValue {
     // This opaque helper call produces a derivation, retaining store-path string context.
     // Rust describes its inputs; nixpkgs owns file generation and nothing is built here.
     Nixpkgs::from_module()
-        .package_function("writeTextDir")
+        .pkgs_function("writeTextDir")
         .apply(["postgresql.conf".into(), settings_text()])
 }
 
@@ -229,7 +229,7 @@ fn pre_start() -> NixValue {
                 ln -sfn "{file}" "{data}/recovery.conf"
             "#,
             file = Nixpkgs::from_module()
-                .package_function("writeText")
+                .pkgs_function("writeText")
                 .apply(["recovery.conf".into(), pg.recovery_config()]),
             data = data.clone(),
         ),
@@ -680,14 +680,14 @@ fn settings() -> NixValue {
         (
             "hba_file",
             Nixpkgs::from_module()
-                .package_function("writeText")
+                .pkgs_function("writeText")
                 .apply(["pg_hba.conf".into(), pg.authentication().into()])
                 .to_text(),
         ),
         (
             "ident_file",
             Nixpkgs::from_module()
-                .package_function("writeText")
+                .pkgs_function("writeText")
                 .apply(["pg_ident.conf".into(), pg.ident_map().into()])
                 .to_text(),
         ),
@@ -706,20 +706,18 @@ fn settings() -> NixValue {
 fn checks() -> NixValue {
     let pg = options::root().services.postgresql;
 
-    let check = Nixpkgs::from_module()
-        .package_function("runCommand")
-        .apply([
-            "postgresql-configfile-check".into(),
-            record! {},
-            nix_text!(
-                r#"
+    let check = Nixpkgs::from_module().pkgs_function("runCommand").apply([
+        "postgresql-configfile-check".into(),
+        record! {},
+        nix_text!(
+            r#"
                     {package}/bin/postgres -D{config_file} -C config_file >/dev/null
                     touch $out
                 "#,
-                package = pg.package(),
-                config_file = configuration_file(),
-            ),
-        ]);
+            package = pg.package(),
+            config_file = configuration_file(),
+        ),
+    ]);
 
     let pkgs = Nixpkgs::from_module();
     // Upstream skips executing the configuration-check derivation for cross builds.

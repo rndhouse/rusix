@@ -793,18 +793,61 @@ let args = NixValue::record([
         "labels": NixValue::list(["a".into(), "b".into()]),
     }),
 ]);
-let file = pkgs.package_function("writeTextFile").call(args);
-let curried = pkgs.package_function("writeText")
+let file = pkgs.pkgs_function("writeTextFile").call(args);
+let curried = pkgs.pkgs_function("writeText")
     .apply(["postgresql.conf".into(), "workers = 4\n".into()]);
 ```
 
-`package_function` looks up functions in the real package set, retaining its
+`pkgs_function` looks up functions in the real package set, retaining its
 overlays; the existing `function` looks in nixpkgs/lib. Each `.call` is ordinary
 Nix application; `.apply([args...])` handles currying on either NixFunction or
 NixValue and preserves the Rust application call site. Results stay `NixValue`,
 without automatic PackageRef inference. Existing package functions/overrides can also be
 selected through `as_value().select(...)` and called. Function schemas and errors
 belong to Nix. No builder or package-specific Rust code is involved.
+
+`PackageFunction` describes a nixpkgs package definition: typically a function
+such as `{ stdenv, lib, openssl, ... }: stdenv.mkDerivation { ... }`, whose named
+arguments are dependencies and feature options. Construct it with
+`PackageFunction::from_function_attrs(arguments, build)`, using the same lazy
+named defaults and body construction as `NixValue::function_attrs`.
+
+```rust
+use rusnix_ir::{Config, interop::{NixValue, Nixpkgs, PackageFunction}};
+
+let factory = PackageFunction::from_function_attrs(["curl", "label"], |args| {
+    (vec![("label", args.clone().select("curl.pname"))], args.select("label"))
+});
+let result = Nixpkgs::new().call_package(&factory, NixValue::record([] as [(&str, NixValue); 0]));
+let config = Config::new().set("factory", factory).set("result", result);
+```
+
+`call_package(&PackageFunction, impl Into<NixValue>) -> NixValue` represents the
+real pinned `pkgs.callPackage factory overrides`. nixpkgs inspects the argument
+names and supplies matching dependencies; explicit caller arguments take
+precedence. Rust does not reimplement dependency injection. The result remains
+`NixValue`: Nix validates arguments and behavior, and Rust does not prove that
+the function returns a derivation. Supported results retain ordinary nixpkgs
+`.override` and `.overrideAttrs` behavior.
+
+The old `package_function` selector was renamed to `pkgs_function`, because it
+selected arbitrary helpers from `pkgs`, including curried functions and
+`callPackage` itself. Those are generic `NixFunction` references, not package
+definitions. `Nixpkgs::function` still selects functions from `lib`.
+`PackageFunction` wraps the existing deferred function expression rather than
+changing the reference-only `NixFunction` representation. Only a
+`PackageFunction` can be passed to `call_package`; generic functions and
+unmarked `NixValue` expressions fail at Rust compile time.
+
+`PackageFunction::as_value()` and `From<PackageFunction> for NixValue` allow
+ordinary calls, records, and `functionArgs` inspection. The existing
+`ConfigValue` and `IntoRusnixValue` conversions also accept package functions in
+`Config::set` and derived configuration fields. The wrapper and `call_package`
+forward source locations into the existing function and application machinery:
+construction, missing-dependency call boundaries, body operations, and caller
+argument failures retain the current diagnostic policy. External nixpkgs frames
+remain subject to the existing provenance limitations. No new forcing
+is added; unused defaults/dependencies and unselected branches stay lazy.
 
 Use derived Rust structs for meaningful fixed schemas and `NixValue::record`
 arrays/iterators for open records. A derived value's `try_into_nix_value()?`
@@ -1051,7 +1094,8 @@ laziness and Nix string dependency context rather than computing in Rust.
 
 For package-function adapters, `#[rusnix::args]` provides the same finite structural
 navigation over a supplied deferred argument record. Bind it with
-`args::from_value(arguments)` inside `NixValue::function_attrs`; accessors such as
+`args::from_value(arguments)` inside `PackageFunction::from_function_attrs`
+(or the generic `NixValue::function_attrs`); accessors such as
 `args.stdenv.host_platform.is_darwin()` construct symbolic selections. Scalar and
 opaque leaf mappings, naming rules and explicit subtree access match
 `#[rusnix::options]`. Rust declares expected shapes; it never reads argument values

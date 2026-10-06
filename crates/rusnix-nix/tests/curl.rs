@@ -22,7 +22,7 @@ use std::{
 #[track_caller]
 fn artifact(fields: impl IntoIterator<Item = (&'static str, NixValue)>) -> Generated {
     let mut arguments = vec![
-        ("factory", lowering::factory()),
+        ("factory", lowering::factory().into()),
         ("nixpkgs", Nixpkgs::new().value("path")),
     ];
     arguments.extend(fields);
@@ -452,10 +452,14 @@ fn excluded_dependencies_passthru_and_unused_factory_remain_lazy() {
             ]),
         )],
     );
-    let generated = compile(&Config::new().set("good", true).set(
-        "unused",
-        lowering::factory().call(NixValue::record([] as [(&str, NixValue); 0])),
-    ))
+    let generated = compile(
+        &Config::new().set("good", true).set(
+            "unused",
+            lowering::factory()
+                .as_value()
+                .call(NixValue::record([] as [(&str, NixValue); 0])),
+        ),
+    )
     .unwrap();
     assert_eq!(
         session()
@@ -729,4 +733,32 @@ fn recursive_passthru_override_failure_keeps_a_rust_boundary() {
         "{:?}",
         errors[1]
     );
+}
+
+#[test]
+fn rust_call_package_matches_exact_default_and_model_derivations() {
+    let default = compare("rust-call-package-default", []);
+    let model = compare(
+        "rust-call-package-model",
+        [("model", model::model().arguments())],
+    );
+    let factory = lowering::factory();
+    let pkgs = Nixpkgs::new();
+    let default_package =
+        pkgs.call_package(&factory, NixValue::record([] as [(&str, NixValue); 0]));
+    let model_package = pkgs.call_package(&factory, model::model().arguments());
+    let generated = compile(
+        &Config::new()
+            .set("default", default_package.select("drvPath"))
+            .set("model", model_package.select("drvPath")),
+    )
+    .unwrap();
+    let value = session()
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .evaluate_interop(&generated)
+        .unwrap()
+        .value;
+    assert_eq!(value["default"], default["derivationPath"]);
+    assert_eq!(value["model"], model["derivationPath"]);
 }

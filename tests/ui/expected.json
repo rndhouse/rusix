@@ -576,5 +576,25 @@
     "reason_tokens": [
       "private"
     ]
+  },
+  {
+    "file": "generic-function-as-package-function.rs",
+    "code": "E0308",
+    "count": 1,
+    "source": "pkgs.call_package(&function",
+    "reason_tokens": [
+      "PackageFunction",
+      "NixFunction"
+    ]
+  },
+  {
+    "file": "nix-value-as-package-function.rs",
+    "code": "E0308",
+    "count": 1,
+    "source": "pkgs.call_package(&function",
+    "reason_tokens": [
+      "PackageFunction",
+      "NixValue"
+    ]
   }
 ]

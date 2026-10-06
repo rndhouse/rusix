@@ -30,7 +30,7 @@ fn artifact_with_options(
     options: RenderOptions,
 ) -> Generated {
     let mut args = vec![
-        ("factory", lowering::factory()),
+        ("factory", lowering::factory().into()),
         ("nixpkgs", Nixpkgs::new().value("path")),
     ];
     args.extend(fields);
@@ -399,7 +399,9 @@ fn ordinary_override_attrs_and_final_package_passthru() {
 #[test]
 fn rust_native_model_matches_ordinary_nix_consumers() {
     // This invokes the model's normal callPackage path, not the comparison fixture.
-    let value = inputs::instantiate(lowering::factory(), model::model()).select("drvPath");
+    let value = Nixpkgs::new()
+        .call_package(&lowering::factory(), inputs::arguments(model::model()))
+        .select("drvPath");
     let artifact = compile(&Config::new().set("result", value)).unwrap();
     let session = session().lock().unwrap_or_else(|p| p.into_inner());
     let rust = session.evaluate_interop(&artifact).unwrap().value;
@@ -418,7 +420,9 @@ fn rust_native_model_matches_ordinary_nix_consumers() {
         },
         ..model::Git::defaults()
     };
-    let full = inputs::instantiate(lowering::factory(), full_model).select("pname");
+    let full = Nixpkgs::new()
+        .call_package(&lowering::factory(), inputs::arguments(full_model))
+        .select("pname");
     assert_eq!(
         session
             .evaluate_interop(&compile(&Config::new().set("result", full)).unwrap())
@@ -604,7 +608,9 @@ fn invalid_structured_dependency_maps_to_rust_lookup_or_call() {
 
 #[test]
 fn unused_package_and_unused_dependency_remain_lazy() {
-    let unused = lowering::factory().call(NixValue::record([] as [(&str, NixValue); 0]));
+    let unused = lowering::factory()
+        .as_value()
+        .call(NixValue::record([] as [(&str, NixValue); 0]));
     let generated = compile(&Config::new().set("good", true).set("unused", unused)).unwrap();
     let session = session().lock().unwrap_or_else(|p| p.into_inner());
     session
@@ -632,4 +638,23 @@ fn unused_package_and_unused_dependency_remain_lazy() {
 fn compare_without_lock(session: &NixSession, generated: Generated) {
     let value = session.evaluate_interop(&generated).unwrap().value;
     assert_eq!(value["result"]["upstream"], value["result"]["candidate"]);
+}
+
+#[test]
+fn rust_call_package_preserves_the_exact_default_derivation() {
+    let factory = lowering::factory();
+    let git = Nixpkgs::new().call_package(&factory, inputs::arguments(model::Git::defaults()));
+    let generated = compile(&Config::new().set("result", git.select("drvPath"))).unwrap();
+    let reference = artifact([]);
+    let session = session().lock().unwrap_or_else(|p| p.into_inner());
+    let value = session.evaluate_interop(&generated).unwrap().value;
+    let comparison = session.evaluate_interop(&reference).unwrap().value;
+    assert_eq!(
+        value["result"],
+        comparison["result"]["upstream"]["derivationPath"]
+    );
+    assert_eq!(
+        value["result"],
+        comparison["result"]["candidate"]["derivationPath"]
+    );
 }

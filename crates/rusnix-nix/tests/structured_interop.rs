@@ -272,7 +272,7 @@ fn file_summary(file: NixValue) -> NixValue {
 fn real_curried_write_text_produces_a_derivation_without_building() {
     let text = format!("workers = {}\n", 4);
     let file = Nixpkgs::new()
-        .package_function("writeText")
+        .pkgs_function("writeText")
         .call("postgresql.conf")
         .call(NixValue::literal(text.clone()));
     let raw_file = generated(file.clone());
@@ -326,7 +326,7 @@ fn real_run_command_accepts_structured_environment_and_remains_unbuilt() {
     // If this were ever built, it would fail; evaluation must not execute it.
     let command = "exit 97";
     let file = pkgs
-        .package_function("runCommand")
+        .pkgs_function("runCommand")
         .call("rusnix-unbuilt")
         .call(args)
         .call(command);
@@ -374,7 +374,7 @@ fn real_attrset_builder_accepts_literals_lists_nested_records_and_package_refere
             ]),
         ),
     ]);
-    let file = pkgs.package_function("writeTextFile").call(args);
+    let file = pkgs.pkgs_function("writeTextFile").call(args);
 
     let summary = NixValue::record([
         ("file", file_summary(file.clone())),
@@ -402,9 +402,7 @@ fn real_attrset_builder_accepts_literals_lists_nested_records_and_package_refere
 
 #[test]
 fn invalid_real_function_argument_maps_to_the_rust_call_and_retains_raw_trace() {
-    let writer = Nixpkgs::new()
-        .package_function("writeText")
-        .call("bad.conf");
+    let writer = Nixpkgs::new().pkgs_function("writeText").call("bad.conf");
     let argument = NixValue::record([("wrong", true.into())]);
 
     let call_line = line!() + 1;
@@ -450,28 +448,27 @@ fn symbolic_module(downstream: &Path, attrset_call: bool) -> NixosModule {
         .with_prefix("data_directory=");
     let pkgs = Nixpkgs::new();
     let file = if attrset_call {
-        pkgs.package_function("writeTextFile")
-            .call(NixValue::record([
-                ("name", "postgresql.conf".into()),
-                ("text", text.into()),
-                (
-                    "passthru",
-                    NixValue::record([(
-                        "nested",
-                        NixValue::record([
-                            (
-                                "directory",
-                                OptionRef::<String>::new("services.postgresql.dataDir")
-                                    .into_expr()
-                                    .into(),
-                            ),
-                            ("packages", NixValue::list([pkgs.get("hello").into()])),
-                        ]),
-                    )]),
-                ),
-            ]))
+        pkgs.pkgs_function("writeTextFile").call(NixValue::record([
+            ("name", "postgresql.conf".into()),
+            ("text", text.into()),
+            (
+                "passthru",
+                NixValue::record([(
+                    "nested",
+                    NixValue::record([
+                        (
+                            "directory",
+                            OptionRef::<String>::new("services.postgresql.dataDir")
+                                .into_expr()
+                                .into(),
+                        ),
+                        ("packages", NixValue::list([pkgs.get("hello").into()])),
+                    ]),
+                )]),
+            ),
+        ]))
     } else {
-        pkgs.package_function("writeText")
+        pkgs.pkgs_function("writeText")
             .call("postgresql.conf")
             .call(text)
     };
@@ -577,7 +574,7 @@ fn unused_structured_symbolic_calls_stay_lazy_and_reference_failures_keep_origin
 #[test]
 fn scoped_symbols_inside_structured_arguments_cannot_escape_nixos() {
     let value = Nixpkgs::new()
-        .package_function("writeTextFile")
+        .pkgs_function("writeTextFile")
         .call(NixValue::record([
             ("name", "scoped.conf".into()),
             (
@@ -728,7 +725,7 @@ fn curried_apply_preserves_argument_order_and_the_authoring_call_origin() {
     let pkgs = Nixpkgs::new();
 
     let artifact = generated(
-        pkgs.package_function("writeText")
+        pkgs.pkgs_function("writeText")
             .apply([
                 "curried.conf".into(),
                 rusnix_ir::nix_text!("workers={count}", count = 4),
@@ -742,7 +739,7 @@ fn curried_apply_preserves_argument_order_and_the_authoring_call_origin() {
         "workers=4"
     );
 
-    let writer = pkgs.package_function("writeText");
+    let writer = pkgs.pkgs_function("writeText");
     let arguments = ["bad.conf".into(), rusnix_ir::nix_record! { "wrong": true }];
 
     let call_line = line!() + 1;

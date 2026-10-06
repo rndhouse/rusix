@@ -2,13 +2,13 @@
 use super::inputs::{ARGUMENTS, Inputs, args};
 use rusnix_ir::{
     IntoRusnixValue,
-    interop::{NixLibrary, NixValue},
+    interop::{NixLibrary, NixValue, PackageFunction},
     nix_text,
 };
 
 /// Describe the ordinary Nix package function, including dependent lazy defaults.
-pub(super) fn factory() -> NixValue {
-    NixValue::function_attrs(ARGUMENTS.iter().copied(), |arguments| {
+pub(super) fn factory() -> PackageFunction {
+    PackageFunction::from_function_attrs(ARGUMENTS.iter().copied(), |arguments| {
         let i = args::from_value(arguments);
         let host = &i.stdenv.host_platform;
         let defaults = vec![

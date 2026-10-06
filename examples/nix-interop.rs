@@ -158,7 +158,7 @@ fn main() {
             NixValue::record([("package", pkgs.get("hello").into())]),
         ),
     ]);
-    let file = pkgs.package_function("writeTextFile").call(args);
+    let file = pkgs.pkgs_function("writeTextFile").call(args);
     let generated = rusnix_nix::compile(&FunctionResult { result: file }.into_config()).unwrap();
     println!("{}", generated.source);
 }

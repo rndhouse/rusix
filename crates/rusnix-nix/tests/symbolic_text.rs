@@ -126,7 +126,7 @@ fn package_and_derivation_interpolation_preserves_exact_string_contexts() {
     let pkgs = Nixpkgs::new();
     let package = pkgs.get("hello");
     let file = pkgs
-        .package_function("writeText")
+        .pkgs_function("writeText")
         .apply(["example.conf".into(), "workers=4\n".into()]);
     let formatted = nix_text!(
         r#"

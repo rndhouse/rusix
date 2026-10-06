@@ -141,11 +141,11 @@ fn diagnostic_matrix_preserves_operations_paths_and_raw_errors() {
         .function("concatStringsSep")
         .apply(["".into(), 42_i64.into()]);
     let opaque = Nixpkgs::new()
-        .package_function("writeText")
+        .pkgs_function("writeText")
         .apply(["config".into(), empty()]);
     // mkDerivation returns a lazy record. Demand drvPath to test its actual recipe.
     let derivation = Nixpkgs::new()
-        .package_function("stdenv.mkDerivation")
+        .pkgs_function("stdenv.mkDerivation")
         .call(NixValue::record([("name", empty())]))
         .select("drvPath");
     let validation: NixValue = Expr::int(3).in_range(0, 1, "out of range").into();
@@ -170,7 +170,7 @@ fn diagnostic_matrix_preserves_operations_paths_and_raw_errors() {
     let imported = input.value("values.lazy.bad");
     let mut final_attrs_origin = None;
     let final_attrs = Nixpkgs::new()
-        .package_function("stdenv.mkDerivation")
+        .pkgs_function("stdenv.mkDerivation")
         .call(NixValue::function(|attrs| {
             let missing = attrs.select("missing");
             final_attrs_origin = Some(origin(missing.clone()));

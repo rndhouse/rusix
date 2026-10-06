@@ -346,8 +346,7 @@ impl Inputs {
 }
 
 /// Supplies Git's explicit dependencies while callPackage selects the remaining scope.
-/// The factory and result remain deferred Nix values; no build is run.
-pub(super) fn instantiate(factory: NixValue, model: super::model::Git) -> NixValue {
+pub(super) fn arguments(model: super::model::Git) -> NixValue {
     let mut fields = model.arguments();
 
     // These explicit arguments reproduce Git's callPackage wiring in all-packages.nix.
@@ -385,6 +384,5 @@ pub(super) fn instantiate(factory: NixValue, model: super::model::Git) -> NixVal
         ),
     ]);
 
-    pkgs.package_function("callPackage")
-        .apply([factory, NixValue::record(fields)])
+    NixValue::record(fields)
 }
