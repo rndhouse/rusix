@@ -1,9 +1,14 @@
-//! Compose independent contributions using ordinary NixOS merge and priority semantics.
+//! Describe and combine NixOS system configuration from Rust.
 //!
-//! [`NixosModule`] describes definitions and imports; it does not run NixOS.
-//! [`OptionRef`] declares finite dependencies on the final merged configuration.
-//! Structural [`OptionDecl`] trees author public schemas using real NixOS types.
-//! NixOS owns schema evaluation, merging and actual value checks.
+//! A NixOS module contributes settings to a larger system configuration. An
+//! *option* is a configurable field with a declared type, default and documentation.
+//! Multiple modules can define the same option; NixOS combines those definitions
+//! according to its type and their priorities, for example joining lists.
+//!
+//! [`NixosModule`] collects contributions and imports. [`OptionDecl`] describes
+//! the public options others can configure. [`OptionRef`] refers to an option’s
+//! value after all modules have been combined. Rust describes each of these;
+//! NixOS performs evaluation, type checking and merging later.
 use crate::interop::AttrPath;
 use crate::interop::{ModuleRef, NixValue, Nixpkgs, PackageRef};
 use crate::{Config, ConfigValue, Expr, IntoConfig, Node, Origin, ValueKind};
@@ -13,31 +18,30 @@ mod schema;
 
 pub use schema::{OptionDecl, OptionType};
 
-/// Construct one standard NixOS assertion record for the `assertions` option.
-/// Both the condition and message may remain symbolic, including inside Nix
-/// callbacks. Construction does not check the condition or force the message;
-/// NixOS checks assertions when its evaluator demands them.
+/// Describe a rule that NixOS should require to be true.
+/// The result is the standard `{ assertion = condition; message = message; }`
+/// record for NixOS’s `assertions` list. On a false condition, NixOS reports the
+/// message when assertions are checked. Rust does not check the condition.
 ///
-/// The message is preserved verbatim for upstream compatibility. Child expression
-/// origins and this call's record origin are retained. For a concrete message
-/// with a Rust-origin marker on a false condition, use [`NixosModule::assertion`].
-/// Nix remains authoritative for the actual boolean/string types of opaque values.
+/// The condition and message can be expressions that Nix evaluates later. Their
+/// Rust locations are preserved, but the message is unchanged for compatibility.
+/// Use [`NixosModule::assertion`] for a concrete message that also identifies the
+/// Rust rule when its condition is false. Nix checks actual boolean/string types.
 ///
 /// ```
-/// use rusnix_ir::{nixos, nix_text};
-/// let enabled = nixos::OptionRef::<bool>::new("services.example.enable").into_expr();
-/// let rule = nixos::assertion(
-///     enabled,
-///     nix_text!("{service} must be enabled", service = "example"),
-/// );
-/// // Put this deferred record in a contribution's assertions list.
+/// use rusnix_ir::nixos;
+/// let rule = nixos::assertion(true, "the service requires a valid port");
+/// // Add this record to a configuration contribution’s assertions list.
 /// ```
 #[track_caller]
 pub fn assertion(condition: impl Into<NixValue>, message: impl Into<NixValue>) -> NixValue {
     NixValue::record([("assertion", condition.into()), ("message", message.into())])
 }
 
-/// Combine deferred definition trees using NixOS mkMerge, not Rust merging.
+/// Combine several groups of NixOS definitions using `lib.mkMerge`.
+/// NixOS combines their settings according to option types and priorities later.
+/// This constructs module-system metadata, not a Rust map merge or a generic
+/// Nix attribute-set union.
 #[track_caller]
 pub fn merge(values: impl IntoIterator<Item = NixValue>) -> NixValue {
     Nixpkgs::new()
@@ -46,8 +50,10 @@ pub fn merge(values: impl IntoIterator<Item = NixValue>) -> NixValue {
 }
 
 impl NixValue {
-    /// NixOS mkIf retains a deferred definition until module processing.
-    /// Unlike if_else, this constructs module metadata, not a selected value.
+    /// Include these NixOS definitions only when `condition` evaluates to true.
+    /// This represents `lib.mkIf condition definitions`; NixOS processes the
+    /// condition while combining modules. Unlike [`Self::if_else`], it describes
+    /// conditional configuration definitions rather than selecting an ordinary value.
     #[track_caller]
     pub fn when(self, condition: impl Into<Self>) -> Self {
         Nixpkgs::new()
@@ -55,8 +61,10 @@ impl NixValue {
             .apply([condition.into(), self])
     }
 
-    /// Definition priority is selected by NixOS, including for symbolic values.
-    /// This is the per-value counterpart of NixosModule::priority.
+    /// Choose how these definitions compete with definitions from other NixOS modules.
+    /// For example, `Default` allows an ordinary definition to replace this value.
+    /// NixOS chooses and merges definitions later. For an entire module’s direct
+    /// settings, use [`NixosModule::priority`].
     #[track_caller]
     pub fn priority(self, priority: DefinitionPriority) -> Self {
         let library = Nixpkgs::new();
@@ -70,49 +78,68 @@ impl NixValue {
         }
     }
 
-    /// Order this definition before ordinary list/lines definitions (mkBefore).
+    /// Place this definition before ordinary list or line-based text definitions.
+    /// This uses NixOS `lib.mkBefore`; it changes merge order, not which override
+    /// priority wins.
     #[track_caller]
     pub fn before(self) -> Self {
         Nixpkgs::new().function("mkBefore").call(self)
     }
 
-    /// Order this definition after ordinary list/lines definitions (mkAfter).
+    /// Place this definition after ordinary list or line-based text definitions.
+    /// This uses NixOS `lib.mkAfter`; it changes merge order, not which override
+    /// priority wins.
     #[track_caller]
     pub fn after(self) -> Self {
         Nixpkgs::new().function("mkAfter").call(self)
     }
 }
 
-/// An explicit dependency on a final merged NixOS option.
+/// A reference to a NixOS option’s value after all modules have been combined.
 ///
-/// `T` is the author's expected type, not a verified option schema. Supported
-/// expression types are `i64`, `bool`, and `String`; NixOS checks actual values.
-/// This handle has no read/resolve operation. It requires NixOS module lowering.
-/// Origins are captured when constructing the reference, not when converting it.
-/// [`crate::options`] generates equivalent tracked accessors for finite option trees.
+/// NixOS options are configurable fields such as `services.example.port`.
+/// Several modules can set them, and NixOS applies their types and priorities
+/// to produce the final configuration. This reference lets another expression
+/// use that final value, including overrides supplied by ordinary Nix modules.
+///
+/// Rust never reads the referenced value. [`Self::into_expr`] creates an
+/// [`Expr<T>`] that Nix evaluates later. `T` states the Rust author’s expected
+/// type; Rusnix does not prove it matches the declared NixOS option. NixOS
+/// remains responsible for option existence, actual types and merging.
 ///
 /// ```
 /// use rusnix_ir::nixos::OptionRef;
 /// let port = OptionRef::<i64>::new("services.example.port");
 /// let command = port.into_expr().to_text().with_prefix("example --port=");
-/// // NixOS resolves the port after merging; Rust cannot read it here.
+/// // Another NixOS module can change the port without rerunning this Rust code.
 /// ```
+///
+/// Supported typed expressions are `i64`, `bool` and `String`; use
+/// [`Self::into_value`] for other expected shapes. References require compilation
+/// as a NixOS module. Their Rust location is recorded when constructed.
+/// [`crate::options`] generates these references from a finite structural declaration.
 #[derive(Clone, Debug)]
 pub struct OptionRef<T> {
+    /// Field names identifying the NixOS option whose final value is used.
     path: AttrPath,
+    /// Rust location that declared this dependency, used if evaluation fails.
     origin: Origin,
+    /// Expected value category for Rust composition, not proof of the NixOS type.
     ty: PhantomData<T>,
 }
 
 impl<T> OptionRef<T> {
-    /// Declare a dotted dependency without reading its value or checking its schema.
-    /// For a literal dot within an attribute name, use [`Self::from_segments`].
+    /// Refer to an option using a dotted path, such as `services.example.port`.
+    /// This records a dependency without reading the option or checking its type.
+    /// Use [`Self::from_segments`] for a field name containing a literal dot.
     #[track_caller]
     pub fn new(path: &str) -> Self {
         Self::from_segments(path.split('.'))
     }
 
-    /// Literal attribute segments; dots and special characters stay within a key.
+    /// Refer to an option using literal field names.
+    /// `["services", "example", "custom.key"]` keeps the last name as one field,
+    /// including its dot. No option value is read or checked in Rust.
     #[track_caller]
     pub fn from_segments(parts: impl IntoIterator<Item = impl Into<String>>) -> Self {
         let path = AttrPath::segments(parts);
@@ -123,8 +150,9 @@ impl<T> OptionRef<T> {
         }
     }
 
-    /// Explicitly cross into the opaque boundary, including collection options.
-    /// This does not expose the referenced value to Rust.
+    /// Represent the option lookup as a [`NixValue`] without a scalar type promise.
+    /// Use this for lists, maps, packages or other objects that will exist in Nix.
+    /// It does not return a concrete Rust collection or read the option value.
     pub fn into_value(self) -> NixValue {
         NixValue::from_node(Node {
             origin: self.origin,
@@ -132,16 +160,18 @@ impl<T> OptionRef<T> {
         })
     }
 
-    /// Preserve the expected Rust type and original provenance in a deferred expression.
-    /// Only `Expr<bool>`, `Expr<i64>` and `Expr<String>` currently support lowering
-    /// as configuration values; use [`Self::into_value`] for opaque shapes.
+    /// Represent the option lookup as an [`Expr<T>`] with its original Rust location.
+    /// The value still belongs to Nix evaluation. Only `Expr<bool>`, `Expr<i64>` and
+    /// `Expr<String>` currently support configuration generation; use
+    /// [`Self::into_value`] for other expected shapes.
     pub fn into_expr(self) -> Expr<T> {
         Expr::new(ValueKind::OptionReference(self.path), self.origin)
     }
 }
 
-/// A pinned-tree module import with the Rust operation that introduced it.
-/// Normally constructed by [`NixosModule::import`].
+/// A NixOS source file to load, together with the Rust location that requested it.
+/// NixOS adds that file’s settings and option declarations to the combined
+/// configuration. Normally created by [`NixosModule::import`].
 #[derive(Clone, Debug)]
 pub struct Import {
     /// Relative file under the evaluator's nixpkgs root; absolute/parent paths are rejected.
@@ -150,46 +180,59 @@ pub struct Import {
     pub origin: Origin,
 }
 
-/// A deferred NixOS assertion with a Rust-origin marker in its failure message.
-/// Normally constructed by [`NixosModule::assertion`].
+/// A rule whose condition NixOS checks and whose failure names the Rust rule.
+/// The condition is evaluated by Nix later, not by Rust. Normally created by
+/// [`NixosModule::assertion`]; the stored message includes source attribution
+/// when generated for NixOS.
 #[derive(Clone, Debug)]
 pub struct Assertion {
     /// Diagnostic identity of this assertion, not a declared NixOS option name.
     pub name: String,
-    /// Deferred boolean condition checked when assertion evaluation is requested.
+    /// Boolean expression NixOS must find true when assertions are checked.
     pub condition: Node,
-    /// Human-readable reason for a false condition, retained alongside provenance.
+    /// Explanation to report if the rule is false, alongside the Rust location.
     pub message: String,
     /// Rust operation that introduced the assertion.
     pub origin: Origin,
 }
 
-/// An explicit NixOS boundary grouping independent definitions, imports and assertions.
-/// Each [`Self::add`] keeps its own contribution rather than flattening bindings
-/// into one [`Config`]. NixOS performs merging and priority selection; symbolic
-/// dependencies follow final values supplied by Rust or ordinary Nix modules.
-/// Creating this value does not evaluate options, build packages or activate a system.
+/// A group of configuration contributions to combine into a NixOS module.
+///
+/// A NixOS module supplies settings or declares configurable options. NixOS
+/// combines modules into one system configuration, using each option’s type and
+/// priority to resolve multiple definitions. This Rust type collects those
+/// settings, declarations, imports and assertions without running NixOS.
+///
+/// Each [`Self::add`] preserves an independent contribution, so list merging,
+/// overrides and errors involving several Rust locations remain meaningful.
+/// [`OptionRef`] dependencies follow the final values supplied by both Rust and
+/// ordinary Nix modules. Constructing this object does not evaluate options,
+/// build packages or activate a system.
 #[derive(Clone, Debug)]
 pub struct NixosModule {
-    /// Bindings owned directly by this module, subject to its priority.
+    /// Settings contributed directly by this module; its priority applies to these settings.
     pub config: Config,
-    /// Public option declarations, structurally placed under options rather than config.
+    /// Declarations of configurable fields, their NixOS types, defaults and documentation.
     pub options: Config,
-    /// Deferred modules returned by Nix helpers, such as option migration modules.
+    /// Expressions for modules produced by Nix helpers, such as renamed-option adapters.
     pub generated_imports: Vec<(NixValue, Origin)>,
     /// Pinned-tree imports, each retaining its introducing Rust operation.
     pub imports: Vec<Import>,
     /// Assertion contributions, merged into NixOS's ordinary assertion list.
     pub assertions: Vec<Assertion>,
-    /// Independent child modules; each validates and retains its own priority.
+    /// Separately contributed modules, each with its own settings and priority.
     pub modules: Vec<NixosModule>,
     /// Override policy for this module's direct bindings, not its children or imports.
     pub priority: DefinitionPriority,
-    /// Opaque imported modules paired with the Rust import call's provenance.
+    /// Existing NixOS module handles paired with the Rust locations that imported them.
     pub opaque_imports: Vec<(ModuleRef, Origin)>,
 }
 
-/// Priority of this module's option assignments; NixOS performs filtering and merging.
+/// How a NixOS definition competes with other definitions of the same option.
+/// NixOS first keeps definitions with the winning priority, then merges them
+/// according to the option type. Lower numeric priorities win. For example,
+/// `Default` provides a fallback, while an ordinary definition can replace it.
+/// This differs from before/after ordering of list elements.
 #[derive(Clone, Copy, Debug, Default)]
 pub enum DefinitionPriority {
     /// Ordinary definitions, left unwrapped (NixOS's normal override priority is 100).
@@ -236,12 +279,15 @@ impl NixosModule {
         }
     }
 
-    /// Add one independent contribution. NixOS performs merging and priority
-    /// filtering across children; duplicate bindings within one Config still
-    /// fail IR validation. To set a contribution's priority explicitly, use
-    /// `module(NixosModule::new(value.into_config()).priority(...))`.
-    /// Conversion happens now in Rust; the contribution's values and NixOS merge
-    /// remain deferred. Caller tracking forwards the authoring location to adapters.
+    /// Add a Rust component’s settings as an independent NixOS contribution.
+    /// Rust converts the component now, but Nix evaluates its expressions and
+    /// combines its settings with other contributions later. Lists can merge and
+    /// conflicting values can identify every contributing source.
+    ///
+    /// Duplicate paths inside one Config still fail Rusnix validation. To give a
+    /// whole contribution a priority, wrap it with [`Self::new`] and
+    /// [`Self::priority`], then add it with [`Self::module`]. Tracked conversions
+    /// record the author’s call location.
     ///
     /// ```
     /// use rusnix_ir::{self as rusnix, nixos::NixosModule};
@@ -271,16 +317,18 @@ impl NixosModule {
         self
     }
 
-    /// Applies to this module's Config assignments. Children have their own
-    /// policies; assertion messages retain their normal list merge semantics.
+    /// Set the override priority of this module’s directly contributed settings.
+    /// NixOS applies it when competing definitions are combined. Child modules keep
+    /// their own priorities, and assertions retain ordinary list merging.
     pub fn priority(mut self, priority: DefinitionPriority) -> Self {
         self.priority = priority;
         self
     }
 
-    /// Import a path relative to the evaluator's pinned nixpkgs source tree.
-    /// For general ecosystem objects use `import_ref(ModuleRef)`. Paths are
-    /// validated during lowering; Nix remains authoritative for module contents.
+    /// Include a NixOS module file from the pinned nixpkgs source tree.
+    /// `path` is relative to that tree. Use [`Self::import_ref`] for handles obtained
+    /// from package collections or local files. Rusnix validates the path, while
+    /// NixOS evaluates the file’s settings and declarations later.
     #[track_caller]
     pub fn import(mut self, path: impl Into<String>) -> Self {
         let path = path.into();
@@ -291,9 +339,12 @@ impl NixosModule {
         self
     }
 
-    /// Add a structural public option schema as an independent module contribution.
-    /// Leaves should be OptionDecl values. NixOS validates declarations and controls
-    /// their type/merge behavior; ordinary Rust field types do not replace that schema.
+    /// Declare configurable NixOS fields, their types, defaults and documentation.
+    /// Unlike [`Self::add`], this defines which options are available rather than
+    /// setting their current values. Nested Rust fields determine option paths;
+    /// leaves should be [`OptionDecl`] values. Ordinary Nix modules can then assign
+    /// those options. NixOS checks types and performs merging, independently of
+    /// Rust’s own type system.
     ///
     /// ```
     /// use rusnix_ir::{self as rusnix, nixos::{NixosModule, OptionDecl, OptionType}};
@@ -303,15 +354,11 @@ impl NixosModule {
     ///     use rusnix_ir::nixos::OptionDecl;
     ///
     ///     #[rusnix(root)]
-    ///     pub struct Root { pub services: Services }
-    ///
-    ///     pub struct Services { pub example: OptionDecl }
+    ///     pub struct Root { pub example: OptionDecl }
     /// }
     /// let module = NixosModule::empty().declare(schema::Root {
-    ///     services: schema::Services {
-    ///         example: OptionDecl::new(OptionType::named("bool"))
-    ///             .default(false).description("Enable the example service."),
-    ///     },
+    ///     example: OptionDecl::new(OptionType::named("bool"))
+    ///         .default(false).description("Enable the example."),
     /// });
     /// ```
     #[track_caller]
@@ -322,9 +369,10 @@ impl NixosModule {
         self
     }
 
-    /// Import an opaque module returned by a Nix function, without a source file handle.
-    /// Values remain deferred; NixOS checks module structure. Import provenance is
-    /// distinct from any ordinary Nix definitions that use the declared interface.
+    /// Add a NixOS module computed by a Nix expression, such as a helper function call.
+    /// NixOS evaluates the expression and checks the resulting module structure.
+    /// The Rust import location is recorded separately from ordinary Nix definitions
+    /// that later configure the module’s options.
     #[track_caller]
     pub fn import_value(mut self, module: NixValue) -> Self {
         let origin = Origin::caller("import generated NixOS module");
@@ -332,8 +380,9 @@ impl NixosModule {
         self
     }
 
-    /// Import an existing opaque module and record this call as a Rust boundary.
-    /// Nix remains authoritative for its contents and interactions with other definitions.
+    /// Include an existing NixOS module referenced by [`ModuleRef`].
+    /// NixOS evaluates its contents and combines them with other contributions.
+    /// Errors in external Nix code can be attributed to this Rust import location.
     #[track_caller]
     pub fn import_ref(mut self, module: ModuleRef) -> Self {
         let origin = Origin::caller(format!(
@@ -344,13 +393,17 @@ impl NixosModule {
         self
     }
 
-    /// Only category-typed PackageRef values cross this boundary. NixOS checks
-    /// that each resolved value really is a package.
-    /// Adds a direct `environment.systemPackages` binding; repeated use within
-    /// one module conflicts in IR validation. Compose separate contributions to merge lists.
+    /// Add packages to the system-wide software available through NixOS’s
+    /// `environment.systemPackages` option. This describes the package list without
+    /// building or installing it; NixOS checks each reference is actually a package.
+    ///
+    /// This adds one direct setting. Repeated calls on the same module conflict in
+    /// Rusnix validation; use separate module contributions when lists should merge.
+    /// Only [`PackageRef`] values are accepted, rather than module handles:
     ///
     /// ```compile_fail
-    #[doc = include_str!("../../../tests/ui/module-as-package.rs")]
+    /// # use rusnix_ir::{nixos::NixosModule, interop::Nixpkgs};
+    /// let module = NixosModule::empty().system_packages(vec![Nixpkgs::new().module("services/networking/ssh/sshd.nix")]);
     /// ```
     #[track_caller]
     pub fn system_packages(mut self, packages: Vec<PackageRef>) -> Self {
@@ -358,9 +411,10 @@ impl NixosModule {
         self
     }
 
-    /// Add a deferred assertion whose message identifies this Rust operation.
-    /// The condition is not resolved in Rust. The evaluator decides when to
-    /// demand assertions; ordinary NixOS activation/build checks remain in NixOS.
+    /// Add a rule whose failure message identifies this Rust call.
+    /// NixOS requires the boolean condition to be true when assertions are checked.
+    /// Rust does not read the condition; evaluation methods decide when to check it.
+    /// `name` labels the rule in diagnostics and `message` explains a false result.
     #[track_caller]
     pub fn assertion(
         mut self,

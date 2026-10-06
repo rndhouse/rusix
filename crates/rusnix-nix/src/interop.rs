@@ -165,9 +165,11 @@ impl NixSession {
         Ok(())
     }
 
-    /// Stage pinned library/package inputs offline, then evaluate a generic JSON result.
-    /// Native objects remain in Nix; select serializable attributes when functions
-    /// or packages cannot cross JSON directly. No package outputs are built.
+    /// Evaluate generated Nix that uses the pinned nixpkgs packages or library.
+    /// The checked local inputs are staged offline into this session’s workspace.
+    /// The result must be JSON-compatible; select data from a package or function
+    /// when the object itself cannot be serialized. Nix may construct build recipes,
+    /// but package outputs are never built.
     pub fn evaluate_interop(&self, generated: &Generated) -> Result<Evaluation, Box<Diagnostic>> {
         self.stage_interop()?;
         self.evaluate(generated)

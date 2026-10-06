@@ -1,5 +1,8 @@
-//! Evaluation in an owned disposable store, with fixed offline subprocess options.
-//! All evaluator methods use this boundary; callers cannot select stores or flags.
+//! Run Nix evaluation in a temporary workspace without using the host’s store.
+//!
+//! Nix stores build recipes and outputs in a *store*. Each [`NixSession`] selects
+//! its own disposable local store and fixed offline options. Callers cannot
+//! substitute another store or supply arbitrary Nix command flags.
 use crate::{Diagnostic, DiagnosticKind, Generated, render::quote};
 use std::{
     fs, io,
@@ -8,17 +11,28 @@ use std::{
 };
 use tempfile::TempDir;
 
-/// An evaluation workspace whose store/config/cache directories are disposable.
-/// Every Nix subprocess explicitly selects this store and strips host-selection
-/// environment settings. Evaluation is offline and import-from-derivation is
-/// disabled; no builds or activation are performed. Dropping the session removes
-/// its workspace, so persist returned diagnostics/artifacts elsewhere if needed.
+/// A temporary workspace for asking Nix to evaluate generated expressions.
+///
+/// Nix’s store contains build recipes and outputs. Each session uses its own
+/// disposable store, configuration and cache directories, so evaluation does not
+/// use the host/default store. Methods return JSON-compatible results or Rust-facing
+/// errors; they do not build packages, install software or activate a system.
+///
+/// Evaluation is offline. Loading the result of an unbuilt derivation as Nix code
+/// (*import from derivation*) is disabled. Every Nix subprocess selects the session’s
+/// store explicitly and removes host-selection environment settings.
+/// Dropping the session deletes its workspace; save artifacts or diagnostics
+/// elsewhere if they must remain available.
 pub struct NixSession {
+    /// Temporary directory containing the session’s local store and evaluator files.
     disposable: TempDir,
     pub(crate) full_source: std::sync::OnceLock<std::sync::Arc<crate::interop::FullSource>>,
 }
 
-/// A successful JSON projection and its original evaluator stderr.
+/// The JSON-compatible result of evaluating a Nix expression.
+/// It includes Nix’s original diagnostic output for inspection. A package or
+/// function cannot necessarily be serialized directly; select suitable data
+/// such as a package’s name before requesting JSON output.
 #[derive(Debug)]
 pub struct Evaluation {
     /// Selected Nix result serialized as JSON; unsupported Nix values may fail serialization.
@@ -111,17 +125,20 @@ impl NixSession {
         Ok(String::from_utf8_lossy(&output.stdout).trim().into())
     }
 
-    /// Parse generated source, then evaluate its whole result as JSON in the isolated store.
-    /// JSON conversion demands the returned value; choose [`Self::evaluate_attribute`]
-    /// for selective evaluation or [`Self::evaluate_interop`] to stage pinned inputs.
-    /// Invalid generated syntax/static bindings are classified as compiler failures.
+    /// Evaluate generated Nix and convert its complete result to JSON.
+    /// Conversion causes Nix to evaluate all values needed for that result, so
+    /// a failing nested value can make the whole request fail. Use
+    /// [`Self::evaluate_attribute`] to select one field, or [`Self::evaluate_interop`]
+    /// when the expression needs pinned nixpkgs inputs. Invalid generated syntax
+    /// or static bindings are reported as compiler failures.
     pub fn evaluate(&self, generated: &Generated) -> Result<Evaluation, Box<Diagnostic>> {
         self.evaluate_selection(generated, None)
     }
 
-    /// Select one literal top-level attribute without demanding its siblings.
-    /// Dots and CLI-looking names are escaped as attribute data, not path traversal
-    /// or subprocess flags. The selected value must be JSON-serializable.
+    /// Evaluate one top-level field of the generated Nix result as JSON.
+    /// Other fields are left unevaluated unless the selected value depends on them.
+    /// `attribute` is one literal name: dots are not nested traversal, and names
+    /// that resemble command flags are escaped as data.
     pub fn evaluate_attribute(
         &self,
         generated: &Generated,

@@ -1,11 +1,16 @@
-//! Advanced backend syntax for rendering and compiler diagnostics.
+//! Describe the Nix syntax emitted by the backend.
 //!
-//! This is deliberately separate from semantic configuration in `rusnix-ir`.
-//! Constructors do not validate arbitrary ASTs; invalid syntax is a compiler
-//! failure when evaluated. Ordinary configuration should not construct this tree.
+//! An abstract syntax tree (AST) represents source code as expressions instead of
+//! strings. This advanced API lets backend authors build and inspect that tree.
+//! Normal configuration authors use `rusnix-ir`; they do not construct Nix syntax.
+//! These constructors do not validate arbitrary trees. Invalid generated syntax
+//! is a compiler failure when evaluated, not an error in user configuration.
 use rusnix_ir::Origin;
 
-/// A Nix syntax expression with optional source attribution and runtime context.
+/// One Nix source expression, optionally linked to a Rust operation.
+/// Backend authors combine these expressions and render them into Nix text.
+/// Attribution supplies source-map entries; optional runtime markers help map
+/// failures whose Nix locations point into external code.
 #[derive(Clone, Debug)]
 pub struct NixExpr {
     /// Rust origin for generated comments and source-map entries, if available.
@@ -16,7 +21,10 @@ pub struct NixExpr {
     pub kind: NixKind,
 }
 
-/// Syntax supported by this backend; child ordering determines generated source.
+/// The syntax of a Nix expression, such as a literal, record or function call.
+/// An attribute set is a group of named fields. Nix evaluates expressions only
+/// when their results are needed, so building this tree does not evaluate values.
+/// Child order determines generated source order.
 #[derive(Clone, Debug)]
 pub enum NixKind {
     /// A boolean literal.
@@ -62,7 +70,9 @@ pub enum NixKind {
     ArgumentFunction(Vec<(String, Option<NixExpr>)>, Box<NixExpr>),
 }
 
-/// Nix builtins emitted by supported lowering operations.
+/// Functions provided by the Nix language itself that this backend can emit.
+/// For example, `builtins.div` performs integer division. These are distinct
+/// from utility functions in nixpkgs’ separately supplied `lib` attribute set.
 #[derive(Clone, Copy, Debug)]
 pub enum Builtin {
     /// Signed integer division via `builtins.div`.
@@ -79,7 +89,9 @@ pub enum Builtin {
     ToString,
 }
 
-/// Native Nix binary operations used by this backend.
+/// Two-operand Nix operators represented by this backend.
+/// They operate when Nix evaluates the generated source, not when Rust builds
+/// the expression tree.
 #[derive(Clone, Copy, Debug)]
 pub enum BinaryOp {
     /// Native value equality (`==`).

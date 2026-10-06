@@ -1,9 +1,15 @@
-//! Lowering, code generation, isolated evaluation, and diagnostic translation.
+//! Generate Nix source from Rust configuration and evaluate it in isolation.
 //!
-//! [`compile`] renders generic contributions; [`nixos::compile_module`] renders
-//! NixOS composition. [`NixSession`] evaluates artifacts using disposable stores
-//! and returns Rusnix-owned [`Diagnostic`] values. [`ast`] is an advanced backend
-//! API; Rust configuration authors normally use `rusnix-ir` instead.
+//! Nix evaluates configuration expressions and describes software builds. This
+//! crate compiles values authored with `rusnix-ir` into that language. Compilation
+//! happens in Rust; evaluation is a separate step using [`NixSession`].
+//!
+//! [`compile`] generates ordinary Nix configuration, while
+//! [`nixos::compile_module`] generates a module that NixOS combines with other
+//! modules. Generated artifacts retain Rust locations for error reporting through
+//! [`Diagnostic`]. Evaluations use temporary, disposable Nix stores, without
+//! building packages or activating a system. [`ast`] is an advanced code-generation
+//! API; normal authors use `rusnix-ir` instead.
 #![warn(missing_docs)]
 
 pub mod ast;
@@ -28,9 +34,11 @@ pub use render::{Generated, SourceSpan, render};
 use rusnix_ir::{Config, Node, ValueKind};
 use std::{cell::Cell, rc::Rc};
 
-/// Validate and lower a generic contribution into Nix source and a source map.
-/// Does not evaluate Nix. NixOS option references and module-supplied package
-/// references require [`nixos::compile_module`] and are rejected here.
+/// Generate Nix source for a group of settings described by [`Config`].
+/// This validates the Rust description and returns source plus the information
+/// needed to map generated error locations back to Rust. It does not run Nix.
+/// References to final NixOS options or the system’s supplied package set require
+/// [`nixos::compile_module`] and are rejected by this standalone compiler.
 pub fn compile(config: &Config) -> Result<Generated, Box<Diagnostic>> {
     config
         .validate()

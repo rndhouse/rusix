@@ -5,6 +5,12 @@ working loop is Rust type checking → semantic IR → validation → Nix AST �
 generated Nix → isolated evaluation → a diagnostic pointing back to Rust.
 Generated Nix is compiler output. Edit Rust configuration functions.
 
+For API documentation, run `cargo doc -p rusnix-ir --no-deps --open`. Start with
+`rusnix_ir`: Rust values describe configuration now, while `Expr`, `OptionRef`
+and `NixValue` describe expressions that Nix evaluates later. Its rustdoc
+introduces packages, utility functions and NixOS modules before their Rusnix
+wrappers. `rusnix_nix` documents compilation and isolated evaluation.
+
 ```text
 User-defined Rust domain model
         ↓
@@ -30,7 +36,7 @@ semantic types, unrepresentable field combinations, caller contracts, and
 exhaustive model consumers. Nine single-file showcases and the multi-file
 PostgreSQL/Git examples define their own domain types and distinguish user models,
 opaque Nix objects and the generic escape hatch.
-Seven tested Nix comparisons and fifty-one UI fixtures
+Seven tested Nix comparisons and fifty-nine UI fixtures
 (including interop category safety and missing TLS keys) back their claims. The examples explain
 which guarantees are static, which require IR checks, and which remain NixOS
 checks; generic configuration/IR escape hatches remain explicit.

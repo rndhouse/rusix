@@ -1,26 +1,39 @@
-//! Narrow extension API for structural data and native Rusnix leaves.
+//! Convert user-defined Rust data into configuration fields and Nix values.
 use crate::{Assignment, Config, ConfigValue, Node, Origin, ValidationError, ValueKind};
 
-/// Convert a reusable value without deciding its global configuration placement.
-/// Prefer the derive for mechanical struct/unit-enum mapping; implement this
-/// trait when conversion carries domain meaning. The parent supplies placement.
-/// Ordinary `Option<T>` converts `Some(value)` normally and `None` to Nix null.
-/// Use the explicit `#[rusnix(omit_none)]` field or named-struct attribute to omit
-/// absent definitions instead; it applies only to direct Option fields and is not inherited.
+/// Convert a Rust value into data Rusnix can use inside a configuration tree.
+/// A nested value defines its fields, while its parent determines where they
+/// appear. For example, the same endpoint type can be nested under several
+/// services without containing a global option path.
+///
+/// Prefer the derive for ordinary structs, newtypes and unit enums. Implement
+/// this trait when conversion expresses a domain decision. This is distinct
+/// from [`crate::IntoConfig`], which creates a complete configuration contribution.
+///
+/// An ordinary `Option<T>` maps `None` to Nix `null`. Explicit
+/// `#[rusnix(omit_none)]` changes field behavior so no definition is contributed.
+/// On a named struct, it applies only to direct Option fields, not nested types.
 pub trait IntoRusnixValue {
-    /// Consume this value into structural data or a native deferred leaf.
-    /// Caller tracking propagates through tracked helpers and preserves child origins.
+    /// Convert this Rust value into fields, a list or a value expression.
+    /// Conversion happens in Rust, but contained Nix expressions remain unevaluated.
+    /// Tracked helpers preserve the author’s call location and existing child locations.
     #[track_caller]
     fn into_value(self) -> RusnixValue;
 }
 
-/// Structural lowering data used by derives and custom domain conversions.
-/// Records nest into configuration paths; lists keep ordered values. Native
-/// expressions and opaque objects remain deferred leaves, retaining their origins.
-/// This is not a Nix source string or an evaluated value.
+/// Data ready to be placed inside a Rusnix configuration tree.
+/// It can contain named fields, ordered lists, literals and expressions that Nix
+/// will evaluate later. Use this as the result of a custom [`IntoRusnixValue`]
+/// implementation; it is not evaluated Nix data or raw Nix source.
+///
+/// Structural records become nested configuration paths. Existing Nix handles
+/// and expressions stay intact, including their Rust locations. To pass a
+/// record as one Nix function argument instead, use [`Self::into_nix_value`].
 #[derive(Clone, Debug)]
 pub struct RusnixValue {
+    /// Rust conversion location used when these fields are placed in configuration.
     origin: Origin,
+    /// A literal/expression, a group of named fields, or an ordered list of values.
     kind: Kind,
 }
 
@@ -32,7 +45,9 @@ enum Kind {
 }
 
 impl RusnixValue {
-    /// Preserve expressions/opaque objects; primitive leaves acquire placed origins.
+    /// Wrap a literal or existing Nix expression as one configuration value.
+    /// Expressions and package references keep their captured Rust locations;
+    /// concrete literals receive a location when converted and placed.
     #[track_caller]
     pub fn leaf(value: impl ConfigValue) -> Self {
         let origin = Origin::caller("configuration value");
@@ -42,9 +57,11 @@ impl RusnixValue {
         }
     }
 
-    /// Build named structural fields whose parent determines their configuration path.
-    /// Unlike [`crate::interop::NixValue::record`], these records are flattened
-    /// into rooted bindings by [`Config::from_value`]; keys remain literal segments.
+    /// Build named fields whose configuration paths are chosen by their parent.
+    /// For example, a parent’s `endpoint` field adds `endpoint` before these names.
+    /// [`Config::from_value`] expands this structural tree into complete settings.
+    /// Unlike [`crate::interop::NixValue::record`], it is not kept as one Nix value;
+    /// keys still remain literal path segments.
     #[track_caller]
     pub fn record(fields: impl IntoIterator<Item = (impl Into<String>, Self)>) -> Self {
         Self {
@@ -74,11 +91,11 @@ impl RusnixValue {
         }
     }
 
-    /// Keep this structural value atomic at the opaque Nix boundary instead of
-    /// flattening it into configuration bindings. Useful for derived structs
-    /// passed to Nix functions or wrapped in NixOS conditions and priorities.
-    /// Child expressions retain their provenance and stay deferred; invalid
-    /// structural flattening returns an error. Other IR checks run at compilation.
+    /// Keep this data as one Nix value instead of expanding its fields into paths.
+    /// Use this for a derived struct passed to a Nix function, or for definitions
+    /// wrapped with NixOS conditions and priorities. Expressions remain unevaluated
+    /// and keep their Rust source locations. Invalid flattening returns a Rust error;
+    /// other validation happens when the configuration is compiled.
     pub fn into_nix_value(self) -> Result<crate::interop::NixValue, ValidationError> {
         self.resolve(&[])
             .map(opaque_record_nodes)
@@ -174,9 +191,10 @@ fn display_path(path: &[String]) -> String {
 }
 
 impl Config {
-    /// Lower a rooted structural record into this contribution's bindings.
-    /// Shape errors are retained and returned by [`Self::validate`]. Native
-    /// opaque records remain atomic values rather than additional option paths.
+    /// Turn a structural root record into a group of configuration settings.
+    /// Nested field names determine their complete paths. Errors in the structure
+    /// are saved for [`Self::validate`] to return. Existing Nix records remain single
+    /// values rather than being expanded into extra paths.
     #[track_caller]
     pub fn from_value(value: RusnixValue) -> Self {
         let mut config = Self::new();

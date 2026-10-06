@@ -1,32 +1,44 @@
-//! Author NixOS declarations while delegating validation and merging to lib.types.
+//! Declare which NixOS configuration fields a module accepts.
+//!
+//! A declaration supplies a field’s type, default and documentation; it does not
+//! assign its current configuration value. NixOS’s `lib.mkOption` and `lib.types`
+//! perform the actual checking and merging. Rust only describes those declarations.
 use crate::{
     IntoRusnixValue, RusnixValue, ValidationError,
     interop::{NixValue, Nixpkgs},
 };
 
-/// A real NixOS option type used by an [`OptionDecl`], not a Rust value type.
-/// Construction remains deferred: NixOS checks merged definitions and applies
-/// the type's coercion and merge rules during evaluation.
+/// A rule NixOS uses to validate and merge configuration values.
+/// For example, `lib.types.port` requires a valid port number, while `listOf`
+/// checks elements and combines list definitions from several modules.
+///
+/// This wrapper describes a real NixOS type object, not a Rust value type.
+/// Construction does not check configuration in Rust; NixOS applies validation,
+/// conversion and merge rules when evaluating the modules.
 #[derive(Clone, Debug)]
 pub struct OptionType(
-    /// Preserves the Nix-side type object and its operations without evaluating them in Rust.
+    /// The expression for NixOS’s type object, including its checking and merging functions.
     NixValue,
 );
 
 impl OptionType {
-    /// Select a real named lib.types value, such as bool, str, path, port or package.
-    /// Names are checked by Nix rather than a generated Rust catalogue.
+    /// Choose a type from NixOS’s `lib.types`, such as `bool`, `str`, `path`,
+    /// `port` or `package`. For example, `named("port")` describes `lib.types.port`.
+    /// Nix checks whether the type exists; Rusnix does not maintain a type catalogue.
     #[track_caller]
     pub fn named(name: &str) -> Self {
         Self(Nixpkgs::new().lib_value(&format!("types.{name}")))
     }
 
-    /// Wrap a custom or composed type supplied by existing Nix code.
+    /// Wrap an existing NixOS type expression, including a custom or composed type.
+    /// The expression should produce the object NixOS uses to check and merge
+    /// option values; Rust does not evaluate or verify it.
     pub fn opaque(value: NixValue) -> Self {
         Self(value)
     }
 
-    /// Access the real Nix-side type without evaluating it in Rust.
+    /// Return the expression for this NixOS type object as a [`NixValue`].
+    /// Use it when passing types to other Nix helpers; Rust does not evaluate the type.
     pub fn as_value(&self) -> NixValue {
         self.0.clone()
     }
@@ -37,25 +49,31 @@ impl OptionType {
         Self(Nixpkgs::new().function("types.nullOr").call(self.0))
     }
 
-    /// Use NixOS's ordered list-of-elements merge semantics.
+    /// Require a list whose elements match this type.
+    /// NixOS checks each element and combines surviving list definitions in order.
     #[track_caller]
     pub fn list_of(self) -> Self {
         Self(Nixpkgs::new().function("types.listOf").call(self.0))
     }
 
-    /// Merge arbitrary literal attribute keys with this type for each value.
+    /// Require a Nix attribute set whose named values match this type.
+    /// Keys remain open-ended. NixOS merges definitions per key using the value type.
     #[track_caller]
     pub fn attrs_of(self) -> Self {
         Self(Nixpkgs::new().function("types.attrsOf").call(self.0))
     }
 
-    /// Declare a deferred function returning values of this type.
+    /// Require a Nix function whose results are checked using this type.
+    /// This describes `lib.types.functionTo`; Rust does not call the function or
+    /// inspect its arguments.
     #[track_caller]
     pub fn function_to(self) -> Self {
         Self(Nixpkgs::new().function("types.functionTo").call(self.0))
     }
 
-    /// Accept one of the supplied NixOS types using upstream selection and merging.
+    /// Accept a value matching one of these NixOS types.
+    /// This uses `lib.types.oneOf`; NixOS selects the matching type and applies
+    /// its validation and merge rules later.
     #[track_caller]
     pub fn one_of(types: impl IntoIterator<Item = Self>) -> Self {
         Self(
@@ -65,7 +83,10 @@ impl OptionType {
         )
     }
 
-    /// Coerce values of another type with a deferred Nix function before merging.
+    /// Accept `source` values by converting them before checking this target type.
+    /// `coercion` describes a Nix function that converts one source value. NixOS
+    /// performs conversion and merging through `lib.types.coercedTo`; Rust does
+    /// not run that function.
     #[track_caller]
     pub fn coerced_from(self, source: Self, coercion: NixValue) -> Self {
         Self(
@@ -75,11 +96,14 @@ impl OptionType {
         )
     }
 
-    /// Declare nested options using ordinary structural lowering; an optional
-    /// freeform type keeps undeclared keys open with NixOS's actual validation.
-    /// With no freeform type, undeclared keys are rejected by NixOS.
-    /// Structural conversion errors are returned in Rust; checking actual definitions
-    /// and applying nested defaults remain deferred to NixOS.
+    /// Declare a nested configuration with its own options and defaults.
+    /// NixOS calls this a *submodule*: values supplied by several modules are
+    /// combined and checked against these nested declarations.
+    ///
+    /// `options` supplies a structural tree of [`OptionDecl`] values. `freeform`
+    /// allows additional, undeclared fields checked using that type; without it,
+    /// NixOS rejects undeclared names. Rust returns errors for invalid structural
+    /// conversion, while NixOS checks definitions and applies nested defaults later.
     #[track_caller]
     pub fn submodule(
         options: impl IntoRusnixValue,
@@ -98,16 +122,22 @@ impl OptionType {
     }
 }
 
-/// One public NixOS option declaration, used as a leaf of a structural schema.
-/// Pass the schema to [`super::NixosModule::declare`]; nested Rust fields determine
-/// the declared paths. This defines the interface ordinary Nix modules configure,
-/// rather than assigning a configuration value or replacing Rust's type system.
+/// Declare a configurable NixOS field and describe its public interface.
 ///
-/// Defaults and metadata may contain deferred Nix values. Setting the same metadata
-/// property twice replaces that property; NixOS still merges configuration definitions.
+/// A NixOS option has a type, documentation and possibly a default. Modules can
+/// then assign values to that option, and NixOS checks and combines them. This
+/// type describes the declaration; it does not set a current value or replace
+/// Rust’s type system.
+///
+/// Place declarations in a structural Rust tree and pass it to
+/// [`super::NixosModule::declare`]. Nested fields determine the option names.
+/// Defaults and documentation metadata may include expressions Nix evaluates
+/// later. Calling the same metadata setter twice replaces that property in
+/// this declaration, not definitions supplied by other modules.
 #[derive(Clone, Debug)]
 pub struct OptionDecl {
-    /// The deferred declaration record, including its real NixOS type and documentation metadata.
+    /// The expression for the NixOS option declaration: its type, default,
+    /// description and other metadata, evaluated later by NixOS.
     value: NixValue,
 }
 
@@ -127,7 +157,9 @@ impl OptionDecl {
         Self { value }
     }
 
-    /// Use mkEnableOption, retaining its standard default, example and description.
+    /// Declare a standard boolean enable option using NixOS `lib.mkEnableOption`.
+    /// It supplies a false default, a true example and a description based on the
+    /// feature name supplied here.
     #[track_caller]
     pub fn enable(description: &str) -> Self {
         Self::from_value(Nixpkgs::new().function("mkEnableOption").call(description))
@@ -141,21 +173,25 @@ impl OptionDecl {
         self
     }
 
-    /// Supply an actual option default, which remains lazy and may be symbolic.
-    /// NixOS applies its usual default priority; ordinary definitions can override it.
+    /// Supply the option value used when no stronger definition is present.
+    /// The default may be an expression evaluated later by Nix. Ordinary NixOS
+    /// definitions can override it; Rust does not choose the winning value.
     #[track_caller]
     pub fn default(self, value: impl Into<NixValue>) -> Self {
         self.metadata("default", value.into())
     }
 
-    /// Supply documentation for a default without defining an actual value.
-    /// Use this when the implementation computes the default as a separate contribution.
+    /// Describe a default for NixOS documentation without assigning a default value.
+    /// This is useful when another contribution computes the effective default.
+    /// It is distinct from [`Self::default`], which supplies an actual value.
     #[track_caller]
     pub fn default_text(self, value: impl Into<NixValue>) -> Self {
         self.metadata("defaultText", value.into())
     }
 
-    /// Attach an upstream-compatible example, including literalExpression values.
+    /// Attach a sample option value for NixOS documentation.
+    /// The example does not configure the option. NixOS `lib.literalExpression`
+    /// values can display sample Nix code rather than an evaluated value.
     #[track_caller]
     pub fn example(self, value: impl Into<NixValue>) -> Self {
         self.metadata("example", value.into())

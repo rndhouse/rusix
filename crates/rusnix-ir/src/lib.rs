@@ -1,9 +1,14 @@
-//! Generic configuration contributions built from ordinary user-defined Rust types.
+//! Describe Nix configuration with ordinary Rust structs, enums and functions.
 //!
-//! Use [`config`] for local structural authoring, or derive [`IntoConfig`] and
-//! [`IntoRusnixValue`] for reusable types. Compose independent contributions with
-//! [`nixos::NixosModule`]; use [`interop`] for existing opaque Nix objects.
-//! Values are lowered into semantic IR without evaluating Nix in Rust.
+//! Nix is a language used to describe configuration and software builds. Rusnix
+//! turns Rust values into Nix expressions; Nix evaluates those expressions later.
+//! Rust code can also describe references and calls without reading their results.
+//!
+//! Start with [`config`] for a local configuration tree. Nested structs become
+//! nested named fields in Nix. Use [`IntoConfig`] and [`IntoRusnixValue`] derives
+//! for reusable types, [`interop`] to reuse existing packages and functions, and
+//! [`nixos::NixosModule`] to combine configuration for NixOS. NixOS combines
+//! modules and checks configurable fields, called *options*, during evaluation.
 #![warn(missing_docs)]
 
 use serde::{Deserialize, Serialize};
@@ -15,17 +20,11 @@ pub mod nixos;
 
 mod value;
 
-/// Local inline authoring: structs and unit enums get conversion derives, with
-/// `#[rusnix(root)]` selecting rooted contributions. External types keep their
-/// own traits; no source files or imported type definitions are inspected.
-/// Multiple rooted structs are allowed. Fields default to lowerCamelCase;
-/// container `rename_all = "PascalCase"` changes the mechanical convention.
-/// Field `rename` handles exceptions, `skip` omits a field and `flatten` inserts
-/// a nested record at its parent's level. Symbolic and opaque values stay deferred.
-/// `Option<T>` normally lowers `None` to Nix null. Explicit `#[rusnix(omit_none)]`
-/// on a field or named struct omits absent definitions; a struct setting applies
-/// only to its direct Option fields, not nested structs. There is no per-field
-/// opt-out from a struct setting; use field annotations for mixed behavior.
+/// Turn an inline Rust module’s local types into Nix configuration values.
+/// Nested structs become nested Nix attribute sets: collections of named fields.
+/// Mark a root struct with `#[rusnix(root)]` so it can be added to a
+/// [`nixos::NixosModule`]. NixOS will combine that contribution with other modules.
+/// The macro describes values; it does not evaluate Nix or declare option types.
 ///
 /// ```
 /// use rusnix_ir::{self as rusnix, nixos::NixosModule};
@@ -33,23 +32,40 @@ mod value;
 /// #[rusnix::config]
 /// mod configuration {
 ///     #[rusnix(root)]
-///     pub struct Machine { services: Services }
+///     pub struct Machine { pub services: Services }
 ///
-///     struct Services { example: Example }
+///     pub struct Services { pub example: Example }
 ///
-///     struct Example { enable: bool, listen_port: u16 }
-///
-///     pub fn model() -> Machine {
-///         Machine { services: Services {
-///             example: Example { enable: true, listen_port: 8080 },
-///         } }
-///     }
+///     pub struct Example { pub enable: bool }
 /// }
-/// let module = NixosModule::empty().add(configuration::model());
+///
+/// use configuration::{Machine, Services, Example};
+/// let module = NixosModule::empty().add(Machine {
+///     services: Services { example: Example { enable: true } },
+/// });
+/// // Defines services.example.enable = true in the generated NixOS module.
 /// ```
 ///
-/// Unit enums lower to lowerCamelCase strings (Server → "server", ReadOnly →
-/// "readOnly"). Data-carrying enums still require explicit conversion semantics:
+/// # Mapping rules
+///
+/// Local structs and unit enums receive the existing conversion derives. Types
+/// imported from elsewhere must already implement the conversion traits. Multiple
+/// roots are allowed. Only inline modules are supported; no external files or
+/// type definitions are inspected.
+///
+/// Fields use lowerCamelCase by default. `rename_all = "PascalCase"` changes the
+/// convention for a struct; `rename` handles a field exception. `skip` omits a
+/// field, and `flatten` inserts a nested record’s fields at its parent’s level.
+/// Symbolic expressions and package handles keep their Nix behavior.
+///
+/// `Option<T>` normally maps `None` to Nix `null`. Explicit `#[rusnix(omit_none)]`
+/// omits a field when it is `None`. On a named struct, it applies only to direct
+/// `Option` fields and does not propagate into nested types. Use field annotations
+/// when some absent fields should be omitted and others should be null.
+///
+/// Unit enums become strings: `Server` becomes `"server"`, and `ReadOnly` becomes
+/// `"readOnly"`. Enums carrying data need an explicit conversion that chooses
+/// what their data means in Nix:
 ///
 /// ```compile_fail,E0277
 /// use rusnix_ir as rusnix;
@@ -64,71 +80,74 @@ mod value;
 /// ```
 pub use rusnix_derive::config;
 
-/// Finite final-option dependencies. Navigation builds paths; tracked leaf calls
-/// create OptionRef expressions. NixOS still owns existence and actual types.
-/// Only a subtree marked `#[rusnix(value)]` exposes `as_value`; roots never do.
-/// Requires an inline module with exactly one `#[rusnix(root)]` struct.
-/// `bool`, `String` and `i64` leaves return typed [`Expr`] values; `NixValue`,
-/// `Option`, `Vec`, `BTreeMap` and `HashMap` leaves return opaque symbolic values,
-/// not concrete Rust collections. Local structs provide nested navigation.
-/// Naming follows the same `rename` and `rename_all` rules as [`config`].
+/// Generate typed accessors for final NixOS configuration values.
+/// NixOS combines configuration supplied by many modules. These accessors refer
+/// to the resulting values, so other modules’ overrides still affect dependent
+/// expressions. Rust constructs references; it never reads the final values.
+/// This declares dependencies, not NixOS options or their actual types.
 ///
 /// ```
-/// #![deny(missing_docs)]
-/// //! A finite dependency declaration.
 /// use rusnix_ir::{self as rusnix, Expr};
 ///
 /// #[rusnix::options]
-/// /// Symbolic dependencies used by this component.
-/// pub mod options {
+/// mod options {
 ///     #[rusnix(root)]
 ///     struct Root { services: Services }
 ///
 ///     struct Services { example: Example }
 ///
-///     struct Example { enable: bool, settings: Settings }
-///
-///     #[rusnix(value)]
-///     struct Settings { port: i64 }
+///     struct Example { port: i64 }
 /// }
-/// let service = options::root().services.example;
-/// let port: Expr<i64> = service.settings.port();
-/// let all_settings = service.settings.as_value();
+/// let port: Expr<i64> = options::root().services.example.port();
+/// // Equivalent to OptionRef::<i64>::new("services.example.port").into_expr().
 /// ```
+///
+/// Use exactly one root in an inline module. Local structs provide navigation;
+/// leaf calls capture their Rust call location. `bool`, `String` and `i64`
+/// leaves return [`Expr`] with the declared expectation. `NixValue`, `Option`,
+/// `Vec`, `BTreeMap` and `HashMap` leaves return Nix expressions, not Rust
+/// collections. NixOS checks option existence and actual value types.
+///
+/// Naming follows [`config`]. Mark a nested struct `#[rusnix(value)]` to expose
+/// `as_value()` for its entire Nix subtree. Roots have no whole-value accessor
+/// or arbitrary field traversal.
 pub use rusnix_derive::options;
 
-/// Typed symbolic navigation over an existing deferred Nix function argument record.
-/// Requires an inline module with one `#[rusnix(root)]` named struct. Bind with
-/// the generated `from_value`; navigation never reads or evaluates values in Rust.
-/// `bool`, `String` and `i64` leaves return [`Expr`] with the declared expected type.
-/// `NixValue`, `Option`, `Vec`, `BTreeMap` and `HashMap` leaves stay opaque, including
-/// deferred collections. Nix remains authoritative for existence and actual types.
-/// Naming and explicit subtree `#[rusnix(value)]` / `as_value` follow [`options`].
-/// Roots have no `as_value` or dynamic traversal; retain the supplied raw
-/// [`interop::NixValue`] for advanced selections. External aliases/view types are
-/// not inspected; use explicit lower-level selections outside the declaration.
-/// Leaf calls capture caller provenance. Views can be cloned without evaluation.
+/// Generate typed accessors for values in a Nix function’s named arguments.
+/// Nixpkgs package functions commonly receive an attribute set of dependencies
+/// and feature choices. This macro describes the fields an adapter needs.
+/// Accessors construct Nix expressions; they do not read argument values in Rust.
 ///
 /// ```
-/// #![deny(missing_docs)]
-/// //! A package implementation's explicit dependencies.
 /// use rusnix_ir::{self as rusnix, interop::NixValue};
 ///
 /// #[rusnix::args]
-/// /// Finite package arguments used by this implementation.
-/// pub mod arguments {
+/// mod arguments {
 ///     #[rusnix(root)]
-///     struct Inputs { feature: bool, platform: Platform }
+///     struct Inputs { enabled: bool, platform: Platform }
 ///
-///     #[rusnix(value)]
 ///     struct Platform { system: String }
 /// }
-/// let factory = NixValue::function_attrs(["feature", "platform"], |value| {
-///     let args = arguments::from_value(value);
-///     let body = NixValue::if_else(args.feature(), args.platform.system(), "disabled");
-///     (Vec::<(&str, NixValue)>::new(), body)
-/// });
+/// let value = NixValue::record([
+///     ("enabled", true.into()),
+///     ("platform", NixValue::record([("system", "x86_64-linux".into())])),
+/// ]);
+/// let args = arguments::from_value(value);
+/// let enabled = args.enabled();
+/// let system = args.platform.system();
+/// // Each accessor describes a field lookup; no Nix evaluation happens here.
 /// ```
+///
+/// Bind the view to an existing [`interop::NixValue`] using generated `from_value`.
+/// This also works with the placeholders supplied by
+/// [`interop::NixValue::function_attrs`]. Nix remains responsible for caller
+/// arguments, defaults and actual types.
+///
+/// Use one root in an inline module. Leaf types, naming and optional subtree
+/// `as_value()` access follow [`options`]. Views can be cloned without evaluating
+/// them. Accessor calls record their own Rust locations. External aliases and
+/// view types are not inspected; retain the raw NixValue for dynamic selections.
+/// Roots do not expose whole-value access or arbitrary field traversal.
 pub use rusnix_derive::args;
 
 #[doc(hidden)]
@@ -137,9 +156,13 @@ pub use rusnix_derive::symbolic_text as __symbolic_text;
 pub use rusnix_derive::{IntoConfig, IntoRusnixValue};
 pub use value::{IntoRusnixValue, RusnixValue};
 
-/// A captured Rust source location and semantic purpose used to explain failures.
-/// IDs are deterministic for the same file, line, column and purpose, not stable
-/// across source edits. Several uses of the same expression may share an ID.
+/// Where a Rust operation was written, and what it was doing.
+/// Rusnix includes this information in generated output so Nix evaluation errors
+/// can be linked back to Rust source. This source attribution is also called
+/// *provenance*.
+///
+/// IDs are deterministic for the same file, line, column and purpose, but can
+/// change after edits. Reusing an expression can produce several uses of one ID.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Origin {
     /// Identity embedded in generated metadata and matched when translating errors.
@@ -162,7 +185,8 @@ impl Origin {
         Self::new(location.file(), location.line(), location.column(), purpose)
     }
 
-    /// Construct provenance from an explicit location, deriving its deterministic ID.
+    /// Create source attribution from an explicit Rust location and operation name.
+    /// The ID is derived from these inputs; it is not an identifier assigned by Nix.
     pub fn new(file: &str, line: u32, column: u32, purpose: impl Into<String>) -> Self {
         let purpose = purpose.into();
         // Specified FNV-1a, rather than Rust's implementation-dependent DefaultHasher.
@@ -180,8 +204,11 @@ impl Origin {
     }
 }
 
-/// A semantic expression with provenance, exposed for backend implementation and inspection.
-/// Normal authoring uses [`Expr`], [`IntoRusnixValue`] or [`interop::NixValue`].
+/// A description of one value or operation, with its Rust source location.
+/// Backend authors use these nodes to generate Nix; the collection of nodes is
+/// Rusnix’s *intermediate representation* (IR). It describes computation without
+/// performing it. Normal authoring uses [`Expr`], [`IntoRusnixValue`] or
+/// [`interop::NixValue`] instead of constructing nodes.
 #[derive(Clone, Debug)]
 pub struct Node {
     /// Rust operation that introduced this expression.
@@ -190,8 +217,10 @@ pub struct Node {
     pub kind: ValueKind,
 }
 
-/// Semantic operations understood by Rusnix's lowering and generic validation.
-/// This is backend-facing IR, not a Nix syntax API or a concrete evaluated value.
+/// The value or operation described by a [`Node`].
+/// Variants distinguish literals, containers and computations Nix will perform
+/// later. This is an interface for backend implementation and inspection, not
+/// a way for Rust authors to obtain evaluated Nix values.
 #[derive(Clone, Debug)]
 pub enum ValueKind {
     /// A concrete Rust boolean embedded as a literal.
@@ -267,16 +296,25 @@ pub enum ValueKind {
     },
 }
 
-/// A typed deferred expression whose value is resolved by Nix, never read into Rust.
-/// `T` restricts available Rust operations; symbolic option references still rely
-/// on NixOS to validate their actual backend types. Child expression origins are retained.
-/// Boolean expressions support `!` and lazy [`Expr::and`], without reading a Rust value.
+/// An expression that Nix will evaluate later, with an expected Rust result type.
+///
+/// For example, [`Expr<i64>`] describes an integer expression and provides
+/// integer operations such as [`Self::divide`]. Calling those methods constructs
+/// more expressions; it does not compute or read the result in Rust. Use
+/// [`interop::NixValue`] when the value’s category should remain unspecified.
+///
+/// `T` restricts Rust composition. For references to external Nix values, it is
+/// an expectation rather than proof of their actual types; Nix or NixOS checks
+/// those during evaluation. Child operations retain their Rust source locations.
+/// Boolean expressions support `!` and short-circuit [`Self::and`].
 ///
 /// Integer and boolean expressions cannot be interchanged:
 #[doc = concat!("```compile_fail,E0308\n", include_str!("../../../tests/fixtures/rust-type-failure.rs"), "\n```")]
 #[derive(Clone, Debug)]
 pub struct Expr<T> {
+    /// The literal or computation Nix should evaluate, with its Rust source location.
     node: Node,
+    /// The expected result category used to restrict Rust operations, not an evaluated value.
     ty: PhantomData<T>,
 }
 
@@ -290,7 +328,8 @@ impl<T> Expr<T> {
 }
 
 impl Expr<i64> {
-    /// Format a deferred integer without resolving it in Rust.
+    /// Describe decimal text conversion of this integer using Nix’s `toString`.
+    /// The result is an [`Expr<String>`]; Rust does not read or format the integer.
     #[track_caller]
     pub fn to_text(self) -> Expr<String> {
         Expr::new(
@@ -305,8 +344,9 @@ impl Expr<i64> {
         Self::new(ValueKind::Int(value), Origin::caller("integer literal"))
     }
 
-    /// Defer signed integer division to Nix, retaining both operand origins.
-    /// Division by zero is reported during evaluation at this operation's caller.
+    /// Describe integer division for Nix to compute later.
+    /// This uses Nix’s signed integer division. Division by zero is reported when
+    /// Nix evaluates the result, with this Rust call as the consuming operation.
     #[track_caller]
     pub fn divide(self, denominator: Self) -> Self {
         Self::new(
@@ -315,8 +355,9 @@ impl Expr<i64> {
         )
     }
 
-    /// Require an inclusive range when Nix evaluates this integer.
-    /// Failure uses `message` and this operation's origin; no Rust-time check is performed.
+    /// Require the integer to be between `min` and `max`, inclusive, when Nix
+    /// evaluates it. A rejected value fails with `message` at this Rust operation.
+    /// The result remains an integer expression; no range check happens in Rust.
     #[track_caller]
     pub fn in_range(self, min: i64, max: i64, message: impl Into<String>) -> Self {
         Self::new(
@@ -332,7 +373,9 @@ impl Expr<i64> {
 }
 
 impl Expr<String> {
-    /// Prepend concrete text to a deferred string. Nix preserves string context.
+    /// Place concrete text before this expression’s string when Nix evaluates it.
+    /// Nix strings also track dependencies on package outputs; concatenation retains
+    /// those dependencies. Rust does not read the string value.
     #[track_caller]
     pub fn with_prefix(self, prefix: impl Into<String>) -> Self {
         Self::new(
@@ -352,9 +395,9 @@ impl Expr<bool> {
         Self::new(ValueKind::Bool(value), Origin::caller("boolean literal"))
     }
 
-    /// Deferred boolean conjunction, independent of any supplied Nix library.
-    /// Nix checks both operands as booleans and leaves the right operand unforced
-    /// when the left is false. Rust only constructs the dependency expression.
+    /// Construct boolean AND for Nix to evaluate later.
+    /// Nix checks the operands as booleans and evaluates the right operand only if
+    /// the left is true. This uses Nix conditionals, independently of nixpkgs `lib`.
     #[track_caller]
     pub fn and(self, other: Self) -> Self {
         let other = interop::NixValue::if_else(other, true, false);
@@ -377,9 +420,10 @@ mod sealed {
     pub trait Sealed {}
 }
 
-/// Sealed conversion of supported literals, expressions and opaque boundary values.
-/// Used by the generic [`Config::set`] escape hatch and interop calls. For your
-/// own domain types, implement [`IntoRusnixValue`] rather than this trait.
+/// A supported value that can be used directly in [`Config::set`] or a Nix call.
+/// Built-in Rust literals, supported [`Expr`] types and Nix references implement
+/// this trait. It is sealed, so users cannot add implementations. For your own
+/// configuration types, derive or implement [`IntoRusnixValue`] instead.
 pub trait ConfigValue: sealed::Sealed {
     /// Lower into semantic IR, using `origin` for concrete leaves and retaining
     /// any provenance already captured by symbolic expressions or references.
@@ -457,7 +501,9 @@ expression_value!(bool);
 
 expression_value!(String);
 
-/// One binding within a [`Config`], exposed for backend lowering and inspection.
+/// A setting with its destination path, value expression and Rust location.
+/// This is inspection data within [`Config`]. The backend turns it into a Nix
+/// field assignment; its value is evaluated later by Nix.
 #[derive(Clone, Debug)]
 pub struct Assignment {
     /// Rust operation that introduced this definition, distinct from child expression origins.
@@ -476,11 +522,18 @@ impl Assignment {
     }
 }
 
-/// A contribution of bindings. Independent contributions are composed by the
-/// backend (for NixOS, with [`nixos::NixosModule::add`]), not flattened into this value.
-/// Prefer structural authoring or [`IntoConfig`] adapters. [`Self::set`] provides
-/// generic option access; duplicate or ancestor/descendant bindings within one
-/// contribution are validation errors, unlike separate NixOS contributions.
+/// A group of settings that one component contributes to configuration.
+/// For example, it can define `services.example.enable` and
+/// `services.example.port`. Values may be concrete Rust literals or expressions
+/// that Nix will evaluate later; constructing Config does not run Nix.
+///
+/// Prefer [`config`] or the [`IntoConfig`] derive for ordinary Rust authoring.
+/// [`Self::set`] is the general escape hatch for explicitly named paths.
+///
+/// A NixOS module supplies settings to a larger system configuration. Combine
+/// independent groups with [`nixos::NixosModule::add`] so NixOS can merge them.
+/// Repeated or overlapping paths inside a single Config are validation errors;
+/// separate contributions can define the same option under NixOS’s merge rules.
 #[derive(Clone, Debug)]
 pub struct Config {
     /// Source location at which this contribution was created.
@@ -490,16 +543,22 @@ pub struct Config {
     error: Option<ValidationError>,
 }
 
-/// Lower a complete component whose placement in configuration is defined.
-/// Reusable domain values should remain values inside such components.
+/// Convert a complete Rust configuration component into a group of settings.
+/// The component defines where its fields belong: a root with a `services`
+/// field, for example, defines paths starting with `services`. Reusable nested
+/// values use [`IntoRusnixValue`] and let their parent choose placement.
 ///
-/// The caller location propagates to implementations and tracked lowering
-/// helpers, so bindings created during conversion point to the authoring call.
-/// Already-captured expression origins are retained. Untracked intermediate
-/// helpers stop that propagation; mark lowering helpers `#[track_caller]` too.
+/// Use the [`config`] macro for local types or derive this trait for reusable
+/// root types. [`nixos::NixosModule::add`] accepts either approach. Conversion
+/// runs in Rust now, but generated expressions and NixOS merging happen later.
+///
+/// For custom implementations, `#[track_caller]` propagates the author’s call
+/// location through tracked helpers. Existing expression locations are retained;
+/// untracked helper calls stop that location propagation.
 pub trait IntoConfig {
-    /// Consume a complete component into rooted configuration bindings.
-    /// Conversion describes definitions; it does not evaluate or merge NixOS options.
+    /// Turn this component into settings at their complete configuration paths.
+    /// This describes the settings without evaluating expressions or combining them
+    /// with other NixOS contributions.
     #[track_caller]
     fn into_config(self) -> Config;
 }
@@ -522,10 +581,11 @@ impl Config {
         }
     }
 
-    /// Add a dotted option path through the generic escape hatch or an adapter.
-    /// Values stay deferred; schema/type checks belong to NixOS. Paths and
-    /// duplicate definitions are checked by [`Self::validate`], not by this call.
-    /// Use structural lowering when a literal attribute segment contains a dot.
+    /// Assign a value at a dotted configuration path, such as `services.example.port`.
+    /// Use this escape hatch when a typed configuration struct is inconvenient.
+    /// The value is described now and evaluated by Nix later. [`Self::validate`]
+    /// checks paths and duplicates; NixOS checks option existence and actual types.
+    /// Use structural authoring for a literal field name containing a dot.
     #[track_caller]
     pub fn set(mut self, path: impl Into<String>, value: impl ConfigValue) -> Self {
         let path = path.into();
@@ -540,9 +600,10 @@ impl Config {
         self
     }
 
-    /// Check generic IR invariants without evaluating expressions or consulting NixOS.
-    /// Rejects ambiguous paths/records, unsupported strings/floats and escaped
-    /// callback parameters. Backend existence, option types and assertions remain unchecked.
+    /// Check that this contribution can be represented unambiguously in generated Nix.
+    /// This runs in Rust and rejects conflicting paths, invalid strings or float
+    /// literals, and callback parameters used outside their functions. It does not
+    /// run Nix or check NixOS option existence, types or assertions.
     pub fn validate(&self) -> Result<(), ValidationError> {
         if let Some(error) = &self.error {
             return Err(error.clone());
@@ -726,7 +787,9 @@ impl Default for Config {
     }
 }
 
-/// A generic configuration invariant failure detected before backend evaluation.
+/// A configuration-description error found by Rust before Nix evaluation.
+/// It identifies the Rust operation and explains why its description cannot be
+/// compiled. NixOS option type errors are checked later by NixOS instead.
 #[derive(Clone, Debug)]
 pub struct ValidationError {
     /// Rust operation associated with the rejected value or binding.

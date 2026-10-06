@@ -2,8 +2,10 @@ use crate::ast::{BinaryOp, Builtin, NixExpr, NixKind};
 use rusnix_ir::Origin;
 use serde::{Deserialize, Serialize};
 
-/// A half-open byte range in generated source attributed to a Rust operation.
-/// Nested ranges allow the most specific span to identify the failed expression.
+/// A range of generated Nix text linked to the Rust operation that created it.
+/// `start` is inclusive and `end` exclusive. Nested ranges let a Nix error
+/// position identify the most specific Rust expression and its surrounding
+/// configuration path.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SourceSpan {
     /// Inclusive UTF-8 byte offset from the start of [`Generated::source`].
@@ -12,23 +14,26 @@ pub struct SourceSpan {
     pub end: usize,
     /// Rust origin of the expression occupying this range.
     pub origin: Origin,
-    /// Static semantic ancestry, independent of which Nix contexts remain active.
+    /// Enclosing Rust operations, such as the containing field assignment.
+    /// These explain the configuration path even without runtime error markers.
     #[serde(default)]
     pub enclosing: Vec<Origin>,
-    /// An unwrapped operation that can identify a failure inside a runtime boundary.
-    /// Literals and function-definition positions cannot displace a consuming call.
+    /// Whether this range identifies an operation’s own failure without a runtime marker.
+    /// Used when choosing between a generated failure position and an enclosing call;
+    /// literal values and function definitions cannot displace the consuming operation.
     #[serde(default)]
     pub diagnostic_site: bool,
 }
 
-/// Compiler output: generated Nix source plus Rust-source attribution.
-/// Persist both together to translate evaluator positions; generated source is
-/// output to inspect, not the normal configuration authoring surface.
+/// Nix source produced by the compiler, with its links back to Rust locations.
+/// Save the source and spans together to translate later Nix error positions.
+/// This is output to inspect or evaluate; normal configuration authors edit
+/// Rust rather than this generated text.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Generated {
     /// Complete rendered expression, with compiler-owned comments and error contexts.
     pub source: String,
-    /// Possibly overlapping expression ranges with semantic ancestry.
+    /// Text ranges linked to Rust operations and their enclosing configuration fields.
     pub spans: Vec<SourceSpan>,
 }
 

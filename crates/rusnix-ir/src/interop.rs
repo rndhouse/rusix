@@ -1,8 +1,14 @@
-//! Structured values and opaque handles for existing Nix ecosystem objects.
+//! Refer to existing Nix packages, functions and configuration from Rust.
 //!
-//! Rust checks broad categories such as packages versus modules. Nix remains
-//! authoritative for existence, function schemas and actual object types. Lookups,
-//! calls and text coercion stay deferred and preserve their Rust provenance.
+//! Nix is a language for describing values and build recipes. nixpkgs is a
+//! collection of packages and utility functions written in that language; NixOS
+//! uses Nix modules to combine system configuration from multiple sources.
+//!
+//! [`NixValue`] describes a value or expression that Nix will evaluate later.
+//! An attribute set is Nix’s collection of named fields, like a Rust record or
+//! map. [`PackageRef`] and other handles distinguish common uses of those values
+//! without inspecting their contents in Rust. Nix checks lookups and function
+//! arguments; Rusnix records Rust locations to help explain failures.
 use crate::{ConfigValue, Node, Origin, ValidationError, ValueKind, sealed};
 use std::path::{Component, PathBuf};
 
@@ -10,8 +16,10 @@ mod library;
 
 pub use library::NixLibrary;
 
-/// Literal attribute segments for an opaque lookup or symbolic option dependency.
-/// Segment contents are data, not Nix source; use [`Self::segments`] for names with dots.
+/// A sequence of field names to look up in Nix attribute sets.
+/// For example, `["services", "example", "port"]` describes
+/// `services.example.port`. Names are data, never executable Nix source.
+/// Use [`Self::segments`] when a field name itself contains a dot.
 #[derive(Clone, Debug)]
 pub struct AttrPath(pub(crate) Vec<String>);
 
@@ -44,8 +52,9 @@ impl AttrPath {
     }
 }
 
-/// Backend-facing identity of the Nix environment in which a reference is resolved.
-/// Authors normally obtain these through [`Nixpkgs`] or [`InputRef`].
+/// Where Nix should obtain a referenced package, function or other value.
+/// This is inspection data for backend authors. Normal configuration code
+/// chooses a source through [`Nixpkgs`] or [`InputRef`] instead.
 #[derive(Clone, Debug)]
 pub enum Source {
     /// The pinned standalone package set, with Nix applying overlays in order.
@@ -79,13 +88,16 @@ pub enum Source {
     },
 }
 
-/// Backend-facing description of a deferred ecosystem lookup with Rust provenance.
-/// Category handles expose this metadata for inspection; it is not an evaluated value.
+/// A description of where Nix should look up an existing value.
+/// It contains the source to load, the field names to select and the Rust
+/// location to report on failure. It does not contain the evaluated Nix value.
+/// Normal authoring uses category handles such as [`PackageRef`]; this metadata
+/// is public for backend implementation and inspection.
 #[derive(Clone, Debug)]
 pub struct Reference {
-    /// Environment or input that owns the referenced object.
+    /// Package set, utility library or local file from which Nix obtains the value.
     pub source: Source,
-    /// Literal selection within that source, or `None` for the source itself.
+    /// Field names to select from that source, or `None` to reference the source itself.
     pub path: Option<AttrPath>,
     /// Rust lookup operation to report if Nix cannot resolve the object.
     pub origin: Origin,
@@ -157,13 +169,14 @@ macro_rules! handle {
         pub struct $name(pub(crate) Reference);
 
         impl $name {
-            /// Inspect source/path provenance without resolving the opaque value.
+            /// Inspect where Nix will look up this object and which Rust location created the reference.
             pub fn reference(&self) -> &Reference {
                 &self.0
             }
 
-            /// Pass this deferred object through the generic [`NixValue`] boundary.
-            /// Preserves the lookup and its origin; does not stringify or validate it.
+            /// Represent this object as a [`NixValue`] for use in records or function calls.
+            /// The lookup and Rust source location are preserved. Rust neither evaluates
+            /// the object nor converts it to a string.
             pub fn as_value(&self) -> NixValue {
                 NixValue(self.0.node())
             }
@@ -173,30 +186,44 @@ macro_rules! handle {
 
 handle!(
     PackageRef,
-    "An opaque package lookup for package-category APIs such as system packages.
-Rust prevents module/package interchange; NixOS checks whether the resolved object
-is really a package. No package-specific Rust bindings are needed."
+    "A reference to a package that Nix will look up later.
+
+In nixpkgs, a package describes how to build software and where its outputs will
+be stored. This handle can be passed to package-specific APIs such as
+[`crate::nixos::NixosModule::system_packages`] without building the package.
+Rust distinguishes it from a module handle; NixOS checks whether the referenced
+value really is a package. The lookup records its Rust source location."
 );
 
 handle!(
     ModuleRef,
-    "An opaque existing NixOS module, obtained from nixpkgs or a local input.
-Import with [`crate::nixos::NixosModule::import_ref`]; Nix evaluates its contents
-and Rusnix retains the Rust import boundary when upstream errors occur."
+    "A reference to an existing NixOS configuration module.
+
+A NixOS module contributes settings or declares configurable options for a
+system; NixOS combines it with other modules. Import this handle with
+[`crate::nixos::NixosModule::import_ref`]. Nix evaluates the module’s contents,
+and Rusnix records the Rust import location for errors in external Nix code."
 );
 
 handle!(
     NixFunction,
-    "An opaque callable selected from nixpkgs/lib, a package set or a local input.
-Calls remain deferred; Nix owns the function schema, currying and result type.
-Results are generic [`NixValue`] values, not inferred package or module handles."
+    "A reference to a Nix function that Rust can describe calls to.
+
+Use it to reuse existing nixpkgs helpers or functions from a local Nix file.
+[`Self::call`] passes one argument; [`Self::apply`] passes arguments one at a
+time, as Nix functions commonly require. Neither executes the function in Rust.
+Nix checks the arguments, and the result is a [`NixValue`]; Rusnix does not
+infer that a function returns a package or module."
 );
 
 handle!(
     OverlayRef,
-    "An opaque overlay function for [`Nixpkgs::with_overlay`]. Nix applies its
-ordinary overlay semantics; Rusnix neither models package internals nor verifies
-the overlay's function schema in Rust."
+    "A reference to a Nix function that extends or replaces packages in nixpkgs.
+
+Such a function is called an *overlay*. It receives the final package set and
+the preceding package set, then returns named additions or replacements. Pass
+it to [`Nixpkgs::with_overlay`]; Nix applies it later. Rust does not inspect
+package internals or verify the overlay’s function arguments."
 );
 
 impl sealed::Sealed for PackageRef {}
@@ -207,19 +234,42 @@ impl ConfigValue for PackageRef {
     }
 }
 
-/// A structured or opaque value resolved in Nix, including deferred expressions.
-/// Records/lists may mix Rust literals, package references and symbolic option
-/// dependencies without converting them to strings. Use [`Self::to_text`] only
-/// when text coercion is intended; Nix owns object types and function schemas.
-/// `!value` negates a deferred boolean; its actual type is checked during Nix evaluation.
+/// A Rust description of a value or expression that Nix will evaluate later.
 ///
-/// Constructors build a graph and record Rust origins without evaluating it.
-/// `From` conversions support literals, supported [`crate::Expr`] types, handles,
-/// `Option<T>` (`None` becomes null), and `BTreeMap<String, NixValue>`.
-/// Floating-point literals must be finite normal values or zero; IR validation
-/// rejects NaN, infinities and subnormals instead of emitting invalid Nix numbers.
+/// This can represent a literal such as `true` or `"hello"`, a list or record,
+/// a package lookup, or a function call. Constructing it does not run Nix or
+/// read a result into Rust. Even a value created from a concrete Rust literal
+/// is stored as a description to include in generated Nix.
+///
+/// An attribute set is Nix’s collection of named fields, like a Rust record or
+/// map. [`Self::record`] and [`Self::list`] can mix literals, package references
+/// and expressions that depend on final NixOS options. These objects remain
+/// Nix values; they are not converted to strings. Use [`Self::to_text`] when
+/// conversion to text is intended.
+///
+/// Unlike [`crate::Expr<T>`], this wrapper does not promise a particular Rust
+/// result type. Nix checks field existence, function arguments and actual value
+/// types when it evaluates the expression. Rusnix also records the Rust operations
+/// that constructed it, so errors can be mapped back to source.
+///
+/// ```
+/// use rusnix_ir::interop::{NixValue, Nixpkgs};
+/// let args = NixValue::record([
+///     ("enabled", true.into()),
+///     ("package", Nixpkgs::new().get("git").into()),
+/// ]);
+/// // Describes { enabled = true; package = pkgs.git; }, without evaluating pkgs.git.
+/// ```
+///
+/// `From` accepts supported literals, expressions, handles, `Option<T>` and
+/// `BTreeMap<String, NixValue>`. `None` becomes Nix `null`. Floating literals
+/// must be finite normal numbers or zero; validation rejects NaN, infinity and
+/// subnormal numbers. `!value` constructs Nix boolean negation.
 #[derive(Clone, Debug)]
-pub struct NixValue(Node);
+pub struct NixValue(
+    /// The literal, lookup or operation to emit in Nix, with its Rust source location.
+    Node,
+);
 
 impl sealed::Sealed for NixValue {}
 
@@ -234,10 +284,16 @@ impl NixValue {
         Self(node)
     }
 
-    /// Describe a scoped callback for an existing Nix function. Rust executes
-    /// the builder once with a symbolic parameter; it never reads Nix values.
-    /// Captured outer parameters remain lexical; escaping a parameter outside its
-    /// callback is an IR validation error. Nix invokes the resulting function.
+    /// Describe a Nix function that takes one argument and computes a result.
+    /// Use this when an existing Nix helper expects a callback, such as a predicate
+    /// or a `stdenv.mkDerivation` attribute builder.
+    ///
+    /// Rust executes `build` once with a placeholder [`NixValue`]. The returned
+    /// expression becomes the function body; Nix supplies the actual argument later.
+    /// Nixpkgs calls the attribute-builder argument `finalAttrs`: its fields reflect
+    /// later derivation overrides, rather than a Rust snapshot of the build recipe.
+    /// Outer Nix parameters remain accessible inside nested functions. A placeholder
+    /// used outside its function is rejected during Rusnix validation.
     #[track_caller]
     pub fn function(build: impl FnOnce(Self) -> Self) -> Self {
         let origin = Origin::caller("opaque Nix callback");
@@ -265,16 +321,25 @@ impl NixValue {
         (binding, parameter)
     }
 
-    /// Declare a native Nix argument-set function with a finite, explicit interface.
-    /// Rust builds the body once with a symbolic record of resolved arguments.
-    /// Return named defaults and the body; omitted defaults make arguments required.
-    /// Defaults may depend on other arguments and remain lazy. Nix owns required/
-    /// unexpected-argument checks and callPackage's functionArgs behavior.
-    /// Names must be valid Nix bindings and cannot use the reserved `__rusnix_` prefix.
-    /// Known argument selections lower to lexical bindings; whole-record use and
-    /// shadowed outer arguments retain a lazy resolved-record fallback. References
-    /// escaping their callback scope are rejected before Nix evaluation.
-    /// This describes dependencies; it does not expose evaluated arguments to Rust.
+    /// Describe a Nix function with named arguments and optional defaults.
+    /// For example, the interface `["name", "label"]` can represent
+    /// `{ name, label ? name }: label`. This is the usual shape of a nixpkgs package
+    /// function, where named arguments supply dependencies and feature choices.
+    ///
+    /// Rust executes `build` once with placeholders for the arguments. Return the
+    /// named defaults and body expression; names without defaults are required.
+    /// Nix evaluates defaults only when needed, and defaults can refer to other
+    /// arguments. Rust never reads the caller’s argument values.
+    ///
+    /// nixpkgs’ `callPackage` calls a package function and automatically supplies
+    /// named dependencies from its package set. The generated function supports
+    /// that mechanism and Nix’s `builtins.functionArgs` inspection of argument names
+    /// and whether defaults exist. Nix checks missing or unexpected arguments.
+    ///
+    /// Names must be valid Nix parameter identifiers and cannot start with
+    /// `__rusnix_`. Known selections use parameter names directly. Whole-record uses
+    /// or shadowed outer names retain a lazy record representation; placeholders
+    /// that escape their function are rejected.
     ///
     /// ```
     /// use rusnix_ir::interop::NixValue;
@@ -282,7 +347,8 @@ impl NixValue {
     ///     let name = args.clone().select("name");
     ///     (vec![("label", name)], args.select("label"))
     /// });
-    /// let deferred = factory.call(NixValue::record([("name", "git".into())]));
+    /// let label = factory.call(NixValue::record([("name", "git".into())]));
+    /// // Nix will return "git" using the label default; Rust only describes the call.
     /// ```
     #[track_caller]
     pub fn function_attrs<K: Into<String>>(
@@ -306,8 +372,10 @@ impl NixValue {
         })
     }
 
-    /// Build both branches in Rust, but demand only the selected branch in Nix.
-    /// Nix checks the condition's actual boolean type; the result stays opaque.
+    /// Choose between two values when Nix evaluates a boolean condition.
+    /// This represents `if condition then yes else no`. Both expressions are
+    /// constructed in Rust, but Nix evaluates only the chosen branch. Nix checks
+    /// the condition’s actual type; the result remains a [`NixValue`].
     #[track_caller]
     pub fn if_else(condition: impl Into<Self>, yes: impl Into<Self>, no: impl Into<Self>) -> Self {
         Self(Node {
@@ -320,7 +388,8 @@ impl NixValue {
         })
     }
 
-    /// Defer native Nix equality, returning an opaque boolean-valued expression.
+    /// Compare two values using Nix’s `==` operation when they are evaluated.
+    /// The result represents a Nix boolean; no comparison happens in Rust.
     #[track_caller]
     pub fn equals(self, other: impl Into<Self>) -> Self {
         Self(Node {
@@ -329,8 +398,13 @@ impl NixValue {
         })
     }
 
-    /// Coerce with Nix `builtins.toString`, retaining string dependency context.
-    /// Coercion and failures happen in Nix, not Rust; unsupported values may fail.
+    /// Convert a value to text later using Nix’s `builtins.toString`.
+    /// `builtins` contains functions supplied by the Nix language itself, separately
+    /// from nixpkgs’ `lib`. Unsupported conversions fail during Nix evaluation.
+    ///
+    /// Nix strings can carry dependencies on package outputs as well as text bytes.
+    /// This method preserves those dependencies, known as *string context*, instead
+    /// of flattening a package path into an unrelated Rust string.
     #[track_caller]
     pub fn to_text(self) -> Self {
         Self(Node {
@@ -339,9 +413,10 @@ impl NixValue {
         })
     }
 
-    /// Native leaves, preserving captured expression/reference origins. Float
-    /// literals support finite normal f64 values and zero; validation rejects
-    /// NaN, infinities and subnormals, which Nix cannot parse as literals.
+    /// Describe a supported Rust literal or preserve an existing Nix expression.
+    /// Rust literals become Nix literals; expression and reference inputs keep their
+    /// recorded source locations. Float values must be finite normal numbers or zero;
+    /// Rusnix validation rejects NaN, infinity and subnormals.
     #[track_caller]
     pub fn literal(value: impl ConfigValue) -> Self {
         Self(value.into_node(Origin::caller("opaque call argument")))
@@ -356,10 +431,14 @@ impl NixValue {
         })
     }
 
-    /// Keys are literal attribute names, not dotted paths. Accepts BTreeMap
-    /// directly; iterator order determines the deterministic generated order.
-    /// Nested references remain opaque. Duplicate or NUL-containing keys are
-    /// rejected by validation; empty literal attribute names are permitted here.
+    /// Build a Nix attribute set: a collection of named values, like a Rust record.
+    /// It stays one value when passed to a function or configuration field; its keys
+    /// are not expanded into configuration paths.
+    ///
+    /// Keys are literal names, so `"a.b"` is one field rather than two nested fields.
+    /// A `BTreeMap` can supply dynamic keys. Iterator order determines generated field
+    /// order, while Nix owns attribute-set semantics. Duplicate or NUL-containing
+    /// keys are rejected during validation; empty names are allowed.
     #[track_caller]
     pub fn record(fields: impl IntoIterator<Item = (impl Into<String>, Self)>) -> Self {
         Self(Node {
@@ -373,7 +452,9 @@ impl NixValue {
         })
     }
 
-    /// Build ordered deferred elements without evaluating their values.
+    /// Describe an ordered Nix list without evaluating its elements in Rust.
+    /// Nix evaluates an element only when it is needed; elements can mix literals,
+    /// packages and other expressions.
     #[track_caller]
     pub fn list(items: impl IntoIterator<Item = Self>) -> Self {
         Self(Node {
@@ -382,7 +463,9 @@ impl NixValue {
         })
     }
 
-    /// One ordinary Nix application. Chain calls for curried functions.
+    /// Pass one argument to a Nix function when Nix evaluates the expression.
+    /// Many Nix functions take arguments one at a time: chain calls to represent
+    /// `function first second`, or use [`Self::apply`]. Rust does not execute the call.
     #[track_caller]
     pub fn call(self, argument: impl ConfigValue) -> Self {
         let origin = Origin::caller("opaque Nix function call");
@@ -392,7 +475,10 @@ impl NixValue {
         })
     }
 
-    /// Apply curried arguments in order. Nix owns their schemas and evaluation.
+    /// Pass arguments to a Nix function one at a time, in the supplied order.
+    /// `function.apply([a, b])` represents `function a b`. This is repeated Nix
+    /// function application, not a Rust call or a single list argument. Nix checks
+    /// the arguments and evaluates them as required by the function.
     #[track_caller]
     pub fn apply(mut self, arguments: impl IntoIterator<Item = Self>) -> Self {
         // A direct call keeps track_caller; a function-pointer fold loses it.
@@ -402,9 +488,10 @@ impl NixValue {
         self
     }
 
-    /// Join deferred strings without dropping their Nix dependency contexts.
-    /// Parts is an opaque Nix list, possibly computed by a deferred callback.
-    /// Its entries must evaluate to strings; use to_text for explicit coercion.
+    /// Join a Nix list of strings using `separator` between each pair.
+    /// The list itself can be computed by Nix later. Elements must evaluate to
+    /// strings; use [`Self::to_text`] for conversion. Package dependencies attached
+    /// to each string are retained.
     #[track_caller]
     pub fn join_text(separator: &str, parts: Self) -> Self {
         Nixpkgs::new()
@@ -412,23 +499,28 @@ impl NixValue {
             .apply([separator.into(), parts])
     }
 
-    /// Concatenate Rust-selected parts while leaving their values deferred in Nix.
+    /// Join the supplied expressions as text with no separator.
+    /// Rust chooses the sequence of parts; Nix evaluates their string values later.
+    /// For a mostly literal template with named holes, prefer [`crate::nix_text!`].
     #[track_caller]
     pub fn concat_text(parts: impl IntoIterator<Item = Self>) -> Self {
         Self::join_text("", Self::list(parts))
     }
 
-    /// Select a dotted attribute path when Nix evaluates this value.
-    /// Missing attributes map to this Rust operation; this does not imply a type
-    /// schema or materialize the referenced record in Rust.
+    /// Look up named fields in a Nix attribute set later.
+    /// `value.select("foo.bar")` represents `value.foo.bar`; it does not read
+    /// fields into Rust. Missing fields can be reported at this Rust call.
+    /// Use [`Self::select_segments`] when a field name itself contains a dot.
     #[track_caller]
     pub fn select(self, path: &str) -> Self {
         self.select_segments(path.split('.'))
     }
 
-    /// Select literal attribute segments; dots and special characters remain within a key.
-    /// The lookup stays deferred and failures retain this operation's caller origin.
-    /// Inside native argument-set functions, known paths use lexical argument bindings.
+    /// Look up a sequence of literal field names in Nix attribute sets.
+    /// For example, `["foo.bar", "baz"]` selects `value."foo.bar".baz`, preserving
+    /// the dot within the first name. The lookup records this Rust call location.
+    /// Inside named-argument functions, known arguments use their Nix parameter
+    /// bindings directly.
     #[track_caller]
     pub fn select_segments(self, parts: impl IntoIterator<Item = impl Into<String>>) -> Self {
         let path = AttrPath::segments(parts);
@@ -438,9 +530,10 @@ impl NixValue {
         })
     }
 
-    /// Declare an expected scalar type without evaluating or checking the Nix value.
-    /// Supports `bool`, `String` and `i64`; Nix remains authoritative for actual types.
-    /// This preserves the expression and its origin, allowing typed symbolic operations.
+    /// Attach an expected scalar type so Rust can offer typed expression operations.
+    /// For example, an `Expr<i64>` permits [`crate::Expr::divide`]. This does not
+    /// read or check the Nix value. Supported expectations are `bool`, `String` and
+    /// `i64`; Nix still checks the actual type when the expression is evaluated.
     pub fn into_expr<T>(self) -> crate::Expr<T>
     where
         crate::Expr<T>: ConfigValue,
@@ -512,21 +605,24 @@ impl From<std::collections::BTreeMap<String, NixValue>> for NixValue {
 }
 
 impl NixFunction {
-    /// Supply one curried argument; Nix checks its schema and returns an opaque value.
-    /// Continue with [`NixValue::call`] if more arguments are required.
+    /// Describe a call to this Nix function with one argument.
+    /// Nix executes the call later and checks the argument. If the result is another
+    /// function, continue with [`NixValue::call`] or use [`Self::apply`].
     #[track_caller]
     pub fn call(&self, argument: impl ConfigValue) -> NixValue {
         self.as_value().call(argument)
     }
 
-    /// Apply any number of curried arguments through the opaque boundary.
-    /// Arguments can contain records, symbolic expressions and native references.
+    /// Describe successive calls to this Nix function, one for each argument.
+    /// For example, `write_text.apply([name, text])` represents `writeText name text`.
+    /// Arguments can mix Rust literals, records, package references and expressions.
+    /// Nix executes the calls later; Rusnix does not infer the result’s category.
     ///
     /// ```
     /// use rusnix_ir::interop::Nixpkgs;
     /// let file = Nixpkgs::new().package_function("writeText")
     ///     .apply(["example.conf".into(), "workers=4\n".into()]);
-    /// let contents = file.select("text"); // Still deferred; nothing is built.
+    /// // Nix will describe a generated file; constructing this call does not build it.
     /// ```
     #[track_caller]
     pub fn apply(&self, arguments: impl IntoIterator<Item = NixValue>) -> NixValue {
@@ -534,28 +630,48 @@ impl NixFunction {
     }
 }
 
-/// Deferred named interpolation, using Nix toString rather than Rust formatting.
-/// Builds a lazy [`NixValue`] string and preserves child provenance and Nix string
-/// dependency context, including store-path dependencies. No deferred value is
-/// evaluated or flattened into a Rust string.
+/// Build text containing values that Nix will evaluate later.
+/// This resembles named Rust formatting, but returns a [`NixValue`] rather
+/// than a Rust `String`. Each hole uses Nix’s `builtins.toString`, so a hole
+/// can contain a Rust literal, a symbolic option reference or a package.
 ///
-/// Leading-newline templates remove that newline and a final indentation-only
-/// closing line, then strip the common space/tab prefix of nonblank content lines.
-/// Relative indentation, blank lines and the newline before the closing line remain;
-/// tabs match tabs rather than visual columns. Other templates are verbatim.
-/// Accepts `{name}`, `{{` and `}}`; interpolation never reindents supplied values.
-/// Each named argument is constructed once; repeated holes reuse its graph.
-/// Arguments must be named explicitly. Unknown, unused or duplicate names,
-/// malformed braces and formatting specifiers produce compile-time errors.
+/// Nix strings can carry dependencies on package outputs. Interpolation keeps
+/// those dependencies and the child expressions’ Rust locations; it does not
+/// read symbolic values into Rust. Nix evaluates the text only when needed.
 ///
 /// ```
 /// use rusnix_ir::{nix_text, nixos::OptionRef};
 /// let port = OptionRef::<i64>::new("services.example.port").into_expr();
 /// let command = nix_text!("postgres --port={port}", port = port);
+/// // Represents "postgres --port=" followed by Nix's toString of the final port.
 /// ```
 ///
-/// The original comma-separated fragment form remains available for dynamic
-/// assembly. Its parts must already be strings; use to_text for coercion.
+/// Use `{name}` for a hole and `{{` or `}}` for literal braces. Arguments must
+/// be explicitly named and are constructed once, even if reused in the template.
+/// Unknown, unused or duplicate names, malformed braces and formatting specifiers
+/// are compile-time errors. Width, precision and debug formatting are unsupported.
+///
+/// # Multiline templates
+///
+/// A template beginning with a newline removes that first newline and a final
+/// indentation-only closing line, then removes the common space/tab prefix from
+/// nonblank lines. Relative indentation, blank lines and the newline before the
+/// closing line remain. Tabs match tabs, not visual columns. Other templates
+/// retain their exact whitespace; interpolated values are never reindented.
+///
+/// ```
+/// use rusnix_ir::nix_text;
+/// let script = nix_text!(
+///     r#"
+///         echo {message}
+///     "#,
+///     message = "ready",
+/// );
+/// // Describes "echo ready\n" after removing the source indentation.
+/// ```
+///
+/// The comma-separated fragment form remains available for dynamic assembly.
+/// Its parts must already be strings; use [`NixValue::to_text`] to convert them.
 #[macro_export]
 macro_rules! nix_text {
     ($template:literal $(, $name:ident = $value:expr)* $(,)?) => {
@@ -566,21 +682,21 @@ macro_rules! nix_text {
     };
 }
 
-/// Construct a deferred [`NixValue`] record from mixed Rust and Nix values.
-/// Keys are literal strings or parenthesized Rust expressions, not attribute
-/// paths: dots and punctuation remain within one key. Values use `NixValue::from`,
-/// preserving symbolic expressions and opaque handles rather than stringifying them.
-/// Duplicate or NUL-containing keys are rejected by IR validation.
+/// Build a Nix attribute set from named values using a concise macro.
+/// An attribute set is Nix’s collection of named fields, like a Rust record or
+/// map. Values can mix Rust literals with packages and expressions that Nix will
+/// evaluate later; the macro does not evaluate them or convert them to strings.
 ///
 /// ```
-/// use rusnix_ir::{nix_record, nixos::OptionRef, interop::Nixpkgs};
-/// let key = String::from("custom.setting");
-/// let args = nix_record! {
-///     "package": Nixpkgs::new().get("hello"),
-///     "enabled": true,
-///     (key): OptionRef::<i64>::new("services.example.port").into_expr(),
-/// };
+/// use rusnix_ir::nix_record;
+/// let args = nix_record! { "name": "example", "enabled": true };
+/// // Represents { name = "example"; enabled = true; }.
 /// ```
+///
+/// Keys are literal strings or parenthesized Rust expressions. Dots remain
+/// within one name rather than creating a nested path. Duplicate or NUL-containing
+/// keys are rejected during validation. Prefer ordinary Rust structs for large
+/// fixed records, and [`NixValue::record`] for dynamic keys.
 #[macro_export]
 macro_rules! nix_record {
     (@key ($key:expr)) => { $key };
@@ -592,27 +708,45 @@ macro_rules! nix_record {
     }};
 }
 
-/// Access pinned nixpkgs objects without generating Rust bindings for its schema.
-/// Constructors perform no Nix evaluation. Package lookups and package functions
-/// use either a standalone package set or NixOS's supplied set; [`Self::function`]
-/// always selects from the pinned library.
+/// Access packages and utility functions from the pinned nixpkgs collection.
+///
+/// nixpkgs contains build descriptions for software, plus functions and source
+/// files used to describe those builds. Its *package set* is a Nix attribute set
+/// whose fields include packages such as `git`, helpers such as `writeText`, and
+/// `stdenv`, the standard build environment. `stdenv.mkDerivation` turns build
+/// attributes into a *derivation*: a recipe with inputs and output paths, not a
+/// completed build.
+///
+/// Use [`Self::get`] for a package, [`Self::package_function`] for a build helper,
+/// and [`Self::function`] for a function in nixpkgs’ separate `lib` utility library.
+/// These methods construct expressions for Nix to evaluate later. They do not
+/// fetch, build or inspect packages in Rust, and no package-specific Rust bindings
+/// are generated.
+///
+/// [`Self::new`] uses a standalone package set. [`Self::from_module`] instead
+/// uses the package set supplied by NixOS, preserving its platform and customizations.
+/// Library lookups always use the pinned `lib`, independently of package overlays.
 #[derive(Clone, Debug, Default)]
 pub struct Nixpkgs {
+    /// Whether package lookups use the NixOS module’s supplied `pkgs` value.
     module_scope: bool,
+    /// Functions that extend or replace packages, applied in the author’s order.
     overlays: Vec<Reference>,
 }
 
 impl Nixpkgs {
-    /// Use the standalone pinned package set for deferred lookups and calls.
-    /// The current backend imports it for `x86_64-linux` with empty nixpkgs config.
-    /// Use [`Self::from_module`] to follow a NixOS module's platform/configuration.
+    /// Select the pinned nixpkgs collection for standalone package lookups.
+    /// The current backend imports it for `x86_64-linux` with an empty nixpkgs
+    /// configuration. No Nix evaluation happens here. Use [`Self::from_module`]
+    /// to follow a NixOS system’s platform and package customizations.
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Refer to a pinned nixpkgs source file or directory, such as a package patch.
-    /// Returns a real deferred Nix path, not file contents or generated source text.
-    /// Relative names are escaped as data; parent traversal is rejected by validation.
+    /// Refer to a file or directory within the pinned nixpkgs source tree.
+    /// Use this for an existing patch, script or other build input. The result
+    /// represents a Nix path; Rust does not read the file, import Nix code or fetch it.
+    /// Paths must be relative and cannot traverse to parent directories.
     #[track_caller]
     pub fn source_path(&self, path: &str) -> NixValue {
         NixValue(
@@ -625,8 +759,10 @@ impl Nixpkgs {
         )
     }
 
-    /// Use the package set supplied by NixOS, including its config and overlays.
-    /// References require NixosModule lowering, like OptionRef dependencies.
+    /// Select the packages supplied to the generated module by NixOS.
+    /// NixOS calls this set `pkgs`; it includes the system’s platform, package
+    /// configuration and overlays. References constructed here must be compiled
+    /// inside a [`crate::nixos::NixosModule`], rather than as standalone configuration.
     pub fn from_module() -> Self {
         Self {
             module_scope: true,
@@ -646,28 +782,32 @@ impl Nixpkgs {
         }
     }
 
-    /// Append an opaque overlay; Nix composes it with preceding overlays.
-    /// The standalone set is imported with overlays; a module-supplied set is extended.
+    /// Add a function that extends or replaces packages in this package set.
+    /// Nixpkgs calls these functions *overlays*; Nix applies them in the supplied
+    /// order. This extends the NixOS-supplied set or configures the standalone import.
+    /// Rust does not run the overlay.
     pub fn with_overlay(mut self, overlay: OverlayRef) -> Self {
         self.overlays.push(overlay.0);
         self
     }
 
-    /// Reference a package by dotted path; existence is checked only in Nix.
-    /// The Rust lookup location is retained for missing-attribute diagnostics.
+    /// Refer to a package that Nix will look up later.
+    /// `get("git")` represents `pkgs.git`; dots select nested package collections.
+    /// Nix checks existence, and lookup failures retain this Rust call location.
     ///
     /// ```
     /// use rusnix_ir::interop::Nixpkgs;
-    /// let pkgs = Nixpkgs::new();
-    /// let git = pkgs.get("git");
-    /// let requests = pkgs.get("python312Packages.requests");
+    /// let git = Nixpkgs::new().get("git");
+    /// // A package reference, not a built Git executable.
     /// ```
     #[track_caller]
     pub fn get(&self, path: &str) -> PackageRef {
         self.path(AttrPath::dotted(path).0)
     }
 
-    /// Reference a package using literal attribute segments, including names with dots.
+    /// Refer to a package using literal field names instead of a dotted path.
+    /// For example, `["packages", "name.with.dot"]` keeps the second name intact.
+    /// Nix performs the lookup later.
     #[track_caller]
     pub fn path(&self, parts: impl IntoIterator<Item = impl Into<String>>) -> PackageRef {
         let path = AttrPath::segments(parts);
@@ -679,8 +819,10 @@ impl Nixpkgs {
         })
     }
 
-    /// Reference an upstream file relative to pinned nixpkgs's `nixos/modules`.
-    /// Nix checks module contents when imported; package-set overlays do not alter the file.
+    /// Refer to an existing NixOS module file in the pinned nixpkgs tree.
+    /// `file` is relative to `nixos/modules`. The module contributes configuration
+    /// when imported by NixOS; Rust does not read it. Package overlays do not alter
+    /// which source file this handle references.
     #[track_caller]
     pub fn module(&self, file: &str) -> ModuleRef {
         ModuleRef(Reference {
@@ -690,8 +832,10 @@ impl Nixpkgs {
         })
     }
 
-    /// Reference a dotted function in pinned `nixpkgs/lib`, without a Rust schema.
-    /// For package-set builders such as `writeText`, use [`Self::package_function`].
+    /// Refer to a function in nixpkgs’ `lib` utility library.
+    /// For example, `function("concatStringsSep")` selects `lib.concatStringsSep`.
+    /// Nix checks the function and arguments later. Build helpers such as `writeText`
+    /// belong to the package set; select those with [`Self::package_function`].
     #[track_caller]
     pub fn function(&self, path: &str) -> NixFunction {
         NixFunction(Reference {
@@ -701,8 +845,10 @@ impl Nixpkgs {
         })
     }
 
-    /// Use the pinned library that supplies [`Self::function`], without package-set overrides.
-    /// For a function's caller-supplied `lib`, use [`NixLibrary::from_value`] instead.
+    /// Wrap the pinned nixpkgs `lib` utility library with common call helpers.
+    /// This uses the same library as [`Self::function`], without package-set overlays.
+    /// To use the `lib` supplied by a package caller instead, wrap that argument
+    /// with [`NixLibrary::from_value`].
     #[track_caller]
     pub fn library(&self) -> NixLibrary {
         NixLibrary::from_value(NixValue(
@@ -715,7 +861,9 @@ impl Nixpkgs {
         ))
     }
 
-    /// Arbitrary package-set data, without claiming a package/function category.
+    /// Refer to any named value in the package set, without claiming it is a package.
+    /// Use this for metadata, records or other objects. Dots select nested fields;
+    /// Rust constructs the lookup and Nix evaluates it later.
     #[track_caller]
     pub fn value(&self, path: &str) -> NixValue {
         NixValue(
@@ -728,8 +876,8 @@ impl Nixpkgs {
         )
     }
 
-    /// The complete opaque package set, for helpers accepting pkgs as an argument.
-    /// This is ecosystem access, not introspection of the final NixOS configuration.
+    /// Pass the entire package set as a Nix value, for helpers that expect `pkgs`.
+    /// Rust does not inspect the packages or the final NixOS configuration.
     #[track_caller]
     pub fn as_value(&self) -> NixValue {
         NixValue(
@@ -742,7 +890,9 @@ impl Nixpkgs {
         )
     }
 
-    /// Opaque data from pinned nixpkgs/lib, including real NixOS option types.
+    /// Refer to a named value in nixpkgs’ `lib` utility library.
+    /// This includes NixOS type objects such as `types.port`; they describe how
+    /// NixOS validates and merges option values. Rust does not evaluate the lookup.
     #[track_caller]
     pub fn lib_value(&self, path: &str) -> NixValue {
         NixValue(
@@ -755,8 +905,10 @@ impl Nixpkgs {
         )
     }
 
-    /// A function in the package set (e.g. writeText), including its overlays.
-    /// `function` separately addresses nixpkgs/lib. No schemas are inferred.
+    /// Refer to a function in the package set, such as `writeText` or
+    /// `stdenv.mkDerivation`. These helpers describe generated files or builds.
+    /// Lookups follow this set’s package overlays. Use [`Self::function`] for
+    /// the separate `lib` utility library; Nix checks function arguments later.
     #[track_caller]
     pub fn package_function(&self, path: &str) -> NixFunction {
         NixFunction(Reference {
@@ -767,18 +919,23 @@ impl Nixpkgs {
     }
 }
 
-/// A named local Nix input supplying packages, modules, overlays or other objects.
-/// This is an import boundary, not a fetching/flake API. Selecting values records
-/// their Rust lookup origin; existence and category checks remain in Nix.
+/// Refer to objects defined in a local Nix expression file.
+///
+/// Nix can load a file with `import` and then select fields from its result.
+/// Use this handle for packages, modules, overlays or functions that are not
+/// in the pinned nixpkgs collection. Rust records the file and lookup location;
+/// Nix evaluates its contents later. This API does not fetch inputs or use flakes.
 #[derive(Clone, Debug)]
 pub struct InputRef {
+    /// The local expression file and its human-readable name for diagnostics.
     source: Source,
 }
 
 impl InputRef {
-    /// Identify a local expression file without opening or evaluating it in Rust.
-    /// `name` is a diagnostic identity; relative paths use Rust's working directory
-    /// during lowering, so the file must remain available during Nix evaluation.
+    /// Identify a local Nix expression file to load later.
+    /// `name` labels the input in diagnostics. Rust does not open or evaluate the
+    /// file. Relative paths are resolved from Rust’s working directory when compiled;
+    /// the file must still be available when Nix evaluates the generated expression.
     pub fn local(name: impl Into<String>, file: impl Into<PathBuf>) -> Self {
         Self {
             source: Source::Input {
@@ -797,31 +954,40 @@ impl InputRef {
         }
     }
 
-    /// Select a dotted package path; Nix validates existence and package contents.
+    /// Refer to a package returned by this local Nix file.
+    /// Dots select nested fields in the file’s result; Nix checks their existence
+    /// and whether the result is suitable as a package.
     #[track_caller]
     pub fn package(&self, path: &str) -> PackageRef {
         PackageRef(self.lookup(path, "package"))
     }
 
-    /// Select a deferred module for [`crate::nixos::NixosModule::import_ref`].
+    /// Refer to a NixOS configuration module returned by this file.
+    /// Pass the handle to [`crate::nixos::NixosModule::import_ref`] to combine it
+    /// with other modules; Nix evaluates its contents later.
     #[track_caller]
     pub fn module(&self, path: &str) -> ModuleRef {
         ModuleRef(self.lookup(path, "module"))
     }
 
-    /// Select a callable without describing its argument or result schema in Rust.
+    /// Refer to a Nix function returned by this file.
+    /// Its calls are described in Rust and executed by Nix later; Rust does not
+    /// infer the function’s argument or result types.
     #[track_caller]
     pub fn function(&self, path: &str) -> NixFunction {
         NixFunction(self.lookup(path, "function"))
     }
 
-    /// Select an overlay whose composition is left to [`Nixpkgs::with_overlay`].
+    /// Refer to an overlay function returned by this file.
+    /// An overlay extends or replaces packages; pass it to [`Nixpkgs::with_overlay`]
+    /// to have Nix apply it later.
     #[track_caller]
     pub fn overlay(&self, path: &str) -> OverlayRef {
         OverlayRef(self.lookup(path, "overlay"))
     }
 
-    /// Select arbitrary deferred input data without promising an object category.
+    /// Refer to any value returned by this file, without assuming its category.
+    /// Dots select nested fields. The resulting expression is evaluated by Nix later.
     #[track_caller]
     pub fn value(&self, path: &str) -> NixValue {
         NixValue(self.lookup(path, "value").node())

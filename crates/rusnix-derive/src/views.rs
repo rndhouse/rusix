@@ -350,10 +350,10 @@ fn expand_from(mut module: ItemMod, source: Source) -> syn::Result<TokenStream> 
         let attrs = &view.item.attrs;
         let description = match source {
             Source::Options => {
-                "Navigation over declared final NixOS option dependencies; values remain symbolic."
+                "Access to declared NixOS fields after modules have been combined. Methods describe Nix lookups; Rust does not read the values."
             }
             Source::Arguments => {
-                "Navigation over a supplied deferred Nix argument record; Rust never reads the values."
+                "Access to declared fields in a supplied Nix function argument set. Methods describe Nix lookups; Rust does not read the values."
             }
         };
         let type_docs = (!attrs.iter().any(|attr| attr.path().is_ident("doc")))
@@ -392,18 +392,18 @@ fn expand_from(mut module: ItemMod, source: Source) -> syn::Result<TokenStream> 
             if docs.is_empty() {
                 let description = match classify(ty, &locals)? {
                     Leaf::Branch(_) => {
-                        "Navigate to this declared subtree without reading or evaluating it."
+                        "Access the declared nested fields. Navigation constructs paths without evaluating Nix values."
                     }
                     Leaf::Scalar => match source {
                         Source::Options => {
-                            "Create a typed symbolic dependency; NixOS resolves and validates the final value after merging."
+                            "Refer to this field after NixOS combines the modules. Returns an expression with an expected Rust type, not a value read by Rust."
                         }
                         Source::Arguments => {
-                            "Select a deferred scalar with an expected Rust type; Nix validates the actual value."
+                            "Describe a lookup of this scalar field. Rust states the expected type; Nix evaluates and checks the actual value later."
                         }
                     },
                     _ => {
-                        "Create an opaque symbolic dependency; this does not materialize a Rust collection or value."
+                        "Refer to this field as a Nix expression. Nix evaluates it later; Rust does not receive a concrete collection or value."
                     }
                 };
                 docs.push(syn::parse_quote!(#[doc = #description]));
@@ -466,7 +466,8 @@ fn expand_from(mut module: ItemMod, source: Source) -> syn::Result<TokenStream> 
             };
 
             quote!(
-                /// Reference the whole declared subtree as a deferred opaque Nix value.
+                /// Refer to all fields in this declared subtree as one Nix value.
+                /// Nix evaluates the lookup later; Rust does not read its contents.
                 #[track_caller]
                 pub fn as_value(&self) -> ::rusnix_ir::interop::NixValue {
                     #selection
@@ -502,14 +503,15 @@ fn expand_from(mut module: ItemMod, source: Source) -> syn::Result<TokenStream> 
 
     let constructor = match source {
         Source::Options => quote!(
-            /// Begin navigation; leaf accessor calls capture their own Rust caller origins.
+            /// Begin referring to the declared final NixOS fields.
+            /// Each leaf method records its own Rust call location without reading a value.
             pub fn root() -> #root {
                 #root::__rusnix_at(::std::vec::Vec::new())
             }
         ),
         Source::Arguments => quote!(
-            /// Bind this finite view to a deferred record without evaluating it.
-            /// Tracked leaf accessors capture their own Rust caller origins.
+            /// Provide the Nix argument value whose declared fields these accessors refer to.
+            /// Rust does not evaluate it; each leaf method records its own call location.
             pub fn from_value(value: ::rusnix_ir::interop::NixValue) -> #root {
                 #root::__rusnix_at(value, ::std::vec::Vec::new())
             }

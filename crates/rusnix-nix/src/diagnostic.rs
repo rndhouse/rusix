@@ -1,5 +1,7 @@
-//! Rusnix-owned failure categories, causal origins and Rust-facing rendering.
-//! Consumers use these structured diagnostics rather than parsing Nix error text.
+//! Explain compilation and Nix evaluation failures in terms of Rust source.
+//! [`Diagnostic`] keeps the useful reason, contributing source locations and
+//! original Nix output. Consumers can inspect these fields without parsing Nix
+//! error text themselves.
 use crate::{Generated, SourceSpan};
 use rusnix_ir::Origin;
 use serde::{Deserialize, Serialize};
@@ -30,7 +32,9 @@ pub enum DiagnosticKind {
     Tooling,
 }
 
-/// Evidence used to recover a Rust origin, distinct from the failure category.
+/// How Rusnix found the Rust location associated with an error.
+/// This is evidence for source attribution, also called *provenance*, rather
+/// than the kind of failure. [`DiagnosticKind`] identifies what failed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Provenance {
     /// A Rust-side IR check retained its introducing operation directly.
@@ -49,7 +53,9 @@ pub enum Provenance {
     Unavailable,
 }
 
-/// The causal role of one source in a potentially multi-origin failure.
+/// Why a source location is included in an error report.
+/// An expression failure usually has one primary operation; a NixOS conflict
+/// can instead have several independent definitions that all contributed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OriginRole {
     /// The initiating operation for a single-expression failure.
@@ -62,7 +68,9 @@ pub enum OriginRole {
     ImportedBoundary,
 }
 
-/// A causal source, distinct from the semantic ancestry in `related`.
+/// One source that caused or contributed to an error.
+/// This differs from [`Diagnostic::related`], which describes enclosing operations
+/// that help explain where the failed computation fits in the configuration.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DiagnosticOrigin {
     /// Recovered Rust location, or `None` for a source known only in Nix.
@@ -76,19 +84,25 @@ pub struct DiagnosticOrigin {
     pub nix_file: Option<String>,
 }
 
-/// A structured failure independent of Nix's JSON or textual diagnostic format.
-/// [`Self::origins`] preserves causal sets for multi-definition failures;
-/// [`Self::related`] records semantic ancestry instead. Retain [`Self::raw_nix`]
-/// for debugging details that Rust-facing rendering intentionally omits.
+/// A compilation or evaluation failure explained using Rust source locations.
+///
+/// Inspect [`Self::reason`] for the useful message and [`Self::origins`] for the
+/// sources that contributed. NixOS can combine definitions from several modules,
+/// so a merge conflict may have several causes rather than one Rust line.
+/// [`Self::primary`] is a convenience for single-operation failures.
+///
+/// [`Self::related`] gives surrounding operations and configuration paths, not
+/// additional conflicting definitions. Keep [`Self::raw_nix`] for Nix’s complete
+/// original message and trace; Rust-facing rendering omits some of that detail.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Diagnostic {
     /// Layer that rejected the configuration or failed to run.
     pub kind: DiagnosticKind,
-    /// Useful underlying reason, with display-oriented provenance/path translation applied.
+    /// The useful error message, with source markers translated into readable locations and paths.
     pub reason: String,
     /// Single-origin convenience; consult [`Self::origins`] to avoid discarding other causes.
     pub primary: Option<Origin>,
-    /// Authoritative causal set. `primary` remains a compatibility convenience.
+    /// All identified sources that caused or contributed to the failure, including merge conflicts.
     #[serde(default)]
     pub origins: Vec<DiagnosticOrigin>,
     /// Enclosing configuration operations, not additional conflicting definitions.
@@ -98,7 +112,7 @@ pub struct Diagnostic {
     /// Unmodified Nix stderr, including JSON events, full traces and temporary paths.
     /// Empty for failures that occur before invoking Nix.
     pub raw_nix: String,
-    /// Affected NixOS/semantic option path recovered from definitions or ancestry.
+    /// Affected configuration path, such as `services.example.port`, when it can be identified.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub option_path: Option<String>,
     /// Imported Nix location useful when Rust attribution stops at the boundary.
@@ -107,7 +121,8 @@ pub struct Diagnostic {
 }
 
 impl Diagnostic {
-    /// Construct an IR validation failure with direct Rust provenance and no Nix trace.
+    /// Create an error for a Rust-side configuration check, before running Nix.
+    /// `origin` identifies the rejected Rust operation; there is no original Nix trace.
     pub fn validation(origin: Origin, reason: String) -> Self {
         Self {
             kind: DiagnosticKind::Validation,
