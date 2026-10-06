@@ -172,10 +172,7 @@ fn lower_module(module: &NixosModule) -> Result<(NixExpr, NixosArtifact), Box<Di
 
     for declaration in &module.options.assignments {
         let body = attrs(vec![
-            (
-                "_file",
-                string(format!("rusnix-schema:{}", declaration.origin.id)),
-            ),
+            ("_file", string(declaration.origin.id.clone())),
             (
                 "options",
                 NixExpr::plain(NixKind::AttrSet(vec![(
@@ -206,10 +203,7 @@ fn lower_module(module: &NixosModule) -> Result<(NixExpr, NixosArtifact), Box<Di
         // One module per definition makes even unknown-option diagnostics carry
         // the precise introducing operation, without demanding the option value.
         let body = attrs(vec![
-            (
-                "_file",
-                string(format!("rusnix-definition:{}", assignment.origin.id)),
-            ),
+            ("_file", string(assignment.origin.id.clone())),
             ("config", config),
         ]);
         imports.push(NixExpr::attributed(body.kind, assignment.origin.clone()));
@@ -231,10 +225,7 @@ fn lower_module(module: &NixosModule) -> Result<(NixExpr, NixosArtifact), Box<Di
             ("assertion", lower_value(&assertion.condition)),
             (
                 "message",
-                string(format!(
-                    "[rusnix-assertion:{}] {}",
-                    assertion.origin.id, assertion.message
-                )),
+                string(format!("[{}] {}", assertion.origin.id, assertion.message)),
             ),
         ]);
         let config = attrs(vec![(
@@ -242,10 +233,7 @@ fn lower_module(module: &NixosModule) -> Result<(NixExpr, NixosArtifact), Box<Di
             NixExpr::plain(NixKind::List(vec![value])),
         )]);
         let body = attrs(vec![
-            (
-                "_file",
-                string(format!("rusnix-assertion:{}", assertion.origin.id)),
-            ),
+            ("_file", string(assertion.origin.id.clone())),
             ("config", config),
         ]);
         imports.push(NixExpr::attributed(body.kind, assertion.origin.clone()));
@@ -606,16 +594,11 @@ fn translate(mut diagnostic: Diagnostic, artifact: &NixosArtifact, pin_root: &Pa
         for file in &failure.files {
             // A schema default is a definition only when Nix explicitly reports
             // our declaration identity. Never blame it for a foreign bad value.
-            let generated = file
-                .strip_prefix("rusnix-definition:")
-                .map(|id| (&artifact.definitions, id))
-                .or_else(|| {
-                    file.strip_prefix("rusnix-schema:")
-                        .map(|id| (&artifact.declarations, id))
-                });
-            let source = if let Some((boundaries, id)) = generated {
-                boundaries
+            let source = if let Some(id) = crate::diagnostic::origin_id(file) {
+                artifact
+                    .definitions
                     .iter()
+                    .chain(&artifact.declarations)
                     .find(|b| b.origin.id == id)
                     .map(|boundary| {
                         // Keep precise NixOS paths within opaque records. Only
@@ -684,9 +667,8 @@ fn translate(mut diagnostic: Diagnostic, artifact: &NixosArtifact, pin_root: &Pa
     }
 
     for boundary in &artifact.definitions {
-        let marker = format!("rusnix-definition:{}", boundary.origin.id);
         diagnostic.reason = diagnostic.reason.replace(
-            &marker,
+            &boundary.origin.id,
             &format!(
                 "Rust {}:{}:{}",
                 boundary.origin.file, boundary.origin.line, boundary.origin.column
@@ -701,7 +683,7 @@ fn translate(mut diagnostic: Diagnostic, artifact: &NixosArtifact, pin_root: &Pa
         diagnostic.kind = DiagnosticKind::NixosAssertion;
         let mut origins = Vec::new();
         for boundary in &artifact.assertions {
-            let marker = format!("[rusnix-assertion:{}]", boundary.origin.id);
+            let marker = format!("[{}]", boundary.origin.id);
             if diagnostic.reason.contains(&marker) {
                 origins.push(DiagnosticOrigin {
                     origin: Some(boundary.origin.clone()),

@@ -122,10 +122,11 @@ fn typed_conflict_reports_both_authoring_calls_via_definition_metadata() {
         assert_eq!(origin.origin.as_ref().unwrap().file, file!());
         assert_eq!(origin.role, OriginRole::ConflictingDefinition);
         assert_eq!(origin.provenance, Provenance::ModuleDefinition);
-        assert!(diagnostic.raw_nix.contains(&format!(
-            "rusnix-definition:{}",
-            origin.origin.as_ref().unwrap().id
-        )));
+        assert!(
+            diagnostic
+                .raw_nix
+                .contains(&origin.origin.as_ref().unwrap().id)
+        );
     }
 
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -442,7 +443,7 @@ fn standard_assertions_follow_final_options_with_verbatim_deferred_messages() {
         .unwrap_err();
     assert_eq!(error.kind, DiagnosticKind::NixosAssertion);
     assert!(error.reason.contains("expected port 5432, got 6432"));
-    assert!(!error.reason.contains("rusnix-assertion:"));
+    assert!(!error.reason.contains("[rn-"));
     assert!(!error.raw_nix.is_empty());
     assert_eq!(artifact.module.source, original);
 }

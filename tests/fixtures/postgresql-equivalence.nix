@@ -145,7 +145,7 @@ let
     (a: lib.hasPrefix "For each database user defined with `services.postgresql.ensureUsers`" a.message)
     (lib.concatMap (definition: definition.value) (builtins.filter
     (definition: lib.hasSuffix "/services/databases/postgresql.nix" definition.file
-      || lib.hasPrefix "rusnix-definition:" definition.file)
+      || builtins.match "rn-[0-9a-f]{16}" definition.file != null)
     evaluated.options.assertions.definitionsWithLocations));
   failedAssertions = builtins.filter (a: !a.assertion) cfg.assertions;
   checks = builtins.filter (drv: drv.name == "postgresql-configfile-check") cfg.system.checks;

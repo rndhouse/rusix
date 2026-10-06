@@ -124,6 +124,10 @@ fn generated_git_contexts_cover_boundaries_not_routine_expression_structure() {
 
     assert!(!boundaries.is_empty());
     for span in boundaries {
+        assert!(
+            generated.source[span.start..span.end]
+                .starts_with(&format!("(builtins.addErrorContext {:?} ", span.origin.id))
+        );
         let purpose = &span.origin.purpose;
         assert!(
             purpose == "opaque Nix function call"

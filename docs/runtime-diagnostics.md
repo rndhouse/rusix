@@ -72,14 +72,23 @@ when a result attribute is selected, after the constructor's runtime context
 has unwound; the selection is then the useful boundary, with raw Nix details
 retained. No eager forcing is added to keep constructor contexts alive.
 
+## Origin identifiers
+
+Rusnix identifies source origins with IDs such as `rn-e160b9de21c72674`.
+Generated Nix includes the same ID in comments (`# rn-e160b9de21c72674`) and,
+at selected failure boundaries, in `addErrorContext`. Source-map and diagnostic
+metadata use that ID unchanged. NixOS definition files and assertion messages
+also carry the same ID; their role is recorded separately in the artifact.
+Readers recognize only complete IDs with 16 lowercase hexadecimal digits.
+
 ## Git output
 
-| Metric | Before | After |
-|---|---:|---:|
-| Lines | 2,537 | 2,537 |
-| UTF-8 bytes | 218,566 | 158,441 |
-| `addErrorContext` calls | 1,226 | 301 |
-| Origin comments | 2,337 | 2,337 |
+| Metric | Before boundary audit | After boundary audit | Compact origin IDs |
+|---|---:|---:|---:|
+| Lines | 2,537 | 2,537 | 2,537 |
+| UTF-8 bytes | 218,566 | 158,441 | 121,509 |
+| `addErrorContext` calls | 1,226 | 301 | 301 |
+| Origin comments | 2,337 | 2,337 | 2,337 |
 
-Origin comments are deliberately unchanged. The reduction is 925 runtime
-wrappers and 60,125 bytes; it does not depend on an arbitrary size target.
+The boundary audit removed 925 runtime wrappers and 60,125 bytes. Compact IDs
+remove another 36,932 bytes while keeping every ID, comment and runtime boundary.

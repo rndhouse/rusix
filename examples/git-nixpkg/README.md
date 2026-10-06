@@ -107,5 +107,6 @@ package internals or attribute every upstream failure to an exact Rust field.
 
 The [runtime diagnostic audit](../../docs/runtime-diagnostics.md) keeps opaque-call
 boundaries while mapping ordinary symbolic operations through source spans. It
-reduces the generated Git output to 158,441 bytes with 301 runtime contexts; all
+reduces runtime wrappers to 301 contexts. Compact origin IDs bring the generated
+Git output to 121,509 bytes; all
 2,337 origin comments remain available for inspection.

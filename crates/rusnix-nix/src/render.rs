@@ -99,16 +99,14 @@ fn indent(out: &mut Generated, depth: usize) {
 fn emit(expr: &NixExpr, out: &mut Generated, depth: usize, enclosing: &[Origin]) {
     if let Some(origin) = &expr.origin {
         // Comments carry only our ID, never unescaped user-provided text.
-        out.source
-            .push_str(&format!("# rusnix-origin:{}\n", origin.id));
+        out.source.push_str(&format!("# {}\n", origin.id));
         indent(out, depth);
         let start = out.source.len();
         let mut children_enclosing = enclosing.to_vec();
         children_enclosing.push(origin.clone());
         if expr.error_context {
             out.source.push_str("(builtins.addErrorContext ");
-            out.source
-                .push_str(&quote(&format!("rusnix-origin:{}", origin.id)));
+            out.source.push_str(&quote(&origin.id));
             out.source.push_str(" (");
         }
 

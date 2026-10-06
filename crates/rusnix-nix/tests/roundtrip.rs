@@ -79,7 +79,7 @@ fn snapshot(name: &str, diagnostic: &Diagnostic) {
 #[test]
 fn valid_rust_ir_ast_nix_json_roundtrip() {
     let generated = compile(&fixtures::config("good").unwrap()).unwrap();
-    assert!(generated.source.contains("# rusnix-origin:rn-"));
+    assert!(generated.source.contains("# rn-"));
     let evaluated = session().evaluate(&generated).unwrap();
     assert_eq!(
         evaluated.value,
@@ -95,8 +95,52 @@ fn valid_rust_ir_ast_nix_json_roundtrip() {
 }
 
 #[test]
+fn compact_comments_and_persisted_source_spans_use_the_same_origin_ids() {
+    let generated = compile(&fixtures::config("good").unwrap()).unwrap();
+    let json = serde_json::to_string(&generated).unwrap();
+    let restored: Generated = serde_json::from_str(&json).unwrap();
+    assert_eq!(restored.source, generated.source);
+    assert_eq!(restored.spans.len(), generated.spans.len());
+
+    for (span, original) in restored.spans.iter().zip(&generated.spans) {
+        assert_eq!(span.origin, original.origin);
+        assert_eq!(span.enclosing, original.enclosing);
+        assert_eq!(span.origin.id.len(), 19);
+        let comment = format!("# {}\n", span.origin.id);
+        assert!(
+            restored.source[..span.start]
+                .trim_end()
+                .ends_with(comment.trim_end())
+        );
+        assert_eq!(restored.origin(&span.origin.id), Some(&span.origin));
+
+        // Byte positions change when comments shrink; persisted spans must still
+        // select the same Rust expression at its generated start position.
+        let before = &restored.source[..span.start];
+        let line = before.bytes().filter(|byte| *byte == b'\n').count() + 1;
+        let column = before.rsplit('\n').next().unwrap().len() + 1;
+        assert_eq!(restored.at_position(line, column), Some(&span.origin));
+    }
+}
+
+#[test]
 fn invalid_domain_value_maps_to_rust_constraint() {
-    let (_, diagnostic, _) = failure("bad-port");
+    let (_, diagnostic, origin) = failure("bad-port");
+    let event: serde_json::Value = serde_json::from_str(
+        diagnostic
+            .raw_nix
+            .lines()
+            .find_map(|line| line.strip_prefix("@nix "))
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(
+        event["trace"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|frame| { frame["raw_msg"].as_str() == Some(origin.id.as_str()) })
+    );
     snapshot("bad-port", &diagnostic);
     let rendered = diagnostic.render(&workspace());
     assert!(rendered.contains("vec![Expr::int(70000).in_range"));
@@ -181,7 +225,7 @@ fn ir_validation_precedes_codegen() {
 }
 
 #[test]
-fn structured_and_legacy_diagnostics_map_the_same_operation() {
+fn structured_and_text_diagnostics_map_the_same_operation() {
     let (generated, diagnostic, origin) = failure("nested");
     let event: serde_json::Value = serde_json::from_str(
         diagnostic
@@ -220,12 +264,10 @@ fn structured_and_legacy_diagnostics_map_the_same_operation() {
     }
 
     // Remove context trace entries: generated positions remain a useful fallback.
-    structured["trace"].as_array_mut().unwrap().retain(|f| {
-        !f["raw_msg"]
-            .as_str()
-            .unwrap_or("")
-            .starts_with("rusnix-origin:")
-    });
+    structured["trace"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|f| !f["raw_msg"].as_str().unwrap_or("").starts_with("rn-"));
     let raw = format!("@nix {structured}");
     let mapped = Diagnostic::from_nix(DiagnosticKind::NixEval, &raw, &generated, &file);
     assert_eq!(mapped.primary, Some(origin));
@@ -236,7 +278,7 @@ fn structured_and_legacy_diagnostics_map_the_same_operation() {
 fn shallow_error_context_loses_nested_failure_context() {
     let origin = Origin::new("lazy.rs", 1, 1, "outer attrset");
     let source = format!(
-        "builtins.addErrorContext \"rusnix-origin:{}\" {{ nested = builtins.throw \"lazy child failed\"; }}",
+        "builtins.addErrorContext \"{}\" {{ nested = builtins.throw \"lazy child failed\"; }}",
         origin.id
     );
 
@@ -368,7 +410,7 @@ fn selecting_bad_maps_to_divide_and_retains_static_path() {
         .as_array()
         .unwrap()
         .iter()
-        .filter_map(|frame| frame["raw_msg"].as_str()?.strip_prefix("rusnix-origin:"))
+        .filter_map(|frame| frame["raw_msg"].as_str().filter(|id| id.starts_with("rn-")))
         .collect();
     // Both the operation and its enclosing assignment come from source spans.
     assert!(runtime_ids.is_empty());

@@ -230,6 +230,11 @@ subexpressions without duplicating their rendered source.
 
 ## Provenance findings
 
+Rusnix identifies source origins with IDs such as `rn-e160b9de21c72674`.
+Generated Nix includes the same ID in comments and, at selected failure
+boundaries, in `addErrorContext`. Source maps and diagnostic JSON retain that
+ID unchanged, including all 16 hexadecimal digits.
+
 Four mechanisms are exercised:
 
 1. **Source spans:** byte ranges in generated Nix map to Rust origins. The
@@ -242,7 +247,7 @@ Four mechanisms are exercised:
    survive evaluation as diagnostic metadata.
 3. **Evaluation contexts:** opaque calls/imported values, final NixOS option
    dependencies, explicit validation and prefix coercion retain
-   `builtins.addErrorContext "rusnix-origin:rn-..." (...)`. Ordinary selections,
+   `builtins.addErrorContext "rn-..." (...)`. Ordinary selections,
    conditions, equality, division and `toString` use generated positions instead.
    Literals, lists, attribute sets and assignments have no runtime context.
    Static ancestry supplies the enclosing option path independently of demand.
@@ -262,7 +267,7 @@ Runtime markers are now reserved for intentional failure/interop boundaries.
 A division renders without a runtime wrapper:
 
 ```nix
-# rusnix-origin:rn-...
+# rn-...
 (builtins.div 44 0)
 ```
 
@@ -451,7 +456,7 @@ The compiler therefore emits **one inline imported module per assignment**:
 
 ```nix
 {
-  "_file" = "rusnix-definition:rn-cb0f3390b6cbe7a2";
+  "_file" = "rn-cb0f3390b6cbe7a2";
   "config" = {
     "services"."openssh"."ports" = [ "twenty-two" ];
   };
@@ -463,12 +468,12 @@ to the exact Rust `.set()` and option path. The actual raw type error includes:
 
 ```text
 A definition for option `services.openssh.ports."[definition 1-entry 1]"' is not of type `16 bit unsigned integer; between 0 and 65535 (both inclusive)'. Definition values:
-- In `rusnix-definition:rn-cb0f3390b6cbe7a2': "twenty-two"
+- In `rn-cb0f3390b6cbe7a2': "twenty-two"
 ```
 
 The displayed reason replaces the marker with the Rust location; raw stderr is
 retained unchanged. This avoids blaming the list container or imported SSH code.
-Assertion messages carry `[rusnix-assertion:<id>]`; the driver adds one scalar
+Assertion messages carry `[rn-<16 hex digits>]`; the driver adds one scalar
 `addErrorContext "rusnix-stage:nixos-assertions"` around the failed-assertion throw.
 The marker maps to `.assertion()` and `assertions.<name>`, and is removed only
 from the displayed reason. Expression failures use the boundary/source-map
@@ -560,16 +565,16 @@ For A and B, the generated definitions include:
 
 ```nix
 {
-  "_file" = "rusnix-definition:rn-85c0e94174be752e";
+  "_file" = "rn-85c0e94174be752e";
   "config" = {
-    "services"."openssh"."authorizedKeysCommandUser" = # rusnix-origin:rn-8163424b47eca2b2
+    "services"."openssh"."authorizedKeysCommandUser" = # rn-8163424b47eca2b2
     "root";
   };
 }
 {
-  "_file" = "rusnix-definition:rn-4da1cd4d48cf31f8";
+  "_file" = "rn-4da1cd4d48cf31f8";
   "config" = {
-    "services"."openssh"."authorizedKeysCommandUser" = # rusnix-origin:rn-cadcdcb6a3ef14f8
+    "services"."openssh"."authorizedKeysCommandUser" = # rn-cadcdcb6a3ef14f8
     "nobody";
   };
 }
@@ -580,8 +585,8 @@ string option's `mergeEqualOption` rejects them. Its raw reason is:
 
 ```text
 The option `services.openssh.authorizedKeysCommandUser' has conflicting definition values:
-- In `rusnix-definition:rn-4da1cd4d48cf31f8': "nobody"
-- In `rusnix-definition:rn-85c0e94174be752e': "root"
+- In `rn-4da1cd4d48cf31f8': "nobody"
+- In `rn-85c0e94174be752e': "root"
 Use `lib.mkForce value` or `lib.mkDefault value` to change the priority on any of these definitions.
 ```
 
@@ -633,7 +638,7 @@ are (the temporary prefix is abbreviated here):
 ```text
 The option `system.nixos.label' has conflicting definition values:
 - In `<session>/nixpkgs/nixos/modules/misc/label.nix': "24.11"
-- In `rusnix-definition:rn-5c963c20bc78fbd8': "rusnix-label"
+- In `rn-5c963c20bc78fbd8': "rusnix-label"
 ```
 
 The final output identifies `merge_fixtures.rs:34:14` as the imported boundary,

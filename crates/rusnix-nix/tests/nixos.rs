@@ -139,8 +139,22 @@ fn module_type_error_keeps_definition_origin_and_option() {
     );
     assert_eq!(d.option_path.as_deref(), Some("services.openssh.ports"));
     assert!(d.reason.contains("16 bit unsigned integer"));
-    assert!(d.raw_nix.contains("rusnix-definition:"));
-    assert!(!d.raw_nix.contains("rusnix-origin:"));
+    assert!(d.raw_nix.contains(&d.primary.as_ref().unwrap().id));
+    // Definition metadata supplies this origin; no runtime origin frame is needed.
+    for event in d
+        .raw_nix
+        .lines()
+        .filter_map(|line| line.strip_prefix("@nix "))
+        .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+    {
+        if let Some(frames) = event["trace"].as_array() {
+            assert!(
+                frames
+                    .iter()
+                    .all(|frame| { !frame["raw_msg"].as_str().unwrap_or("").starts_with("rn-") })
+            );
+        }
+    }
 }
 
 #[test]
@@ -166,7 +180,10 @@ fn assertion_message_maps_to_rust_assertion_construct() {
     );
     assert_eq!(d.option_path.as_deref(), Some("assertions.port-policy"));
     assert!(d.reason.contains("SSH port policy rejected"));
-    assert!(!d.reason.contains("rusnix-assertion:"));
+    assert!(
+        !d.reason
+            .contains(&format!("[{}]", d.primary.as_ref().unwrap().id))
+    );
 }
 
 #[test]
@@ -227,12 +244,10 @@ fn module_selection_is_lazy_and_nested_operation_origin_survives() {
         .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
         .find(|e| e["level"] == 0 && e["raw_msg"].is_string())
         .unwrap();
-    event["trace"].as_array_mut().unwrap().retain(|f| {
-        !f["raw_msg"]
-            .as_str()
-            .unwrap_or("")
-            .starts_with("rusnix-origin:")
-    });
+    event["trace"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|f| !f["raw_msg"].as_str().unwrap_or("").starts_with("rn-"));
 
     let fallback = Diagnostic::from_nix(
         DiagnosticKind::NixEval,

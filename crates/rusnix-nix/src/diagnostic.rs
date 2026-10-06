@@ -180,7 +180,8 @@ impl Diagnostic {
             let line = line.trim();
             line.strip_prefix("… ")
                 .or_else(|| line.strip_prefix("... "))
-                .is_some_and(|message| message.starts_with("rusnix-origin:"))
+                .and_then(origin_id)
+                .is_some()
         });
         let positioned: Vec<_> = lines
             .iter()
@@ -206,15 +207,15 @@ impl Diagnostic {
             .collect();
 
         // Match trace-shaped lines, excluding ordinary source excerpts and
-        // single-line throws. This legacy fallback is a heuristic, not a parser.
+        // single-line throws. This text fallback is a heuristic, not a parser.
         // Trace order is outermost -> innermost on the tested Nix versions.
         for line in text.lines() {
             let trace = line
                 .trim()
                 .strip_prefix("… ")
                 .or_else(|| line.trim().strip_prefix("... "));
-            if let Some(id) = trace.and_then(|s| s.strip_prefix("rusnix-origin:"))
-                && let Some(origin) = generated.origin(id.trim())
+            if let Some(id) = trace.and_then(|s| origin_id(s.trim()))
+                && let Some(origin) = generated.origin(id)
                 && !related.iter().any(|o: &Origin| o.id == origin.id)
             {
                 related.push(origin.clone());
@@ -276,12 +277,7 @@ impl Diagnostic {
             .chain(
                 frames
                     .iter()
-                    .take_while(|f| {
-                        !f["raw_msg"]
-                            .as_str()
-                            .unwrap_or("")
-                            .starts_with("rusnix-origin:")
-                    })
+                    .take_while(|f| f["raw_msg"].as_str().and_then(origin_id).is_none())
                     .filter(|f| operation_frame(f["raw_msg"].as_str().unwrap_or(""))),
             )
             .filter_map(mapped)
@@ -291,9 +287,7 @@ impl Diagnostic {
 
         // JSON traces are innermost first, unlike the rendered message.
         for frame in frames.iter().rev() {
-            if let Some(id) = frame["raw_msg"]
-                .as_str()
-                .and_then(|s| s.strip_prefix("rusnix-origin:"))
+            if let Some(id) = frame["raw_msg"].as_str().and_then(origin_id)
                 && let Some(origin) = generated.origin(id)
                 && !related.iter().any(|o: &Origin| o.id == origin.id)
             {
@@ -517,6 +511,14 @@ impl Diagnostic {
     }
 }
 
+// Runtime origin frames contain only the canonical ID, not arbitrary text
+// mentioning an ID. Keep source excerpts and user error messages out of attribution.
+pub(crate) fn origin_id(message: &str) -> Option<&str> {
+    let hash = message.strip_prefix("rn-")?;
+    (hash.len() == 16 && hash.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')))
+        .then_some(message)
+}
+
 /// A builtin/condition frame identifies an operation, unlike a function's definition site.
 fn operation_frame(message: &str) -> bool {
     let message = strip_ansi(message);
@@ -680,15 +682,64 @@ mod tests {
     use crate::SourceSpan;
 
     #[test]
+    fn origin_frames_require_one_complete_canonical_id() {
+        let id = "rn-e160b9de21c72674";
+        assert_eq!(origin_id(id), Some(id));
+        for message in [
+            "rn-e160b9de21c7267",
+            "rn-e160b9de21c726740",
+            "rn-e160b9de21c7267g",
+            "rn-E160B9DE21C72674",
+            "context:rn-e160b9de21c72674",
+            "rn-e160b9de21c72674 extra text",
+        ] {
+            assert_eq!(origin_id(message), None, "{message}");
+        }
+    }
+
+    #[test]
+    fn compact_structured_context_retains_the_origin_and_unmodified_raw_error() {
+        let origin = Origin::new("config.rs", 12, 9, "opaque Nix function call");
+        let generated = Generated {
+            source: "f x".into(),
+            spans: vec![SourceSpan {
+                start: 0,
+                end: 3,
+                origin: origin.clone(),
+                enclosing: vec![],
+                diagnostic_site: false,
+            }],
+        };
+        let raw = format!(
+            "@nix {}",
+            serde_json::json!({
+                "action": "msg",
+                "level": 0,
+                "raw_msg": "external function failed",
+                "msg": "unrelated human-readable rendering",
+                "trace": [{"raw_msg": origin.id}],
+            })
+        );
+
+        let diagnostic = Diagnostic::from_nix(
+            DiagnosticKind::NixEval,
+            &raw,
+            &generated,
+            Path::new("generated.nix"),
+        );
+        assert_eq!(diagnostic.primary, Some(origin));
+        assert_eq!(diagnostic.provenance, Provenance::ErrorContext);
+        assert_eq!(diagnostic.reason, "external function failed");
+        assert_eq!(diagnostic.raw_nix, raw);
+    }
+
+    #[test]
     fn module_adapter_reads_reported_definition_lines_without_scanning_value_excerpts() {
-        let reason = "The option `services.openssh.authorizedKeysCommandUser' has conflicting definition values:\n- In `rusnix-definition:rn-a': \"root\"\n- In `/pinned/sshd.nix': {\n    text = \"- In `innocent.nix': value\";\n}\nUse `lib.mkForce value` or `lib.mkDefault value` to change the priority on any of these definitions.";
+        let reason = "The option `services.openssh.authorizedKeysCommandUser' has conflicting definition values:\n- In `rn-000000000000000a': \"root\"\n- In `/pinned/sshd.nix': {\n    text = \"- In `innocent.nix': value\";\n}\nUse `lib.mkForce value` or `lib.mkDefault value` to change the priority on any of these definitions.";
         let failure = module_failure(reason).unwrap();
         assert_eq!(failure.kind, DiagnosticKind::NixosMerge);
         assert_eq!(failure.option, "services.openssh.authorizedKeysCommandUser");
-        assert_eq!(
-            failure.files,
-            ["rusnix-definition:rn-a", "/pinned/sshd.nix"]
-        );
+        assert_eq!(failure.files, ["rn-000000000000000a", "/pinned/sshd.nix"]);
         assert!(
             module_failure(
                 "The option `x' returned a string mentioning ' has conflicting definition values:"
@@ -715,7 +766,7 @@ mod tests {
     }
 
     #[test]
-    fn maps_json_context_without_matching_a_spoofed_throw_or_excerpt() {
+    fn maps_text_context_without_matching_a_spoofed_throw_or_excerpt() {
         let origin = Origin::new("config.rs", 12, 9, "integer division");
         let generated = Generated {
             source: "builtins.div 1 0".into(),
@@ -727,10 +778,7 @@ mod tests {
                 diagnostic_site: false,
             }],
         };
-        let msg = format!(
-            "error:\n … rusnix-origin:{}\n error: division by zero",
-            origin.id
-        );
+        let msg = format!("error:\n … {}\n error: division by zero", origin.id);
         let raw = format!(
             "@nix {}",
             serde_json::json!({"action":"msg", "msg": msg, "level":0})
@@ -744,8 +792,8 @@ mod tests {
         assert_eq!(diagnostic.primary, Some(origin.clone()));
         assert_eq!(diagnostic.reason, "division by zero");
         for raw in [
-            format!("error: rusnix-origin:{}", origin.id),
-            format!("1| # rusnix-origin:{}", origin.id),
+            format!("error: {}", origin.id),
+            format!("1| # {}", origin.id),
         ] {
             assert!(
                 Diagnostic::from_nix(DiagnosticKind::NixEval, &raw, &generated, Path::new("x"))

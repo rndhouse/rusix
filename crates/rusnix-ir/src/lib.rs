@@ -165,7 +165,8 @@ pub use value::{IntoRusnixValue, RusnixValue};
 /// change after edits. Reusing an expression can produce several uses of one ID.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Origin {
-    /// Identity embedded in generated metadata and matched when translating errors.
+    /// Deterministic `rn-` followed by 16 lowercase hexadecimal digits, embedded
+    /// unchanged in generated comments, error contexts and source-map metadata.
     pub id: String,
     /// Rust source path as recorded by the caller; it may be relative to the build.
     pub file: String,

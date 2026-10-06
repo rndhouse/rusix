@@ -101,10 +101,7 @@ fn two_individually_valid_modules_conflict_with_both_rust_origins() {
         assert_eq!(source.provenance, Provenance::ModuleDefinition);
         let origin = source.origin.as_ref().unwrap();
         assert!(artifact.definitions.iter().any(|b| &b.origin == origin));
-        assert!(
-            d.raw_nix
-                .contains(&format!("rusnix-definition:{}", origin.id))
-        );
+        assert!(d.raw_nix.contains(&origin.id));
     }
 
     assert_ne!(d.origins[0].origin, d.origins[1].origin);
@@ -139,10 +136,7 @@ fn three_valid_definitions_preserve_exactly_the_conflicting_pair_reported_by_nix
         d.origins[1].origin.as_ref(),
         Some(&artifact.definitions[1].origin)
     );
-    assert!(!d.raw_nix.contains(&format!(
-        "rusnix-definition:{}",
-        artifact.definitions[0].origin.id
-    )));
+    assert!(!d.raw_nix.contains(&artifact.definitions[0].origin.id));
 }
 
 #[test]
@@ -157,10 +151,7 @@ fn three_invalid_definitions_retain_all_three_origins_from_nixos() {
                 .iter()
                 .any(|o| o.origin.as_ref() == Some(&boundary.origin))
         );
-        assert!(
-            d.raw_nix
-                .contains(&format!("rusnix-definition:{}", boundary.origin.id))
-        );
+        assert!(d.raw_nix.contains(&boundary.origin.id));
     }
     assert!(
         d.origins

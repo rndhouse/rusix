@@ -220,12 +220,10 @@ fn record_lists_are_structured_lazy_and_keep_operation_origins() {
         .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
         .find(|event| event["level"] == 0 && event["raw_msg"].is_string())
         .unwrap();
-    event["trace"].as_array_mut().unwrap().retain(|frame| {
-        !frame["raw_msg"]
-            .as_str()
-            .unwrap_or("")
-            .starts_with("rusnix-origin:")
-    });
+    event["trace"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|frame| !frame["raw_msg"].as_str().unwrap_or("").starts_with("rn-"));
 
     let fallback = rusnix_nix::Diagnostic::from_nix(
         DiagnosticKind::NixEval,

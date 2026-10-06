@@ -199,7 +199,7 @@ fn operation_on_final_port_retains_rust_origin_and_destination_path() {
         diagnostic.option_path.as_deref(),
         Some("systemd.services.example.serviceConfig.ExecStart")
     );
-    assert!(diagnostic.raw_nix.contains("rusnix-origin:"));
+    assert!(diagnostic.raw_nix.contains("rn-"));
     save_diagnostic("division", &diagnostic);
     fs::write(
         root().join("target/symbolic-options/division/module.nix"),
@@ -215,12 +215,10 @@ fn operation_on_final_port_retains_rust_origin_and_destination_path() {
         .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
         .find(|event| event["level"] == 0 && event["raw_msg"].is_string())
         .unwrap();
-    event["trace"].as_array_mut().unwrap().retain(|frame| {
-        !frame["raw_msg"]
-            .as_str()
-            .unwrap_or("")
-            .starts_with("rusnix-origin:")
-    });
+    event["trace"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|frame| !frame["raw_msg"].as_str().unwrap_or("").starts_with("rn-"));
 
     let fallback = Diagnostic::from_nix(
         DiagnosticKind::NixEval,
