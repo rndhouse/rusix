@@ -112,6 +112,30 @@ fn generated_git_factory_does_not_reconstruct_native_argument_records() {
 }
 
 #[test]
+fn generated_git_contexts_cover_boundaries_not_routine_expression_structure() {
+    let generated = compile(&Config::new().set("factory", lowering::factory())).unwrap();
+    let boundaries: Vec<_> = generated
+        .spans
+        .iter()
+        .filter(|span| {
+            generated.source[span.start..span.end].starts_with("(builtins.addErrorContext ")
+        })
+        .collect();
+
+    assert!(!boundaries.is_empty());
+    for span in boundaries {
+        let purpose = &span.origin.purpose;
+        assert!(
+            purpose == "opaque Nix function call"
+                || purpose.starts_with("nixpkgs lib function lookup ")
+                || purpose.starts_with("nixpkgs function lookup ")
+                || purpose.starts_with("nixpkgs package lookup "),
+            "unexpected structural runtime context: {purpose}",
+        );
+    }
+}
+
+#[test]
 fn caller_library_all_override_does_not_change_native_boolean_decisions() {
     // Upstream uses && for the name and linker decisions, not lib.all.
     // These decisions must remain independent of a replacement library function.

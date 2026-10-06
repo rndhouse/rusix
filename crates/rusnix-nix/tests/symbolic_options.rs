@@ -194,7 +194,7 @@ fn operation_on_final_port_retains_rust_origin_and_destination_path() {
     assert_eq!(diagnostic.reason, "division by zero");
     assert_eq!(diagnostic.primary.as_ref().unwrap().line, division_line);
     assert_eq!(diagnostic.primary.as_ref().unwrap().file, file!());
-    assert_eq!(diagnostic.provenance, Provenance::ErrorContext);
+    assert_eq!(diagnostic.provenance, Provenance::SourceMap);
     assert_eq!(
         diagnostic.option_path.as_deref(),
         Some("systemd.services.example.serviceConfig.ExecStart")

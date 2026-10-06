@@ -18,6 +18,9 @@ pub mod nixos;
 
 mod render;
 
+#[cfg(test)]
+mod context_audit;
+
 use ast::{BinaryOp, Builtin, NixExpr, NixKind};
 pub use diagnostic::{Diagnostic, DiagnosticKind, DiagnosticOrigin, OriginRole, Provenance};
 pub use isolated::{Evaluation, NixSession};
@@ -134,6 +137,30 @@ fn binary(op: BinaryOp, left: NixExpr, right: NixExpr) -> NixExpr {
 
 fn lower_value(node: &Node) -> NixExpr {
     lower_scoped(node, &[])
+}
+
+/// Runtime markers are reserved for failures that lose their operation position.
+#[derive(Clone, Copy)]
+enum DiagnosticBoundary {
+    /// Nix may report only the external implementation of the called function.
+    OpaqueCall,
+    /// Explicit constraints must identify the validating operation.
+    Validation,
+    /// Nix string addition can blame the operand rather than its consuming operation.
+    Coercion,
+    /// A merged option can force a foreign definition without a generated lookup frame.
+    FinalOption,
+}
+
+/// Ordinary expression failures use generated positions and static span ancestry.
+fn runtime_boundary(kind: &ValueKind) -> Option<DiagnosticBoundary> {
+    match kind {
+        ValueKind::Apply(..) => Some(DiagnosticBoundary::OpaqueCall),
+        ValueKind::InRange { .. } => Some(DiagnosticBoundary::Validation),
+        ValueKind::StringPrefix { .. } => Some(DiagnosticBoundary::Coercion),
+        ValueKind::OptionReference(_) => Some(DiagnosticBoundary::FinalOption),
+        _ => None,
+    }
 }
 
 /// A callback parameter or a native argument-set scope identified by semantic IR.
@@ -270,10 +297,20 @@ fn lower_scoped(node: &Node, scope: &[ParameterScope<'_>]) -> NixExpr {
             Box::new(NixExpr::plain(NixKind::String(prefix.clone()))),
             Box::new(lower_value(value)),
         ),
-        ValueKind::Apply(function, argument) => NixKind::Apply(
-            Box::new(lower_value(function)),
-            Box::new(lower_value(argument)),
-        ),
+        ValueKind::Apply(function, argument) => {
+            let mut function = lower_value(function);
+            // A curried .apply(...) records the same caller for every application.
+            // The outer call covers evaluation of its partial applications too.
+            if matches!(function.kind, NixKind::Apply(..))
+                && function
+                    .origin
+                    .as_ref()
+                    .is_some_and(|o| o.id == node.origin.id)
+            {
+                function.error_context = false;
+            }
+            NixKind::Apply(Box::new(function), Box::new(lower_value(argument)))
+        }
         ValueKind::Select(value, path) => {
             let kind = if let Some(index) = argument_scope(value, scope) {
                 let first = &path.parts()[0];
@@ -283,7 +320,7 @@ fn lower_scoped(node: &Node, scope: &[ParameterScope<'_>]) -> NixExpr {
                     .any(|entry| entry.arguments.is_some_and(|names| names.contains(first)));
 
                 // Only a direct parameter selection becomes a bare lexical name.
-                // Keep every enclosing selection's provenance and error context.
+                // Keep every enclosing selection's provenance and source span.
                 if matches!(value.kind, ValueKind::Parameter(_)) && known && !shadowed {
                     let root =
                         NixExpr::attributed(NixKind::Variable(first.clone()), value.origin.clone());
@@ -294,7 +331,7 @@ fn lower_scoped(node: &Node, scope: &[ParameterScope<'_>]) -> NixExpr {
             } else {
                 interop::select(lower_value(value), path).kind
             };
-            return NixExpr::contextual(kind, node.origin.clone());
+            return NixExpr::attributed(kind, node.origin.clone());
         }
         ValueKind::Divide(left, right) => {
             NixKind::Call(Builtin::Div, vec![lower_value(left), lower_value(right)])
@@ -336,17 +373,7 @@ fn lower_scoped(node: &Node, scope: &[ParameterScope<'_>]) -> NixExpr {
         }
     };
 
-    if matches!(
-        node.kind,
-        ValueKind::If(..)
-            | ValueKind::Equal(..)
-            | ValueKind::Divide(..)
-            | ValueKind::InRange { .. }
-            | ValueKind::Apply(..)
-            | ValueKind::OptionReference(_)
-            | ValueKind::ToText(_)
-            | ValueKind::StringPrefix { .. }
-    ) {
+    if runtime_boundary(&node.kind).is_some() {
         NixExpr::contextual(kind, node.origin.clone())
     } else {
         NixExpr::attributed(kind, node.origin.clone())

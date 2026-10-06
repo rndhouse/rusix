@@ -198,7 +198,7 @@ fn record_lists_are_structured_lazy_and_keep_operation_origins() {
     let diagnostic = session.evaluate_attribute(&generated, "items").unwrap_err();
     assert_eq!(diagnostic.reason, "division by zero");
     assert_eq!(diagnostic.primary.as_ref().unwrap().line, division_line);
-    assert_eq!(diagnostic.provenance, Provenance::ErrorContext);
+    assert_eq!(diagnostic.provenance, Provenance::SourceMap);
     assert!(
         diagnostic
             .related
@@ -836,7 +836,7 @@ fn structural_to_opaque_conversion_preserves_laziness_and_child_error_origin() {
     let diagnostic = session.evaluate_attribute(&artifact, "bad").unwrap_err();
     assert_eq!(diagnostic.primary.as_ref().unwrap().file, file!());
     assert_eq!(diagnostic.primary.as_ref().unwrap().line, operation_line);
-    assert_eq!(diagnostic.provenance, Provenance::ErrorContext);
+    assert_eq!(diagnostic.provenance, Provenance::SourceMap);
     assert!(diagnostic.reason.contains("division by zero"));
 }
 
@@ -1011,7 +1011,7 @@ fn emitted_optional_expressions_and_packages_keep_child_origins_and_laziness() {
     );
     let diagnostic = session.evaluate_attribute(&artifact, "bad").unwrap_err();
     assert_eq!(diagnostic.primary.as_ref().unwrap().line, operation_line);
-    assert_eq!(diagnostic.provenance, Provenance::ErrorContext);
+    assert_eq!(diagnostic.provenance, Provenance::SourceMap);
     assert!(diagnostic.reason.contains("division by zero"));
 
     let package = compile(

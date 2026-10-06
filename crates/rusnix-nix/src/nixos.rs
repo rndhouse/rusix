@@ -13,6 +13,10 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{fs, path::Path, sync::OnceLock};
 
+#[cfg(test)]
+#[path = "nixos_context_audit.rs"]
+mod context_audit;
+
 /// Revision shared by the vendored minimal schemas and full offline nixpkgs archive.
 pub const NIXPKGS_REVISION: &str = "8b27c1239e5c421a2bbc2c65d52e4a6fbf2ff296";
 

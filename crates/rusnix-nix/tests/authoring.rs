@@ -233,7 +233,7 @@ fn previously_captured_expression_and_setter_origins_survive_conversion() {
         )
         .unwrap_err();
     assert_eq!(diagnostic.primary.as_ref().unwrap().line, expression_line);
-    assert_eq!(diagnostic.provenance, Provenance::ErrorContext);
+    assert_eq!(diagnostic.provenance, Provenance::SourceMap);
     assert_eq!(
         diagnostic.option_path.as_deref(),
         Some("services.openssh.ports")
@@ -506,7 +506,7 @@ fn deferred_assertion_condition_failures_keep_the_child_operation_origin() {
 
     assert_eq!(error.primary.as_ref().unwrap().file, file!());
     assert_eq!(error.primary.as_ref().unwrap().line, operation_line);
-    assert_eq!(error.provenance, Provenance::ErrorContext);
+    assert_eq!(error.provenance, Provenance::SourceMap);
     assert!(error.reason.contains("division by zero"));
     assert!(!error.raw_nix.is_empty());
 }
@@ -530,7 +530,7 @@ fn deferred_assertion_message_failures_keep_the_child_operation_origin() {
 
     assert_eq!(error.primary.as_ref().unwrap().file, file!());
     assert_eq!(error.primary.as_ref().unwrap().line, operation_line);
-    assert_eq!(error.provenance, Provenance::ErrorContext);
+    assert_eq!(error.provenance, Provenance::SourceMap);
     assert!(error.reason.contains("division by zero"));
     assert!(!error.raw_nix.is_empty());
 }

@@ -36,7 +36,14 @@ fn failure(name: &str) -> (Generated, Diagnostic, Origin) {
         "{}",
         diagnostic.raw_nix
     );
-    assert_eq!(diagnostic.provenance, Provenance::ErrorContext);
+    assert_eq!(
+        diagnostic.provenance,
+        if name == "bad-port" {
+            Provenance::ErrorContext
+        } else {
+            Provenance::SourceMap
+        }
+    );
     (generated, *diagnostic, expected)
 }
 
@@ -119,6 +126,7 @@ fn generated_syntax_failure_is_a_compiler_bug_even_with_a_rust_span() {
             end: source.len(),
             origin,
             enclosing: vec![],
+            diagnostic_site: false,
         }],
         source,
     };
@@ -208,7 +216,7 @@ fn structured_and_legacy_diagnostics_map_the_same_operation() {
     ] {
         let mapped = Diagnostic::from_nix(DiagnosticKind::NixEval, &raw, &generated, &file);
         assert_eq!(mapped.primary, Some(origin.clone()));
-        assert_eq!(mapped.provenance, Provenance::ErrorContext);
+        assert_eq!(mapped.provenance, Provenance::SourceMap);
     }
 
     // Remove context trace entries: generated positions remain a useful fallback.
@@ -248,6 +256,7 @@ fn shallow_error_context_loses_nested_failure_context() {
             end: generated.source.len(),
             origin,
             enclosing: vec![],
+            diagnostic_site: false,
         }],
     };
     let mapped = Diagnostic::from_nix(
@@ -304,7 +313,7 @@ fn selecting_good_does_not_demand_bad() {
     assert!(!generated.source.contains("builtins.seq"));
     assert_eq!(
         generated.source.matches("builtins.addErrorContext").count(),
-        1
+        0
     );
     assert_eq!(
         session()
@@ -335,7 +344,7 @@ fn selecting_bad_maps_to_divide_and_retains_static_path() {
         diagnostic.primary,
         Some(config.assignments[1].value.origin.clone())
     );
-    assert_eq!(diagnostic.provenance, Provenance::ErrorContext);
+    assert_eq!(diagnostic.provenance, Provenance::SourceMap);
     assert_eq!(diagnostic.reason, "division by zero");
     assert!(
         diagnostic
@@ -361,15 +370,12 @@ fn selecting_bad_maps_to_divide_and_retains_static_path() {
         .iter()
         .filter_map(|frame| frame["raw_msg"].as_str()?.strip_prefix("rusnix-origin:"))
         .collect();
-    // The enclosing assignment comes from the source map, not an active context.
-    assert_eq!(
-        runtime_ids,
-        vec![config.assignments[1].value.origin.id.as_str()]
-    );
+    // Both the operation and its enclosing assignment come from source spans.
+    assert!(runtime_ids.is_empty());
 }
 
 #[test]
-fn selected_list_child_keeps_operation_context_without_container_forcing() {
+fn selected_list_child_keeps_operation_origin_without_container_forcing() {
     use rusnix_ir::Expr;
 
     let config = Config::new().set("good", 42).set(
@@ -392,7 +398,7 @@ fn selected_list_child_keeps_operation_context_without_container_forcing() {
 
     let diagnostic = session().evaluate_attribute(&generated, "bad").unwrap_err();
     assert_eq!(diagnostic.primary, Some(items[1].origin.clone()));
-    assert_eq!(diagnostic.provenance, Provenance::ErrorContext);
+    assert_eq!(diagnostic.provenance, Provenance::SourceMap);
     assert!(
         diagnostic
             .related

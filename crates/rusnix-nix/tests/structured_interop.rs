@@ -252,7 +252,7 @@ fn opaque_categories_and_expression_origins_survive_inside_records() {
         .evaluate_interop(&generated(mixed.select("expression")))
         .unwrap_err();
     assert_eq!(error.reason, "division by zero");
-    assert_eq!(error.provenance, Provenance::ErrorContext);
+    assert_eq!(error.provenance, Provenance::SourceMap);
     assert_eq!(error.primary.as_ref().unwrap().line, expression_line);
 }
 

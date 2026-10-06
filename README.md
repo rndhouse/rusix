@@ -234,11 +234,12 @@ Four mechanisms are exercised:
 2. **Comment markers:** generated comments contain stable `rn-...` origin IDs.
    These help manual inspection and survive emission, but comments alone do not
    survive evaluation as diagnostic metadata.
-3. **Evaluation contexts:** only deferred division and range-constraint operations use
-   `builtins.addErrorContext "rusnix-origin:rn-..." (...)`. The innermost known
-   context identifies the Rust operation. Literals, lists, attribute sets, and
-   assignments carry comments/spans but no runtime context. Static ancestry
-   supplies the enclosing option path independently of evaluation demand.
+3. **Evaluation contexts:** opaque calls/imported values, final NixOS option
+   dependencies, explicit validation and prefix coercion retain
+   `builtins.addErrorContext "rusnix-origin:rn-..." (...)`. Ordinary selections,
+   conditions, equality, division and `toString` use generated positions instead.
+   Literals, lists, attribute sets and assignments have no runtime context.
+   Static ancestry supplies the enclosing option path independently of demand.
 4. **Structured diagnostics:** `--log-format internal-json --show-trace` on
    Nix 2.34.8 provides a message, underlying `raw_msg`, and structured `trace`.
    Rusnix prefers those fields. JSON trace order is innermost first; the rendered
@@ -251,23 +252,26 @@ JSON serialization evaluates `nested`. A regression test demonstrates this
 lost provenance. The first implementation used `deepSeq` within each context
 to keep outer contexts alive. The selective-evaluation experiment removed
 **all generated `deepSeq` calls** and the per-node forcing let bindings.
-Generated operation contexts now have this shape:
+Runtime markers are now reserved for intentional failure/interop boundaries.
+A division renders without a runtime wrapper:
 
 ```nix
-builtins.addErrorContext "rusnix-origin:rn-..." (builtins.div 44 0)
+# rusnix-origin:rn-...
+(builtins.div 44 0)
 ```
 
-Division produces a scalar. Its context remains active when the demanded
-operation fails, even when that operation was delayed inside a list. No outer
-container needs forcing to keep that operation's context. Existing nested
-diagnostics and their snapshots still pass, with the option path reconstructed
-from the operation's static span ancestry.
+Nix's generated builtin frame identifies the consuming Rust division, including
+when delayed inside a list or an opaque library call. The source map supplies
+its enclosing option path. A concrete generated error position is preferred to
+callback-definition frames; a mapped child operation can outrank an enclosing
+runtime marker when the evaluator identifies the inner failure. Static ancestry
+supplies its contribution and path, including across separately generated modules.
 
-Tests select both scalar and list-valued failing attributes while their good
-siblings remain usable. A live AST fixture also omits every runtime context:
-Nix's generated division frame still maps to Rust via source spans alone, with
-the enclosing path retained. This proves a source-map fallback on a real Nix
-failure, in addition to the adapter test which removes captured trace entries.
+The [runtime instrumentation audit](docs/runtime-diagnostics.md) records the
+complete policy and before/after failure matrix. Git now has 301 runtime markers
+instead of 1,226, with every origin comment retained. Prefix coercion and final
+NixOS references retain narrow markers because live tests demonstrate missing
+or misleading generated positions in those cases. No container forcing is added.
 
 For an expression cloned into two assignments, concrete generated positions
 choose the correct occurrence's ancestry. If positions are absent, the ID-only
@@ -435,7 +439,7 @@ activation, or host-store command was used. The original store-construction and
 physical-write tests remain. A new test checks staged module files, isolated
 store database, and session cleanup.
 
-**Module provenance:** NixOS evaluates an option's type after a literal's context
+**Module provenance:** NixOS evaluates an option's type after a value-level context
 would have unwound; unknown options can fail without a useful generated frame.
 The compiler therefore emits **one inline imported module per assignment**:
 
@@ -461,8 +465,8 @@ retained unchanged. This avoids blaming the list container or imported SSH code.
 Assertion messages carry `[rusnix-assertion:<id>]`; the driver adds one scalar
 `addErrorContext "rusnix-stage:nixos-assertions"` around the failed-assertion throw.
 The marker maps to `.assertion()` and `assertions.<name>`, and is removed only
-from the displayed reason. Existing operation contexts remain **only** around
-division/range checks; no generated `deepSeq` or broad forcing was added.
+from the displayed reason. Expression failures use the boundary/source-map
+policy described above; no generated `deepSeq` or broad forcing was added.
 
 | Fixture | Observed reason | Rust mapping | Lost precision |
 | --- | --- | --- | --- |
@@ -470,7 +474,7 @@ division/range checks; no generated `deepSeq` or broad forcing was added.
 | `unknown` | `services.openssh.rusnixMissing` does not exist | introducing `.set`, definition marker | no value-level runtime context |
 | `assertion` | Failed assertions: SSH port policy rejected | `.assertion`, message marker | false boolean itself did not throw |
 | `external` | attribute `version` missing inside `label.nix` | `.import(NixosLabel)`, external trace frame | no exact upstream-causal Rust expression |
-| `lazy` | ports nested division by zero | `.divide`, runtime marker + static ancestry | none in the tested path |
+| `lazy` | ports nested division by zero | `.divide`, generated source span + static ancestry | none in the tested path |
 
 Run reviewable fixtures (the four error fixtures exit 1):
 
@@ -740,8 +744,8 @@ the isolated store; packages are never built. The helper additionally disables
 import-from-derivation, and every Nix process retains explicit disposable store
 and matching eval-store selection.
 
-Contexts on lookup/call/selection operations preserve immediate opaque-boundary
-failures. Imported module functions retain file boundaries through existing trace
+Runtime contexts on imported lookups/calls supplement source spans on ordinary
+selections, preserving immediate opaque-boundary failures. Imported module functions retain file boundaries through existing trace
 and `_file` adapters; a small guard uses upstream types.deferredModule.check to
 catch a category-invalid module before NixOS loses its location. It inspects the
 head only. If an opaque function returns a lazy container whose child later
@@ -1036,7 +1040,8 @@ Native argument selections lower directly to lexical bindings such as
 `stdenv.hostPlatform.isDarwin`, including in dependent defaults. Whole-record uses
 and outer arguments shadowed by nested named functions retain a lazy record
 capture; references that escape their callback scope are rejected. Argument lookup
-origins and error contexts remain intact.
+origins and source-map ancestry remain intact; ordinary lookup failures use
+generated positions.
 
 `NixValue::select_segments` preserves literal dots within keys, and
 `NixValue::into_expr::<T>()` attaches a supported expected scalar type while
@@ -1047,13 +1052,12 @@ an ordinary Nix option-declaration fixture and an independent default-priority
 port contribution of 5432. Each contribution retains its own `_file` identity.
 Only contributions containing references become `{ config, ... }:` functions;
 existing concrete modules retain their generated representation.
-The actual generated dependent value is:
+The generated dependency, omitting diagnostic comments and retained boundary
+wrappers for readability, is:
 
 ```nix
-"systemd"."services"."example"."serviceConfig"."ExecStart" = # rusnix-origin:rn-3011865f26657c91
-(builtins.addErrorContext "rusnix-origin:rn-3011865f26657c91" (("example --port=" + # rusnix-origin:rn-f3e74398cc7c2441
-(builtins.addErrorContext "rusnix-origin:rn-f3e74398cc7c2441" ((builtins.toString (# rusnix-origin:rn-5f19170779a2dd8f
-(builtins.addErrorContext "rusnix-origin:rn-5f19170779a2dd8f" ((config)."services"."example"."port")))))))));
+systemd.services.example.serviceConfig.ExecStart =
+  "example --port=" + builtins.toString config.services.example.port;
 ```
 
 String addition plus `builtins.toString` expresses the dependency without raw

@@ -85,11 +85,12 @@ The matrix covers default/minimal/full Git; Perl/SVN/send-email/PCRE2/manual/Pyt
 translation/GUI/SSH/libsecret/check choices; Linux and Darwin on x86_64 and ARM;
 ARM, musl, MinGW and FreeBSD cross builds; dependent defaults, ordinary overrides,
 `overrideAttrs`, laziness, malformed dependencies and all three feature assertions.
-There are **39 Git tests**, including **34 full projection comparisons** (one
+There are **40 Git tests**, including **34 full projection comparisons** (one
 uses the explicit SunOS branch probe, and two check caller-supplied library
 overrides), three feature-assertion rejection cases,
 a malformed-dependency case, Solaris rejection, and focused Rust-model/laziness
-checks, plus a regression against reconstructed argument records. The SunOS
+checks, plus regressions against reconstructed argument records and structural
+runtime diagnostic wrappers. The SunOS
 make-flags branch has an explicit host-flag probe. A real Solaris cross scope is rejected by this pinned nixpkgs's libc support in both implementations;
 the probe is not evidence of a working Solaris toolchain.
 
@@ -100,3 +101,8 @@ Package assertions recover Rust lowering locations. A malformed dependency that
 stdenv rejects while forcing a returned derivation may map only to the Rust
 crossing boundary; the original Nix trace is retained. Rust does not inspect
 package internals or attribute every upstream failure to an exact Rust field.
+
+The [runtime diagnostic audit](../../docs/runtime-diagnostics.md) keeps opaque-call
+boundaries while mapping ordinary symbolic operations through source spans. It
+reduces the generated Git output to 158,441 bytes with 301 runtime contexts; all
+2,337 origin comments remain available for inspection.

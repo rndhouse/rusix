@@ -349,7 +349,7 @@ fn unused_values_stay_lazy_and_operation_origins_survive_the_module() {
     assert_eq!(diagnostic.primary.as_ref().unwrap().line, operation_line);
     assert_eq!(diagnostic.primary.as_ref().unwrap().file, file!());
     assert!(diagnostic.related.iter().any(|o| o.purpose == "set bad"));
-    assert_eq!(diagnostic.provenance, Provenance::ErrorContext);
+    assert_eq!(diagnostic.provenance, Provenance::SourceMap);
 }
 
 #[rusnix::config]

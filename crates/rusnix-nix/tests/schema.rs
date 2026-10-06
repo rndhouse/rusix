@@ -133,7 +133,7 @@ fn unused_schema_defaults_remain_lazy_and_failure_keeps_expression_origin() {
         .evaluate_nixos(&artifact, &["services", "example", "derived"], false)
         .unwrap_err();
     assert_eq!(failure.primary.as_ref().unwrap().line, operation_line);
-    assert_eq!(failure.provenance, Provenance::ErrorContext);
+    assert_eq!(failure.provenance, Provenance::SourceMap);
     assert!(failure.reason.contains("division by zero"));
     assert!(!failure.raw_nix.is_empty());
 }

@@ -15,6 +15,10 @@ pub struct SourceSpan {
     /// Static semantic ancestry, independent of which Nix contexts remain active.
     #[serde(default)]
     pub enclosing: Vec<Origin>,
+    /// An unwrapped operation that can identify a failure inside a runtime boundary.
+    /// Literals and function-definition positions cannot displace a consuming call.
+    #[serde(default)]
+    pub diagnostic_site: bool,
 }
 
 /// Compiler output: generated Nix source plus Rust-source attribution.
@@ -114,6 +118,16 @@ fn emit(expr: &NixExpr, out: &mut Generated, depth: usize, enclosing: &[Origin])
             end,
             origin: origin.clone(),
             enclosing: enclosing.to_vec(),
+            diagnostic_site: !expr.error_context
+                && matches!(
+                    expr.kind,
+                    NixKind::Call(..)
+                        | NixKind::Apply(..)
+                        | NixKind::Binary(..)
+                        | NixKind::If(..)
+                        | NixKind::Select(..)
+                        | NixKind::ArgumentSelect(..)
+                ),
         });
     } else {
         emit_kind(&expr.kind, out, depth, enclosing);

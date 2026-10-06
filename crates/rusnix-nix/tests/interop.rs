@@ -442,7 +442,7 @@ fn delayed_function_failure_maps_to_selection_not_original_call() {
         .evaluate_interop(&generated)
         .unwrap_err();
     assert_eq!(error.primary.unwrap().purpose, "opaque Nix selection bad");
-    assert_eq!(error.provenance, Provenance::ErrorContext);
+    assert_eq!(error.provenance, Provenance::SourceMap);
     assert_eq!(error.reason, "delayed external call failed");
 }
 

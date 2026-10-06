@@ -10,7 +10,7 @@ use rusnix_ir::Origin;
 pub struct NixExpr {
     /// Rust origin for generated comments and source-map entries, if available.
     pub origin: Option<Origin>,
-    /// Runtime context only for operations that can fail when demanded.
+    /// Runtime marker for intentional failure/interop boundaries, not routine structure.
     pub error_context: bool,
     /// Syntax to render; attribution does not alter its semantic operation.
     pub kind: NixKind,

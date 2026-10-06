@@ -86,7 +86,13 @@ pub(crate) fn lower_reference(reference: &Reference) -> NixExpr {
         None => root,
     };
 
-    NixExpr::contextual(value.kind, reference.origin.clone())
+    if matches!(reference.source, Source::PinnedPath { .. }) {
+        // Appending validated literal path data introduces no external evaluation.
+        NixExpr::attributed(value.kind, reference.origin.clone())
+    } else {
+        // Imported values may fail entirely inside Nix even after a call returns.
+        NixExpr::contextual(value.kind, reference.origin.clone())
+    }
 }
 
 // Only ordinary source files are shared; each NixSession still owns its own

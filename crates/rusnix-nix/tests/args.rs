@@ -174,7 +174,7 @@ fn missing_argument_selection_maps_to_accessor_and_preserves_nix_trace() {
     let origin = diagnostic.primary.as_ref().unwrap();
     assert_eq!(origin.line, line);
     assert_eq!(origin.file, file!());
-    assert_eq!(diagnostic.provenance, Provenance::ErrorContext);
+    assert_eq!(diagnostic.provenance, Provenance::SourceMap);
     assert!(diagnostic.reason.contains("missing"));
     assert!(!diagnostic.raw_nix.is_empty());
 }

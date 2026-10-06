@@ -5,6 +5,7 @@ cd "$(dirname "$0")/.."
 cargo run --locked --quiet -p rusnix-derive --bin check-rust-spacing
 
 # Real evaluator round-trips compare the committed Rusnix diagnostic snapshots.
+cargo test --locked -p rusnix-nix --lib context_audit
 cargo test --locked -p rusnix-nix --test roundtrip
 cargo test --locked -p rusnix-nix --test nixos
 cargo test --locked -p rusnix-nix --test merges

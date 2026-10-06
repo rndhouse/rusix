@@ -160,14 +160,34 @@ impl Diagnostic {
 
         let mut related = Vec::new();
         let prefix = format!("at {}:", file.display());
-        let local_spans: Vec<_> = text
-            .lines()
+        let lines: Vec<_> = text.lines().collect();
+        let innermost_context = lines.iter().rposition(|line| {
+            let line = line.trim();
+            line.strip_prefix("… ")
+                .or_else(|| line.strip_prefix("... "))
+                .is_some_and(|message| message.starts_with("rusnix-origin:"))
+        });
+        let positioned: Vec<_> = lines
+            .iter()
+            .enumerate()
             .rev()
-            .filter_map(|line| {
+            .filter_map(|(index, line)| {
                 let rest = line.trim().strip_prefix(&prefix)?;
                 let mut parts = rest.split(':');
-                generated.span_at_position(parts.next()?.parse().ok()?, parts.next()?.parse().ok()?)
+                let span = generated
+                    .span_at_position(parts.next()?.parse().ok()?, parts.next()?.parse().ok()?)?;
+                let message = lines[..index].iter().rev().find(|l| !l.trim().is_empty())?;
+                Some((
+                    span,
+                    (message.trim().starts_with("error:") || operation_frame(message))
+                        && innermost_context.is_none_or(|boundary| index > boundary),
+                ))
             })
+            .collect();
+        let local_spans: Vec<_> = positioned.iter().map(|(span, _)| *span).collect();
+        let failure_spans: Vec<_> = positioned
+            .iter()
+            .filter_map(|(span, operation)| operation.then_some(*span))
             .collect();
 
         // Match trace-shaped lines, excluding ordinary source excerpts and
@@ -191,13 +211,8 @@ impl Diagnostic {
                 // Syntax/static backend errors must never accuse a user's Rust line.
                 related.clear();
                 (None, Provenance::Unavailable)
-            } else if let Some(origin) = related.last() {
-                (Some(origin.clone()), Provenance::ErrorContext)
             } else {
-                match local_spans.first() {
-                    Some(span) => (Some(span.origin.clone()), Provenance::SourceMap),
-                    None => (None, Provenance::Unavailable),
-                }
+                recover_operation(&related, &local_spans, &failure_spans)
             };
 
         Self {
@@ -227,19 +242,34 @@ impl Diagnostic {
                 .unwrap_or("Nix failed; inspect the retained original diagnostic"),
         );
         let frames = event["trace"].as_array().map(Vec::as_slice).unwrap_or(&[]);
-        let local_spans: Vec<_> = frames
-            .iter()
-            .chain(std::iter::once(event))
-            .filter_map(|frame| {
-                let line = usize::try_from(frame["line"].as_u64()?).ok()?;
-                let column = usize::try_from(frame["column"].as_u64()?).ok()?;
-                let reported = frame["file"].as_str()?;
-                let path = file.to_string_lossy();
-                if reported != path && reported != format!("{path}:{line}:{column}") {
-                    return None;
-                }
-                generated.span_at_position(line, column)
-            })
+        let mapped = |frame: &serde_json::Value| {
+            let line = usize::try_from(frame["line"].as_u64()?).ok()?;
+            let column = usize::try_from(frame["column"].as_u64()?).ok()?;
+            let reported = frame["file"].as_str()?;
+            let path = file.to_string_lossy();
+            if reported != path && reported != format!("{path}:{line}:{column}") {
+                return None;
+            }
+            generated.span_at_position(line, column)
+        };
+        // The error's own position is more precise than lambda/call-site frames.
+        let local_spans: Vec<_> = std::iter::once(event)
+            .chain(frames.iter())
+            .filter_map(mapped)
+            .collect();
+        let failure_spans: Vec<_> = std::iter::once(event)
+            .chain(
+                frames
+                    .iter()
+                    .take_while(|f| {
+                        !f["raw_msg"]
+                            .as_str()
+                            .unwrap_or("")
+                            .starts_with("rusnix-origin:")
+                    })
+                    .filter(|f| operation_frame(f["raw_msg"].as_str().unwrap_or(""))),
+            )
+            .filter_map(mapped)
             .collect();
 
         let mut related = Vec::new();
@@ -260,17 +290,8 @@ impl Diagnostic {
             if matches!(kind, DiagnosticKind::Compiler | DiagnosticKind::Tooling) {
                 related.clear();
                 (None, Provenance::Unavailable)
-            } else if let Some(origin) = related.last() {
-                (Some(origin.clone()), Provenance::ErrorContext)
             } else {
-                // Use the most local generated frame, and never map an external file.
-                let origin = local_spans.first().map(|span| span.origin.clone());
-                let provenance = if origin.is_some() {
-                    Provenance::SourceMap
-                } else {
-                    Provenance::Unavailable
-                };
-                (origin, provenance)
+                recover_operation(&related, &local_spans, &failure_spans)
             };
 
         Self {
@@ -481,6 +502,37 @@ impl Diagnostic {
     }
 }
 
+/// A builtin/condition frame identifies an operation, unlike a function's definition site.
+fn operation_frame(message: &str) -> bool {
+    let message = strip_ansi(message);
+    message.contains("while calling the '") && message.contains("' builtin")
+        || message.contains("while evaluating a branch condition")
+}
+
+/// Prefer an inner generated failure over its runtime boundary, never a caller frame.
+/// The trace may cross separately generated NixOS definitions, so static nesting alone
+/// cannot decide which operation failed; static ancestry supplies the resulting path.
+fn recover_operation(
+    contexts: &[Origin],
+    local_spans: &[&SourceSpan],
+    failure_spans: &[&SourceSpan],
+) -> (Option<Origin>, Provenance) {
+    if let Some(boundary) = contexts.last() {
+        if let Some(span) = failure_spans.first()
+            && span.diagnostic_site
+            && span.origin.id != boundary.id
+        {
+            return (Some(span.origin.clone()), Provenance::SourceMap);
+        }
+        return (Some(boundary.clone()), Provenance::ErrorContext);
+    }
+
+    match local_spans.first() {
+        Some(span) => (Some(span.origin.clone()), Provenance::SourceMap),
+        None => (None, Provenance::Unavailable),
+    }
+}
+
 fn render_location(out: &mut String, origin: &Origin, source_root: &Path) {
     out.push_str(&format!(
         "  --> {}:{}:{}\n",
@@ -657,6 +709,7 @@ mod tests {
                 end: 16,
                 origin: origin.clone(),
                 enclosing: vec![],
+                diagnostic_site: false,
             }],
         };
         let msg = format!(

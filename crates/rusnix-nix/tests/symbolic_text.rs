@@ -241,7 +241,7 @@ fn unused_interpolated_failure_stays_lazy_and_selected_failure_keeps_child_origi
         .evaluate_interop(&generated(result.select("bad")))
         .unwrap_err();
     assert_eq!(diagnostic.reason, "division by zero");
-    assert_eq!(diagnostic.provenance, Provenance::ErrorContext);
+    assert_eq!(diagnostic.provenance, Provenance::SourceMap);
     assert_eq!(diagnostic.primary.as_ref().unwrap().line, operation_line);
     assert_eq!(diagnostic.primary.as_ref().unwrap().file, file!());
     assert_eq!(

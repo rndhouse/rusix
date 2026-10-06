@@ -185,7 +185,7 @@ fn imported_real_module_failure_maps_only_to_import_boundary() {
 }
 
 #[test]
-fn module_selection_is_lazy_and_nested_operation_context_survives() {
+fn module_selection_is_lazy_and_nested_operation_origin_survives() {
     let module = fixtures::module("lazy").unwrap();
     let ValueKind::List(items) = &module.config.assignments[1].value.kind else {
         panic!()
@@ -206,7 +206,7 @@ fn module_selection_is_lazy_and_nested_operation_context_survives() {
         .unwrap_err();
     assert_eq!(d.kind, DiagnosticKind::NixEval);
     assert_eq!(d.primary, Some(items[1].origin.clone()));
-    assert_eq!(d.provenance, Provenance::ErrorContext);
+    assert_eq!(d.provenance, Provenance::SourceMap);
     assert_eq!(d.option_path.as_deref(), Some("services.openssh.ports"));
     assert_eq!(d.reason, "division by zero");
     // Checking successful assertions must not classify an unrelated selected
