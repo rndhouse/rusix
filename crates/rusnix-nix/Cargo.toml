@@ -63,3 +63,7 @@ path = "../../examples/curl-nixpkg/main.rs"
 [[example]]
 name = "openssl-nixpkg"
 path = "../../examples/openssl-nixpkg/main.rs"
+
+[[example]]
+name = "composed-packages"
+path = "../../examples/composed-packages/main.rs"

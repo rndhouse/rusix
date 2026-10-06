@@ -7,7 +7,7 @@ use rusnix_ir::{
 };
 
 /// Describe the ordinary Nix package function, including dependent lazy defaults.
-pub(super) fn factory() -> PackageFunction {
+pub fn factory() -> PackageFunction {
     PackageFunction::from_function_attrs(ARGUMENTS.iter().copied(), |arguments| {
         let i = args::from_value(arguments);
         let host = &i.stdenv.host_platform;
