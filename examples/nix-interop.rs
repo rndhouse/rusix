@@ -3,6 +3,7 @@
 use rusnix_ir::{
     self as rusnix, Config, IntoConfig, IntoRusnixValue, RusnixValue,
     interop::{InputRef, ModuleRef, NixFunction, NixValue, Nixpkgs, OverlayRef, PackageRef},
+    nix_record,
     nixos::NixosModule,
 };
 
@@ -149,15 +150,12 @@ fn main() {
 
     // Mixed records cross the same opaque boundary; Nix owns the builder's schema.
     let pkgs = Nixpkgs::new();
-    let args = NixValue::record([
-        ("name", "example.conf".into()),
-        ("text", "workers = 4\n".into()),
-        ("executable", false.into()),
-        (
-            "passthru",
-            NixValue::record([("package", pkgs.get("hello").into())]),
-        ),
-    ]);
+    let args = nix_record! {
+        "name": "example.conf",
+        "text": "workers = 4\n",
+        "executable": false,
+        "passthru": nix_record! { "package": pkgs.get("hello") },
+    };
     let file = pkgs.pkgs_function("writeTextFile").call(args);
     let generated = rusnix_nix::compile(&FunctionResult { result: file }.into_config()).unwrap();
     println!("{}", generated.source);

@@ -8,6 +8,11 @@ The semantic reference is `pkgs/development/libraries/openssl/default.nix`
 and exports both a family factory and individually overridable package factories.
 `inputs.rs` describes the finite argument interface; `scripts.rs` preserves exact
 shell phase text using `nix_text!`. `main.rs` emits the family and default package.
+The complete argument view supplies `args::argument_names()` to both factories,
+including unused upstream parameters. Naming annotations cover exceptions such
+as `enableSSL2`; ordinary names use the default lowerCamelCase mapping.
+Fixed opaque records use `nix_record!`, with iterators retained for release families
+and dynamic target tables.
 
 All package policy is Rust authored. The backend remains the caller's nixpkgs
 library, fetchurl, stdenv.mkDerivation, outputs, wrappers, setup hooks and tests.
@@ -35,9 +40,11 @@ filesystem spelling. Metadata's source `position` is excluded because the packag
 is now authored in Rust. Neither exclusion changes or normalizes derivation recipes.
 
 ```rust
+use rusnix_ir::{interop::Nixpkgs, nix_record};
+
 let pkgs = Nixpkgs::new();
 let openssl = pkgs.call_package(
     &lowering::factory(model::Release::Preview),
-    NixValue::record([] as [(&str, NixValue); 0]),
+    nix_record! {},
 );
 ```

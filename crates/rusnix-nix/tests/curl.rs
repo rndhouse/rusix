@@ -105,7 +105,7 @@ fn all_real_recursive_passthru_test_recipes_match() {
 fn public_argument_names_and_required_defaults_match() {
     let arguments = compare("arguments", [("probe", "arguments".into())]);
     let arguments = arguments.as_object().unwrap();
-    assert_eq!(arguments.len(), inputs::ARGUMENTS.len());
+    assert_eq!(arguments.len(), inputs::args::argument_names().len());
     assert_eq!(
         arguments.values().filter(|value| **value == true).count(),
         18

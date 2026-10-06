@@ -17,6 +17,8 @@ lazily in the generated expression. No package factory or source recipe is copie
 per dependent edge. Each package's `mod.rs` exposes its ordinary Rust factory.
 
 ```rust
+use rusnix_ir::{interop::Nixpkgs, nix_record};
+
 let pkgs = Nixpkgs::new();
 let openssl = pkgs.call_package(&openssl::factory(openssl::model::Release::Preview), arguments());
 let curl = pkgs.call_package(
@@ -25,11 +27,11 @@ let curl = pkgs.call_package(
 );
 let git = pkgs.call_package(
     &git::factory(),
-    git::arguments().merge_attrs(NixValue::record([("openssl", openssl)])),
+    git::arguments().merge_attrs(nix_record! { "openssl": openssl }),
 );
 let mariadb = pkgs.call_package(
     &mariadb::factory(),
-    mariadb::model::Release::V1011.arguments().merge_attrs(NixValue::record([("curl", curl)])),
+    mariadb::model::Release::V1011.arguments().merge_attrs(nix_record! { "curl": curl }),
 );
 ```
 

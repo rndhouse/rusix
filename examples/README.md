@@ -86,6 +86,12 @@ read final values into Rust.
 `#[rusnix::args]` supplies the analogous finite view over an existing deferred Nix
 function argument record. Git and curl bind it in `inputs.rs` with `args::from_value`;
 navigation and leaf accessors remain symbolic and Nix owns actual argument types.
+All four package examples declare their complete argument views and use generated
+`args::argument_names()` for their native function interfaces. Defaults remain
+explicit deferred expressions in the factories. A partial view returns only its
+declared root names, so it cannot substitute for a complete package interface.
+Fixed opaque records use `nix_record!` to avoid tuple/conversion boilerplate;
+dynamic fields retain ordinary Rust iterators and `NixValue::record`.
 
 For local configuration, one inline module boundary supplies structural lowering:
 

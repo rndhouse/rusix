@@ -1,32 +1,28 @@
 //! Complete pinned client/server family; CMake and builders remain ordinary nixpkgs.
 use super::{
-    inputs::{ARGUMENTS, Inputs, args},
+    inputs::{Inputs, args},
     model::Release,
     scripts,
 };
 use rusnix_ir::{
     IntoRusnixValue,
     interop::{NixLibrary, NixValue, Nixpkgs, PackageFunction},
-    nix_text, package,
+    nix_record, nix_text, package,
 };
 
 pub fn factory() -> PackageFunction {
-    PackageFunction::from_function_attrs(ARGUMENTS.iter().copied(), |arguments| {
+    PackageFunction::from_function_attrs(args::argument_names().iter().copied(), |arguments| {
         let i = args::from_value(arguments);
-        let defaults = vec![
-            ("withStorageMroonga", true.into()),
-            ("withStorageRocks", true.into()),
-            ("withEmbedded", false.into()),
-            ("withNuma", false.into()),
-        ];
+        let defaults = defaults();
         let lib = NixLibrary::from_value(i.lib());
         let body = NixValue::function(|common| {
             let client = client(&i, &lib, &common);
             let server = server(&i, &lib, &common);
             NixValue::function(|server| {
-                server
-                    .clone()
-                    .merge_attrs(NixValue::record([("client", client), ("server", server)]))
+                server.clone().merge_attrs(nix_record! {
+                    "client": client,
+                    "server": server,
+                })
             })
             .call(server)
         })
@@ -41,16 +37,10 @@ pub fn family() -> NixValue {
     NixValue::function(|factory| {
         NixValue::record(Release::ALL.map(|release| {
             // Each call retains real callPackage's override and dependency-splicing semantics.
-            let selected =
-                PackageFunction::from_function_attrs(ARGUMENTS.iter().copied(), |arguments| {
-                    let defaults = vec![
-                        ("withStorageMroonga", true.into()),
-                        ("withStorageRocks", true.into()),
-                        ("withEmbedded", false.into()),
-                        ("withNuma", false.into()),
-                    ];
-                    (defaults, factory.clone().call(arguments))
-                });
+            let selected = PackageFunction::from_function_attrs(
+                args::argument_names().iter().copied(),
+                |arguments| (defaults(), factory.clone().call(arguments)),
+            );
             (
                 release.attribute(),
                 Nixpkgs::new().call_package(&selected, release.arguments()),
@@ -58,6 +48,15 @@ pub fn family() -> NixValue {
         }))
     })
     .call(factory.as_value())
+}
+
+fn defaults() -> Vec<(&'static str, NixValue)> {
+    vec![
+        ("withStorageMroonga", true.into()),
+        ("withStorageRocks", true.into()),
+        ("withEmbedded", false.into()),
+        ("withNuma", false.into()),
+    ]
 }
 
 #[track_caller]
@@ -212,16 +211,13 @@ fn common(i: &Inputs, lib: &NixLibrary) -> NixValue {
     .call(test_version);
     Common {
         version: i.version(),
-        src: i.fetchurl().call(NixValue::record([
-            (
-                "url",
-                nix_text!(
-                    "https://archive.mariadb.org/mariadb-{version}/source/mariadb-{version}.tar.gz",
-                    version = i.version()
-                ),
+        src: i.fetchurl().call(nix_record! {
+            "url": nix_text!(
+                "https://archive.mariadb.org/mariadb-{version}/source/mariadb-{version}.tar.gz",
+                version = i.version()
             ),
-            ("hash", i.hash()),
-        ])),
+            "hash": i.hash(),
+        }),
         outputs: vec!["out", "man"],
         native_build_inputs: native,
         build_inputs: inputs,
@@ -243,23 +239,17 @@ fn common(i: &Inputs, lib: &NixLibrary) -> NixValue {
                     .call(NixValue::list([i.less(), i.ncurses()])),
             ),
         ),
-        passthru: NixValue::record([("tests", tests)]),
-        meta: NixValue::record([
-            (
-                "description",
-                "Enhanced, drop-in replacement for MySQL".into(),
-            ),
-            ("homepage", "https://mariadb.org/".into()),
-            ("license", i.lib().select("licenses.gpl2Plus")),
-            (
-                "maintainers",
-                concat([
-                    NixValue::list([i.lib().select("maintainers.thoughtpolice")]),
-                    i.lib().select("teams.helsinki-systems.members"),
-                ]),
-            ),
-            ("platforms", i.lib().select("platforms.all")),
-        ]),
+        passthru: nix_record! { "tests": tests },
+        meta: nix_record! {
+            "description": "Enhanced, drop-in replacement for MySQL",
+            "homepage": "https://mariadb.org/",
+            "license": i.lib().select("licenses.gpl2Plus"),
+            "maintainers": concat([
+                NixValue::list([i.lib().select("maintainers.thoughtpolice")]),
+                i.lib().select("teams.helsinki-systems.members"),
+            ]),
+            "platforms": i.lib().select("platforms.all"),
+        },
     }
     .try_into_nix_value()
     .expect("fixed common MariaDB attributes")
@@ -268,45 +258,33 @@ fn common(i: &Inputs, lib: &NixLibrary) -> NixValue {
 fn client(i: &Inputs, lib: &NixLibrary, common: &NixValue) -> NixValue {
     i.stdenv()
         .select("mkDerivation")
-        .call(common.clone().merge_attrs(NixValue::record([
-            ("pname", "mariadb-client".into()),
-            (
-                "patches",
-                concat([
-                    common.clone().select("patches"),
-                    NixValue::list([file("cmake-plugin-includedir.patch")]),
+        .call(common.clone().merge_attrs(nix_record! {
+            "pname": "mariadb-client",
+            "patches": concat([
+                common.clone().select("patches"),
+                NixValue::list([file("cmake-plugin-includedir.patch")]),
+            ]),
+            "buildInputs": concat([
+                common.clone().select("buildInputs"),
+                lib.optionals(
+                    at_least(i, common.clone().select("version"), "10.7"),
+                    NixValue::list([i.fmt_8()]),
+                ),
+            ]),
+            "cmakeFlags": concat([
+                common.clone().select("cmakeFlags"),
+                NixValue::list([
+                    "-DPLUGIN_AUTH_PAM=NO".into(),
+                    "-DWITHOUT_SERVER=ON".into(),
+                    "-DWITH_WSREP=OFF".into(),
+                    "-DINSTALL_MYSQLSHAREDIR=share/mysql-client".into(),
                 ]),
-            ),
-            (
-                "buildInputs",
-                concat([
-                    common.clone().select("buildInputs"),
-                    lib.optionals(
-                        at_least(i, common.clone().select("version"), "10.7"),
-                        NixValue::list([i.fmt_8()]),
-                    ),
-                ]),
-            ),
-            (
-                "cmakeFlags",
-                concat([
-                    common.clone().select("cmakeFlags"),
-                    NixValue::list([
-                        "-DPLUGIN_AUTH_PAM=NO".into(),
-                        "-DWITHOUT_SERVER=ON".into(),
-                        "-DWITH_WSREP=OFF".into(),
-                        "-DINSTALL_MYSQLSHAREDIR=share/mysql-client".into(),
-                    ]),
-                ]),
-            ),
-            (
-                "postInstall",
-                NixValue::concat_text([
-                    common.clone().select("postInstall"),
-                    scripts::post_install_client(host(i, "extensions.sharedLibrary")),
-                ]),
-            ),
-        ])))
+            ]),
+            "postInstall": NixValue::concat_text([
+                common.clone().select("postInstall"),
+                scripts::post_install_client(host(i, "extensions.sharedLibrary")),
+            ]),
+        }))
 }
 
 fn server(i: &Inputs, lib: &NixLibrary, common: &NixValue) -> NixValue {
@@ -394,46 +372,32 @@ fn server(i: &Inputs, lib: &NixLibrary, common: &NixValue) -> NixValue {
     ]);
     i.stdenv()
         .select("mkDerivation")
-        .call(common.clone().merge_attrs(NixValue::record([
-            ("pname", "mariadb-server".into()),
-            (
-                "nativeBuildInputs",
-                concat([
-                    common.clone().select("nativeBuildInputs"),
-                    NixValue::list([i.bison(), i.boost().select("dev"), i.flex()]),
-                ]),
-            ),
-            ("buildInputs", inputs),
-            (
-                "propagatedBuildInputs",
-                lib.optional(i.with_numa(), i.numactl()),
-            ),
-            ("postPatch", scripts::post_patch_server()),
-            ("cmakeFlags", flags),
-            (
-                "preConfigure",
+        .call(common.clone().merge_attrs(nix_record! {
+            "pname": "mariadb-server",
+            "nativeBuildInputs": concat([
+                common.clone().select("nativeBuildInputs"),
+                NixValue::list([i.bison(), i.boost().select("dev"), i.flex()]),
+            ]),
+            "buildInputs": inputs,
+            "propagatedBuildInputs": lib.optional(i.with_numa(), i.numactl()),
+            "postPatch": scripts::post_patch_server(),
+            "cmakeFlags": flags,
+            "preConfigure":
                 lib.optional_text(!host(i, "isDarwin"), scripts::pre_configure()),
-            ),
-            (
-                "postInstall",
-                NixValue::concat_text([
-                    common.clone().select("postInstall"),
-                    scripts::post_install_server(),
-                    lib.optional_text(i.with_storage_mroonga(), scripts::install_mroonga()),
-                    lib.optional_text(
-                        both(
-                            !host(i, "isDarwin"),
-                            at_least(i, common.clone().select("version"), "10.4"),
-                        ),
-                        scripts::install_pam(),
+            "postInstall": NixValue::concat_text([
+                common.clone().select("postInstall"),
+                scripts::post_install_server(),
+                lib.optional_text(i.with_storage_mroonga(), scripts::install_mroonga()),
+                lib.optional_text(
+                    both(
+                        !host(i, "isDarwin"),
+                        at_least(i, common.clone().select("version"), "10.4"),
                     ),
-                ]),
-            ),
-            (
-                "CXXFLAGS",
-                lib.optional_text(host(i, "isi686"), "-fpermissive"),
-            ),
-        ])))
+                    scripts::install_pam(),
+                ),
+            ]),
+            "CXXFLAGS": lib.optional_text(host(i, "isi686"), "-fpermissive"),
+        }))
 }
 
 #[derive(IntoRusnixValue)]

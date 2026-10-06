@@ -296,6 +296,25 @@ fn expand_from(mut module: ItemMod, source: Source) -> syn::Result<TokenStream> 
     }
 
     let root = roots[0].item.ident.clone();
+    let argument_names = if matches!(source, Source::Arguments) {
+        let names = roots[0]
+            .item
+            .fields
+            .iter()
+            .map(|field| key(field, roots[0].naming))
+            .collect::<syn::Result<Vec<_>>>()?;
+
+        Some(quote!(
+            /// Mapped names of this view's direct root fields, in declaration order.
+            /// This describes the declared view only, not defaults or undeclared arguments.
+            /// Use it for a native function interface when the view declares every argument.
+            pub const fn argument_names() -> &'static [&'static str] {
+                &[#(#names),*]
+            }
+        ))
+    } else {
+        None
+    };
     let mut graph = BTreeMap::new();
 
     for view in &views {
@@ -526,6 +545,8 @@ fn expand_from(mut module: ItemMod, source: Source) -> syn::Result<TokenStream> 
             #(#generated)*
 
             #constructor
+
+            #argument_names
         }
     ))
 }

@@ -12,9 +12,10 @@ pub mod git;
 pub mod mariadb;
 
 use rusnix_ir::interop::{NixValue, Nixpkgs};
+use rusnix_ir::nix_record;
 
 pub fn arguments() -> NixValue {
-    NixValue::record([] as [(&str, NixValue); 0])
+    nix_record! {}
 }
 
 pub fn graph() -> NixValue {
@@ -37,15 +38,15 @@ pub fn with_openssl(openssl: NixValue) -> NixValue {
 
 /// Match the normal pkgs.curl flavour selected by MariaDB, rather than curlMinimal.
 pub fn curl_arguments(pkgs: &Nixpkgs, openssl: NixValue) -> NixValue {
-    NixValue::record([
-        ("openssl", openssl),
-        ("idnSupport", true.into()),
-        ("pslSupport", true.into()),
-        ("zstdSupport", true.into()),
-    ])
+    nix_record! {
+        "openssl": openssl,
+        "idnSupport": true,
+        "pslSupport": true,
+        "zstdSupport": true,
+    }
     .merge_attrs(NixValue::if_else(
         !pkgs.value("stdenv.hostPlatform.isStatic"),
-        NixValue::record([("brotliSupport", true.into())]),
+        nix_record! { "brotliSupport": true },
         arguments(),
     ))
 }
@@ -62,19 +63,19 @@ pub fn compose(
         let curl = make_curl(&pkgs, &openssl);
         let git = pkgs.call_package(
             &git::factory(),
-            git::arguments().merge_attrs(NixValue::record([("openssl", openssl.clone())])),
+            git::arguments().merge_attrs(nix_record! { "openssl": openssl.clone() }),
         );
         NixValue::function(|curl| {
             let mariadb = pkgs.call_package(
                 &mariadb::factory(),
-                mariadb_arguments.merge_attrs(NixValue::record([("curl", curl.clone())])),
+                mariadb_arguments.merge_attrs(nix_record! { "curl": curl.clone() }),
             );
-            NixValue::record([
-                ("openssl", openssl),
-                ("curl", curl),
-                ("git", git),
-                ("mariadb", mariadb),
-            ])
+            nix_record! {
+                "openssl": openssl,
+                "curl": curl,
+                "git": git,
+                "mariadb": mariadb,
+            }
         })
         .call(curl)
     })

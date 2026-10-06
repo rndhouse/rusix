@@ -5,6 +5,7 @@
 use rusnix_ir::{
     self as rusnix,
     interop::{NixValue, Nixpkgs},
+    nix_record,
     nixos::{NixosModule, OptionDecl, OptionType},
 };
 
@@ -148,7 +149,7 @@ fn users() -> OptionType {
         ensure_db_ownership: OptionDecl::new(OptionType::named("bool"))
             .default(false).description(docs::OWNERSHIP),
         ensure_clauses: OptionDecl::new(clauses())
-            .default(NixValue::record([] as [(&str, NixValue); 0]))
+            .default(nix_record! {})
             .default_text(markdown("The default, `null`, means that the user created will have the default permissions assigned by PostgreSQL. Subsequent server starts will not set or unset the clause, so imperative changes are preserved.\n"))
             .example(literal("{\n  superuser = true;\n  createrole = true;\n  createdb = true;\n}\n"))
             .description(docs::ENSURE_CLAUSES),
@@ -200,7 +201,7 @@ pub(crate) fn module() -> NixosModule {
     let package = Nixpkgs::new().function("mkPackageOption").apply([
         Nixpkgs::from_module().as_value(),
         "postgresql".into(),
-        NixValue::record([("example", "postgresql_15".into())]),
+        nix_record! { "example": "postgresql_15" },
     ]);
 
     let module = NixosModule::empty().declare(declarations::Root {
@@ -243,7 +244,7 @@ pub(crate) fn module() -> NixosModule {
                     .example(literal("ps: with ps; [ postgis pg_repack ]"))
                     .description(docs::EXTRA_PLUGINS),
                 settings: OptionDecl::new(settings())
-                    .default(NixValue::record([] as [(&str, NixValue); 0]))
+                    .default(nix_record! {})
                     .example(literal("{\n  log_connections = true;\n  log_statement = \"all\";\n  logging_collector = true;\n  log_disconnections = true;\n  log_destination = lib.mkForce \"syslog\";\n}\n"))
                     .description(docs::SETTINGS),
                 recovery_config: OptionDecl::new(OptionType::named("lines").null_or())

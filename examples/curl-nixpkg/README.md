@@ -7,6 +7,11 @@ nixpkgs builders. Its reference is **nixpkgs
 227 lines, curl **8.11.0**, 53 arguments (35 required, 18 with defaults).
 The checked `vendor/nixpkgs` submodule supplies the reference offline.
 
+The complete `#[rusnix::args]` view supplies `args::argument_names()` to the
+factory, so public argument names are declared once. Defaults remain explicit
+deferred expressions. Fixed opaque records use `nix_record!`; dynamic feature
+arguments remain ordinary Rust collections.
+
 - `model.rs` offers a small optional Rust authoring surface. `TlsBackend` makes a
   concrete choice of at most one backend; it does not replace the public Nix API.
 - `inputs.rs` declares the finite external interface with `#[rusnix::args]`.

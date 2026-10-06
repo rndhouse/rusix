@@ -7,6 +7,25 @@ use rusnix_nix::{Generated, NixSession, Provenance, compile};
 use std::fs;
 
 #[rusnix::args]
+#[allow(dead_code)]
+mod interface {
+    use rusnix_ir::interop::NixValue;
+
+    #[rusnix(root, rename_all = "PascalCase")]
+    struct Inputs {
+        name: String,
+        label: String,
+        #[rusnix(rename = "pkg-config")]
+        pkg_config: NixValue,
+        platform: Platform,
+    }
+
+    struct Platform {
+        system: String,
+    }
+}
+
+#[rusnix::args]
 mod args {
     use rusnix_ir::interop::NixValue;
     use std::collections::{BTreeMap, HashMap};
@@ -78,6 +97,56 @@ fn evaluate(value: NixValue) -> serde_json::Value {
         .unwrap()
         .value["result"]
         .clone()
+}
+
+#[test]
+fn declared_argument_names_preserve_mapping_and_native_dependent_defaults() {
+    assert_eq!(
+        args::argument_names(),
+        [
+            "platform",
+            "second",
+            "package",
+            "names",
+            "optional",
+            "values",
+            "hashValues",
+            "literal.node ${key}\"",
+        ]
+    );
+    assert_eq!(
+        interface::argument_names(),
+        ["Name", "Label", "pkg-config", "Platform"]
+    );
+
+    let factory = rusnix_ir::interop::PackageFunction::from_function_attrs(
+        interface::argument_names().iter().copied(),
+        |value| {
+            let input = interface::from_value(value);
+
+            (vec![("Label", input.name().into())], input.label().into())
+        },
+    );
+    assert_eq!(
+        evaluate(NixValue::builtin("functionArgs").call(factory.as_value())),
+        serde_json::json!({"Name": false, "Label": true, "pkg-config": false, "Platform": false})
+    );
+    let arguments = rusnix_ir::nix_record! {
+        "Name": "Git",
+        "pkg-config": Expr::int(1).divide(Expr::int(0)),
+        "Platform": NixValue::record([] as [(&str, NixValue); 0]),
+    };
+    assert_eq!(evaluate(factory.as_value().call(arguments.clone())), "Git");
+    assert_eq!(
+        evaluate(
+            factory
+                .as_value()
+                .call(arguments.merge_attrs(rusnix_ir::nix_record! {
+                    "Label": "explicit",
+                }))
+        ),
+        "explicit"
+    );
 }
 
 #[test]

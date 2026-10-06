@@ -1,14 +1,14 @@
 //! Reproduces curlMinimal's complete pinned package recipe with real nixpkgs builders.
-use super::inputs::{ARGUMENTS, Inputs, args};
+use super::inputs::{Inputs, args};
 use rusnix_ir::{
     IntoRusnixValue,
     interop::{NixLibrary, NixValue, PackageFunction},
-    nix_text, package,
+    nix_record, nix_text, package,
 };
 
 /// Describe the ordinary Nix package function, including dependent lazy defaults.
 pub fn factory() -> PackageFunction {
-    PackageFunction::from_function_attrs(ARGUMENTS.iter().copied(), |arguments| {
+    PackageFunction::from_function_attrs(args::argument_names().iter().copied(), |arguments| {
         let i = args::from_value(arguments);
         let host = &i.stdenv.host_platform;
         let defaults = vec![
@@ -153,23 +153,20 @@ fn attributes(i: &Inputs, final_attrs: NixValue) -> NixValue {
 
     // curl bootstraps fetchurl. Source/patch handling must not introduce fetchpatch;
     // that argument is used only by the existing lazy passthru test graph.
-    let source = i.fetchurl().call(NixValue::record([
-        (
-            "urls",
-            NixValue::list([
-                nix_text!(
-                    "https://curl.haxx.se/download/curl-{version}.tar.xz",
-                    version = version.clone(),
-                ),
-                nix_text!(
-                    "https://github.com/curl/curl/releases/download/curl-{tag}/curl-{version}.tar.xz",
-                    tag = release_tag,
-                    version = version.clone(),
-                ),
-            ]),
-        ),
-        ("hash", "sha256-21nPDWccpuf1wsXsF3CEozp54EyX5xzxg6XN6iNQVOs=".into()),
-    ]));
+    let source = i.fetchurl().call(nix_record! {
+        "urls": NixValue::list([
+            nix_text!(
+                "https://curl.haxx.se/download/curl-{version}.tar.xz",
+                version = version.clone(),
+            ),
+            nix_text!(
+                "https://github.com/curl/curl/releases/download/curl-{tag}/curl-{version}.tar.xz",
+                tag = release_tag,
+                version = version.clone(),
+            ),
+        ]),
+        "hash": "sha256-21nPDWccpuf1wsXsF3CEozp54EyX5xzxg6XN6iNQVOs=",
+    });
 
     Derivation {
         pname: "curl",
@@ -191,7 +188,7 @@ fn attributes(i: &Inputs, final_attrs: NixValue) -> NixValue {
                 .is_darwin()
                 .and(i.stdenv.host_platform.is_static())
                 .into(),
-            NixValue::record([("NIX_LDFLAGS", "-liconv".into())]),
+            nix_record! { "NIX_LDFLAGS": "-liconv" },
         ]),
         native_build_inputs: NixValue::list([i.pkg_config(), i.perl()]),
         propagated_build_inputs: dependencies(i, &lib),
@@ -435,7 +432,7 @@ fn post_install(i: &Inputs, lib: &NixLibrary) -> NixValue {
 fn use_this_curl(package: NixValue, curl: &NixValue) -> NixValue {
     package
         .select("override")
-        .call(NixValue::record([("curl", curl.clone())]))
+        .call(nix_record! { "curl": curl.clone() })
 }
 
 /// Preserve the recursive test graph; requesting these values constructs recipes only.
@@ -445,47 +442,35 @@ fn passthru(i: &Inputs, final_attrs: NixValue) -> NixValue {
         .clone()
         .select("overrideAttrs")
         .call(NixValue::function(|_| {
-            NixValue::record([("doCheck", true.into())])
+            nix_record! { "doCheck": true }
         }));
     let fetchpatch = i
         .fetchpatch()
         .select("override")
-        .call(NixValue::record([(
-            "fetchurl",
-            use_this_curl(i.fetchurl(), &curl),
-        )]))
-        .merge_attrs(NixValue::record([("version", 1_i64.into())]));
+        .call(nix_record! { "fetchurl": use_this_curl(i.fetchurl(), &curl) })
+        .merge_attrs(nix_record! { "version": 1_i64 });
     let fetchpatch_test = i
         .tests
         .fetchpatch
         .simple()
         .select("override")
-        .call(NixValue::record([("fetchpatch", fetchpatch)]));
+        .call(nix_record! { "fetchpatch": fetchpatch });
 
-    NixValue::record([
-        ("opensslSupport", i.openssl_support().into()),
-        ("openssl", i.openssl()),
-        (
-            "tests",
-            NixValue::record([
-                ("withCheck", with_check),
-                ("fetchpatch", fetchpatch_test),
-                ("curlpp", use_this_curl(i.curlpp(), &curl)),
-                ("coeurl", use_this_curl(i.coeurl(), &curl)),
-                (
-                    "haskell-curl",
-                    use_this_curl(i.haskell_packages.curl(), &curl),
-                ),
-                (
-                    "ocaml-curly",
-                    use_this_curl(i.ocaml_packages.curly(), &curl),
-                ),
-                ("pycurl", use_this_curl(i.python3.pkgs.pycurl(), &curl)),
-                ("php-curl", use_this_curl(i.php_extensions.curl(), &curl)),
-                ("nginx-http3", i.nixos_tests.nginx_http3()),
-                ("pkg-config", i.testers.test_meta_pkg_config().call(curl)),
-                ("static", i.pkgs_static.curl()),
-            ]),
-        ),
-    ])
+    nix_record! {
+        "opensslSupport": i.openssl_support(),
+        "openssl": i.openssl(),
+        "tests": nix_record! {
+            "withCheck": with_check,
+            "fetchpatch": fetchpatch_test,
+            "curlpp": use_this_curl(i.curlpp(), &curl),
+            "coeurl": use_this_curl(i.coeurl(), &curl),
+            "haskell-curl": use_this_curl(i.haskell_packages.curl(), &curl),
+            "ocaml-curly": use_this_curl(i.ocaml_packages.curly(), &curl),
+            "pycurl": use_this_curl(i.python3.pkgs.pycurl(), &curl),
+            "php-curl": use_this_curl(i.php_extensions.curl(), &curl),
+            "nginx-http3": i.nixos_tests.nginx_http3(),
+            "pkg-config": i.testers.test_meta_pkg_config().call(curl),
+            "static": i.pkgs_static.curl(),
+        },
+    }
 }

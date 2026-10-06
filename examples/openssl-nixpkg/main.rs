@@ -7,15 +7,11 @@ mod model;
 
 mod scripts;
 
-use rusnix_ir::{
-    Config,
-    interop::{NixValue, Nixpkgs},
-};
+use rusnix_ir::{Config, interop::Nixpkgs, nix_record};
 
 fn main() {
     let factory = lowering::factory(model::Release::Preview);
-    let openssl =
-        Nixpkgs::new().call_package(&factory, NixValue::record([] as [(&str, NixValue); 0]));
+    let openssl = Nixpkgs::new().call_package(&factory, nix_record! {});
     let generated = rusnix_nix::compile(
         &Config::new()
             .set("factory", factory)

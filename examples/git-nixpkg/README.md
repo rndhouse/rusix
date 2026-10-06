@@ -27,12 +27,20 @@ reconstructing the complete argument record. Declared subtrees
 marked `#[rusnix(value)]` expose `as_value()` when the whole opaque record is
 needed. Naming follows the same rules as `#[rusnix::options]`. Generic condition/list
 helpers use `NixLibrary::from_value(inputs.lib.as_value())`, preserving the
-caller's library overrides. Feature checks use `throw_if_not`; their order remains
-explicit in the package factory. Other library functions use the visibly dynamic
+caller's library overrides. Feature checks use native `NixValue::assert`; their
+order remains explicit in the package factory, and an overridden `lib.throwIfNot`
+cannot bypass them. Other library functions use the visibly dynamic
 `lib.as_value().clone().select(...).apply(...)` escape hatch.
 Boolean `!` and `Expr<bool>::and` stay symbolic and
-independent of library overrides. Only the local native-build predicate and pinned
-Git asset paths remain as Inputs helpers.
+independent of library overrides. Implication and disjunction use native deferred
+conditionals, and passthru merging uses `merge_attrs`, so replacing `lib.any` or
+`lib.mergeAttrs` does not change those native operations. Pinned Git asset paths
+remain an Inputs helper.
+
+The complete `Inputs` declaration also supplies `args::argument_names()` to the
+factory; there is no separate list of its 57 parameters. Defaults remain explicit
+and lazy in the factory. Fixed opaque records use `nix_record!`, while dynamic
+feature argument lists remain ordinary Rust collections.
 
 The generated artifact exposes `factory` and `git`. Ordinary Nix can pass `factory`
 to `pkgs.callPackage` with the same explicit framework/Perl-library arguments used
@@ -107,13 +115,14 @@ package internals or attribute every upstream failure to an exact Rust field.
 
 The [runtime diagnostic audit](../../docs/runtime-diagnostics.md) keeps opaque-call
 boundaries while mapping ordinary symbolic operations through source spans. It
-retains 301 runtime contexts. The [pretty-printer](../../docs/generated-nix-layout.md)
+records the earlier runtime-context measurements. The [pretty-printer](../../docs/generated-nix-layout.md)
 uses a 100-character target, formatting functions, dependency lists and fields
 while recording their source spans. Normal output has no fine-grained origin
-comments: 133,197 bytes and 2,136 lines. For manual inspection,
+comments. For manual inspection,
 `rusnix_nix::compile_with_options` accepts `RenderOptions { origin_comments: true }`,
-producing 293,239 bytes and 4,967 lines with all 2,337 origin comments. Both modes
-retain the same 619 mapped origins; each source map has offsets for its own text.
+adding origin comments. Both modes retain the same mapped origins; each source
+map has offsets for its own text. Historical sizes are recorded in the renderer
+audits and vary as the authored recipe changes.
 [Precedence-aware rendering](../../docs/nix-expression-rendering.md) removes blanket
 application/selection parentheses while preserving explicit AST groups.
 Quoted shell fragments remain unchanged and can exceed the target width.

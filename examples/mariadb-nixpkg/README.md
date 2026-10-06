@@ -12,6 +12,11 @@ shared common record, client/server refinements, dependencies, CMake flags,
 platform and cross behavior, storage options, tests and metadata. `scripts.rs`
 preserves exact shell phase text and interpolation contexts. `main.rs` emits the
 factory, family and default package; `mod.rs` exposes the reusable factory.
+The complete argument view supplies `args::argument_names()` to the factory and
+family forwarders. The four lazy defaults are declared once and shared by both
+interfaces. Only exceptional names such as `CoreServices`, `pkg-config`,
+`linux-pam` and `fmt_8` need explicit naming annotations. Fixed common/client/server
+refinements use `nix_record!`; dynamic fields retain ordinary Rust iteration.
 
 The common attributes are shared lazily using an existing NixValue callback
 binding. This is ordinary Rust composition and Nix interop: no new derivation,

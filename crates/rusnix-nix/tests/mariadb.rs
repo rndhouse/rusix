@@ -49,7 +49,10 @@ fn default_client_server_recipes_and_generic_interface_match_every_release() {
         let value = compare("default", release, []);
         assert_eq!(value["server"]["version"], release.version());
         let args = compare("arguments", release, [("probe", "arguments".into())]);
-        assert_eq!(args.as_object().unwrap().len(), inputs::ARGUMENTS.len());
+        assert_eq!(
+            args.as_object().unwrap().len(),
+            inputs::args::argument_names().len()
+        );
         assert_eq!(
             args.as_object()
                 .unwrap()

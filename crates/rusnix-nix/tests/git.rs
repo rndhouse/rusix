@@ -178,6 +178,8 @@ fn generated_git_contexts_cover_boundaries_not_routine_expression_structure() {
         let purpose = &span.origin.purpose;
         assert!(
             purpose == "opaque Nix function call"
+                // Native union can reject an opaque operand supplied by the caller.
+                || purpose == "Nix attribute-set union"
                 || purpose.starts_with("nixpkgs lib function lookup ")
                 || purpose.starts_with("nixpkgs function lookup ")
                 || purpose.starts_with("nixpkgs package lookup "),
@@ -213,6 +215,71 @@ fn caller_library_all_override_does_not_change_native_boolean_decisions() {
         "caller-library-override",
         [("features", NixValue::record(fields))],
     );
+}
+
+#[test]
+fn caller_library_any_and_merge_overrides_do_not_change_native_operations() {
+    let library = Nixpkgs::new().function("recursiveUpdate").apply([
+        Nixpkgs::new().value("lib"),
+        rusnix_ir::nix_record! {
+            "any": NixValue::function(|_| NixValue::function(|_| false.into())),
+            "mergeAttrs": NixValue::function(|_| NixValue::function(|_| rusnix_ir::nix_record! {})),
+        },
+    ]);
+
+    for system in ["x86_64-linux", "aarch64-darwin"] {
+        compare(
+            &format!("caller-native-operations-{system}"),
+            [
+                ("localSystem", system.into()),
+                (
+                    "features",
+                    rusnix_ir::nix_record! { "lib": library.clone() },
+                ),
+            ],
+        );
+    }
+}
+
+#[test]
+fn native_assertions_do_not_use_an_overridden_throw_if_not() {
+    let bypass = NixValue::function(|_| NixValue::function(|_| NixValue::function(|value| value)));
+    let library = Nixpkgs::new().function("recursiveUpdate").apply([
+        Nixpkgs::new().value("lib"),
+        rusnix_ir::nix_record! { "throwIfNot": bypass },
+    ]);
+    let session = session().lock().unwrap_or_else(|p| p.into_inner());
+
+    for (fields, feature) in [
+        (vec![("osxkeychainSupport", true)], "osxkeychainSupport"),
+        (
+            vec![("perlSupport", false), ("sendEmailSupport", true)],
+            "sendEmailSupport",
+        ),
+        (
+            vec![("perlSupport", false), ("svnSupport", true)],
+            "svnSupport",
+        ),
+    ] {
+        let features =
+            features(fields).merge_attrs(rusnix_ir::nix_record! { "lib": library.clone() });
+
+        for side in ["upstream", "candidate"] {
+            let generated = artifact([("features", features.clone()), ("project", side.into())]);
+            let error = session.evaluate_interop(&generated).unwrap_err();
+            assert!(error.reason.contains("assertion"), "{}", error.reason);
+            assert!(error.reason.contains(feature), "{}", error.reason);
+            assert!(!error.raw_nix.is_empty());
+            if side == "candidate" {
+                assert!(error.origins.iter().any(|origin| {
+                    origin.origin.as_ref().is_some_and(|origin| {
+                        origin.file.ends_with("examples/git-nixpkg/lowering.rs")
+                            && origin.purpose == "Nix expression assertion"
+                    })
+                }));
+            }
+        }
+    }
 }
 
 fn features(fields: impl IntoIterator<Item = (&'static str, bool)>) -> NixValue {

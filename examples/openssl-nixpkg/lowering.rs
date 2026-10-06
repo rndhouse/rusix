@@ -1,18 +1,18 @@
 //! Complete OpenSSL family policy; nixpkgs retains fetchers, stdenv and overrides.
 use super::{
-    inputs::{ARGUMENTS, Inputs, args},
+    inputs::{Inputs, args},
     model::Release,
     scripts,
 };
 use rusnix_ir::{
     IntoRusnixValue,
     interop::{NixLibrary, NixValue, Nixpkgs, PackageFunction},
-    nix_text, package,
+    nix_record, nix_text, package,
 };
 
 /// The default nixpkgs OpenSSL is the 3.3 preview release at this pin.
 pub fn factory(release: Release) -> PackageFunction {
-    PackageFunction::from_function_attrs(ARGUMENTS.iter().copied(), |arguments| {
+    PackageFunction::from_function_attrs(args::argument_names().iter().copied(), |arguments| {
         let i = args::from_value(arguments);
         let defaults = defaults(&i);
         (defaults, common(&i, release))
@@ -21,7 +21,7 @@ pub fn factory(release: Release) -> PackageFunction {
 
 /// Preserve upstream's multi-result family interface without duplicating recipe policy.
 pub fn family_factory() -> PackageFunction {
-    PackageFunction::from_function_attrs(ARGUMENTS.iter().copied(), |arguments| {
+    PackageFunction::from_function_attrs(args::argument_names().iter().copied(), |arguments| {
         let i = args::from_value(arguments);
         (
             defaults(&i),
@@ -95,8 +95,12 @@ fn common(i: &Inputs, release: Release) -> NixValue {
         }),
     ));
     let extra_meta = match release {
-        Release::Legacy => NixValue::record([("knownVulnerabilities", NixValue::list(["OpenSSL 1.1 is reaching its end of life on 2023/09/11 and cannot be supported through the NixOS 23.11 release cycle. https://www.openssl.org/blog/blog/2023/03/28/1.1.1-EOL/".into()]))]),
-        _ => NixValue::record([("license", i.lib().select("licenses.asl20"))]),
+        Release::Legacy => nix_record! {
+            "knownVulnerabilities": NixValue::list([
+                "OpenSSL 1.1 is reaching its end of life on 2023/09/11 and cannot be supported through the NixOS 23.11 release cycle. https://www.openssl.org/blog/blog/2023/03/28/1.1.1-EOL/".into(),
+            ]),
+        },
+        _ => nix_record! { "license": i.lib().select("licenses.asl20") },
     };
     // Upstream's version/hash are lexically captured by common, not finalAttrs.
     i.stdenv()
@@ -138,10 +142,21 @@ fn attributes(
         NixValue::list(["_".into()]),
         version.clone(),
     ]);
-    let source = i.fetchurl().call(NixValue::record([
-        ("url", NixValue::if_else(old, nix_text!("https://github.com/openssl/openssl/releases/download/OpenSSL_{fixed}/openssl-{version}.tar.gz", fixed = fixed, version = version.clone()), nix_text!("https://github.com/openssl/openssl/releases/download/openssl-{version}/openssl-{version}.tar.gz", version = version.clone()))),
-        ("hash", hash),
-    ]));
+    let source = i.fetchurl().call(nix_record! {
+        "url": NixValue::if_else(
+            old,
+            nix_text!(
+                "https://github.com/openssl/openssl/releases/download/OpenSSL_{fixed}/openssl-{version}.tar.gz",
+                fixed = fixed,
+                version = version.clone(),
+            ),
+            nix_text!(
+                "https://github.com/openssl/openssl/releases/download/openssl-{version}/openssl-{version}.tar.gz",
+                version = version.clone(),
+            ),
+        ),
+        "hash": hash,
+    });
     let flags = concat([
         NixValue::list([
             "shared".into(),
@@ -250,43 +265,31 @@ fn attributes(
             ),
             lib.optional_text(at_least(lib, &version, "3.3.0"), scripts::fixup_cmake()),
         ]),
-        passthru: NixValue::record([(
-            "tests",
-            NixValue::record([(
-                "pkg-config",
-                i.testers()
+        passthru: nix_record! {
+            "tests": nix_record! {
+                "pkg-config": i.testers()
                     .select("testMetaPkgConfig")
                     .call(final_attrs.select("finalPackage")),
-            )]),
-        )]),
-        meta: NixValue::record([
-            ("homepage", "https://www.openssl.org/".into()),
-            (
-                "changelog",
-                nix_text!(
-                    "https://github.com/openssl/openssl/blob/openssl-{version}/CHANGES.md",
-                    version = version
-                ),
+            },
+        },
+        meta: nix_record! {
+            "homepage": "https://www.openssl.org/",
+            "changelog": nix_text!(
+                "https://github.com/openssl/openssl/blob/openssl-{version}/CHANGES.md",
+                version = version,
             ),
-            (
-                "description",
-                "Cryptographic library that implements the SSL and TLS protocols".into(),
-            ),
-            ("license", i.lib().select("licenses.openssl")),
-            ("mainProgram", "openssl".into()),
-            (
-                "maintainers",
-                concat([
-                    NixValue::list([i.lib().select("maintainers.thillux")]),
-                    i.lib().select("teams.stridtech.members"),
-                ]),
-            ),
-            (
-                "pkgConfigModules",
-                NixValue::list(["libcrypto".into(), "libssl".into(), "openssl".into()]),
-            ),
-            ("platforms", i.lib().select("platforms.all")),
-        ])
+            "description": "Cryptographic library that implements the SSL and TLS protocols",
+            "license": i.lib().select("licenses.openssl"),
+            "mainProgram": "openssl",
+            "maintainers": concat([
+                NixValue::list([i.lib().select("maintainers.thillux")]),
+                i.lib().select("teams.stridtech.members"),
+            ]),
+            "pkgConfigModules": NixValue::list([
+                "libcrypto".into(), "libssl".into(), "openssl".into(),
+            ]),
+            "platforms": i.lib().select("platforms.all"),
+        }
         .merge_attrs(extra_meta),
     }
     .try_into_nix_value()

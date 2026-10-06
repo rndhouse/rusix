@@ -1,5 +1,6 @@
 //! The four pinned release variants share the same Rust recipe.
 use rusnix_ir::interop::{NixValue, Nixpkgs};
+use rusnix_ir::nix_record;
 
 #[derive(Clone, Copy, Debug)]
 pub enum Release {
@@ -40,13 +41,11 @@ impl Release {
     }
 
     pub fn arguments(self) -> NixValue {
-        NixValue::record([
-            ("version", self.version().into()),
-            ("hash", self.hash().into()),
-            (
-                "CoreServices",
-                Nixpkgs::new().value("darwin.apple_sdk.frameworks.CoreServices"),
-            ),
-        ])
+        nix_record! {
+            "version": self.version(),
+            "hash": self.hash(),
+            "CoreServices": Nixpkgs::new()
+                .value("darwin.apple_sdk.frameworks.CoreServices"),
+        }
     }
 }

@@ -1126,6 +1126,13 @@ or validates the external function's schema. Roots have no dynamic traversal or
 whole-root accessor; retain the raw NixValue for advanced access. External aliases
 and reusable views use explicit lower-level selection rather than source inspection.
 
+Generated `args::argument_names()` returns the mapped names of the root's direct
+fields in declaration order. The Git, curl, OpenSSL and MariaDB examples declare
+complete public interfaces and pass these names to `from_function_attrs`, avoiding
+duplicate argument-name lists. Partial views return only the fields they declare;
+they do not discover undeclared arguments. Defaults and requiredness remain
+explicit in the native function builder.
+
 The [Git argument declaration](examples/git-nixpkg/inputs.rs) exercises this API without
 changing defaults, `functionArgs`, `callPackage`, `.override` or `.overrideAttrs`.
 The [argument-view tests](crates/rusnix-nix/tests/args.rs) verify literal path keys,

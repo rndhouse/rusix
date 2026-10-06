@@ -78,11 +78,11 @@ impl IntoConfig for Postgresql {
 }
 
 fn role_value(role: Role, owns_database: bool) -> NixValue {
-    NixValue::record([
-        ("name", role.name.into()),
-        ("ensureDBOwnership", owns_database.into()),
-        ("ensureClauses", role_clauses(role.clauses)),
-    ])
+    record! {
+        "name": role.name,
+        "ensureDBOwnership": owns_database,
+        "ensureClauses": role_clauses(role.clauses),
+    }
 }
 
 fn role_clauses(clauses: RoleClauses) -> NixValue {
@@ -638,19 +638,13 @@ fn service_config() -> NixValue {
             false,
             true,
         )),
-        NixValue::record([
-            (
-                "StateDirectory",
-                nix_text!(
-                    "postgresql postgresql/{schema}",
-                    schema = pg.package().select("psqlSchema"),
-                ),
+        record! {
+            "StateDirectory": nix_text!(
+                "postgresql postgresql/{schema}",
+                schema = pg.package().select("psqlSchema"),
             ),
-            (
-                "StateDirectoryMode",
-                NixValue::if_else(group_access, "0750", "0700"),
-            ),
-        ])
+            "StateDirectoryMode": NixValue::if_else(group_access, "0750", "0700"),
+        }
         .when(data.equals(standard_data)),
     ])
 }
@@ -677,31 +671,20 @@ fn settings() -> NixValue {
     let pg = options::root().services.postgresql;
 
     // PostgreSQL owns this open namespace, including its literal snake_case keys.
-    NixValue::record([
-        (
-            "hba_file",
-            Nixpkgs::from_module()
-                .pkgs_function("writeText")
-                .apply(["pg_hba.conf".into(), pg.authentication().into()])
-                .to_text(),
-        ),
-        (
-            "ident_file",
-            Nixpkgs::from_module()
-                .pkgs_function("writeText")
-                .apply(["pg_ident.conf".into(), pg.ident_map().into()])
-                .to_text(),
-        ),
-        ("log_destination", "stderr".into()),
-        (
-            "listen_addresses",
-            NixValue::if_else(pg.enable_tcpip(), "*", "localhost"),
-        ),
-        (
-            "jit",
-            NixValue::if_else(pg.enable_jit(), "on", "off").priority(DefinitionPriority::Default),
-        ),
-    ])
+    record! {
+        "hba_file": Nixpkgs::from_module()
+            .pkgs_function("writeText")
+            .apply(["pg_hba.conf".into(), pg.authentication().into()])
+            .to_text(),
+        "ident_file": Nixpkgs::from_module()
+            .pkgs_function("writeText")
+            .apply(["pg_ident.conf".into(), pg.ident_map().into()])
+            .to_text(),
+        "log_destination": "stderr",
+        "listen_addresses": NixValue::if_else(pg.enable_tcpip(), "*", "localhost"),
+        "jit": NixValue::if_else(pg.enable_jit(), "on", "off")
+            .priority(DefinitionPriority::Default),
+    }
 }
 
 fn checks() -> NixValue {
@@ -858,9 +841,7 @@ mod config {
             users: guarded(opaque(UserDefinitions {
                 users: record! { "postgres": postgres_user },
                 groups: record! {
-                    "postgres": record! {
-                        "gid": options::root().ids.gids.postgres(),
-                    },
+                    "postgres": record! { "gid": options::root().ids.gids.postgres() },
                 },
             })),
             environment: guarded(opaque(Environment {
@@ -868,7 +849,9 @@ mod config {
                 paths_to_link: vec!["/share/postgresql"],
             })),
             system: guarded(record! { "checks": checks() }),
-            systemd: guarded(record! { "services": record! { "postgresql": service() } }),
+            systemd: guarded(record! {
+                "services": record! { "postgresql": service() },
+            }),
         }
     }
 }

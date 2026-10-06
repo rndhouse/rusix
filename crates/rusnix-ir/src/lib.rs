@@ -150,6 +150,11 @@ pub use rusnix_derive::options;
 /// them. Accessor calls record their own Rust locations. External aliases and
 /// view types are not inspected; retain the raw NixValue for dynamic selections.
 /// Roots do not expose whole-value access or arbitrary field traversal.
+/// Generated `argument_names()` returns the mapped names of the root's direct
+/// fields in declaration order. When the view declares the complete public
+/// interface, pass these names to [`interop::PackageFunction::from_function_attrs`]
+/// instead of maintaining a separate name list. Partial views list only their
+/// declared fields; defaults and requiredness still belong to the function builder.
 pub use rusnix_derive::args;
 
 #[doc(hidden)]

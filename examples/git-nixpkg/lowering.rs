@@ -1,18 +1,16 @@
 //! Reproduces the pinned Git package recipe using real nixpkgs builders and helpers.
 //! Helpers construct deferred values and shell scripts; they never execute build commands in Rust.
-use super::inputs::{ARGUMENTS, Inputs, args};
+use super::inputs::{Inputs, args};
 use rusnix_ir::{
     Expr, IntoRusnixValue,
     interop::{NixLibrary, NixValue, PackageFunction},
-    nix_text, package,
+    nix_record, nix_text, package,
 };
 
 /// Creates a native Nix package function compatible with `callPackage` and argument overrides.
 pub fn factory() -> PackageFunction {
-    PackageFunction::from_function_attrs(ARGUMENTS.iter().copied(), |args| {
+    PackageFunction::from_function_attrs(args::argument_names().iter().copied(), |args| {
         let inputs = args::from_value(args);
-        // All helper calls use the lib supplied by this Nix function's caller.
-        let lib = NixLibrary::from_value(inputs.lib.as_value());
         let defaults = vec![
             ("svnSupport", false.into()),
             (
@@ -38,7 +36,8 @@ pub fn factory() -> PackageFunction {
         ];
 
         // Keep the public Nix interface's assertions even though the Rust model
-        // already rules out the Perl-dependent invalid combinations.
+        // already rules out the Perl-dependent invalid combinations. Implication
+        // stays native, independent of any caller-supplied library predicates.
         let derivation = inputs
             .stdenv
             .mk_derivation()
@@ -46,33 +45,13 @@ pub fn factory() -> PackageFunction {
                 attributes(&inputs, final_attrs)
             }));
         let checks = [
-            (
-                lib.as_value().clone().select("any").apply([
-                    NixValue::function(|x| x),
-                    NixValue::list([
-                        (!inputs.osxkeychain_support()).into(),
-                        inputs.stdenv.host_platform.is_darwin().into(),
-                    ]),
-                ]),
-                "osxkeychainSupport requires Darwin",
+            NixValue::if_else(
+                inputs.osxkeychain_support(),
+                inputs.stdenv.host_platform.is_darwin(),
+                true,
             ),
-            (
-                lib.as_value().clone().select("any").apply([
-                    NixValue::function(|x| x),
-                    NixValue::list([
-                        (!inputs.send_email_support()).into(),
-                        inputs.perl_support().into(),
-                    ]),
-                ]),
-                "sendEmailSupport requires perlSupport",
-            ),
-            (
-                lib.as_value().clone().select("any").apply([
-                    NixValue::function(|x| x),
-                    NixValue::list([(!inputs.svn_support()).into(), inputs.perl_support().into()]),
-                ]),
-                "svnSupport requires perlSupport",
-            ),
+            NixValue::if_else(inputs.send_email_support(), inputs.perl_support(), true),
+            NixValue::if_else(inputs.svn_support(), inputs.perl_support(), true),
         ];
 
         // Build guards inside out so Nix checks them in source order when the
@@ -80,8 +59,8 @@ pub fn factory() -> PackageFunction {
         let body = checks
             .into_iter()
             .rev()
-            .fold(derivation, |body, (condition, message)| {
-                lib.throw_if_not(condition, message, body)
+            .fold(derivation, |body, condition| {
+                NixValue::assert(condition, body)
             });
 
         (defaults, body)
@@ -169,22 +148,29 @@ fn attributes(i: &Inputs, final_attrs: NixValue) -> NixValue {
     .fold(Expr::boolean(true), |result, condition| {
         result.and(!condition)
     });
-    let svn = i
-        .subversion_client()
-        .select("override")
-        .call(NixValue::record([(
-            "perlBindings",
-            i.perl_support().into(),
-        )]));
+    let svn = i.subversion_client().select("override").call(nix_record! {
+        "perlBindings": i.perl_support(),
+    });
     let perl = i.perl_packages.perl.as_value();
     let patches = lib.concat_lists([
-        NixValue::list(["docbook2texi.patch", "git-sh-i18n.patch", "git-send-email-honor-PATH.patch", "installCheck-path.patch"].map(|p| i.file(p))),
+        NixValue::list(
+            [
+                "docbook2texi.patch",
+                "git-sh-i18n.patch",
+                "git-send-email-honor-PATH.patch",
+                "installCheck-path.patch",
+            ]
+            .map(|p| i.file(p)),
+        ),
         lib.optional(i.with_ssh(), i.file("ssh-path.patch")),
-        lib.optional(i.gui_support().and(i.stdenv.host_platform.is_darwin()), i.fetchpatch().call(NixValue::record([
-            ("name", "gitk_check_main_window_visibility_before_waiting_for_it_to_show.patch".into()),
-            ("url", "https://github.com/git/git/commit/1db62e44b7ec93b6654271ef34065b31496cd02e.patch".into()),
-            ("hash", "sha256-ntvnrYFFsJ1Ebzc6vM9/AMFLHMS1THts73PIOG5DkQo=".into()),
-        ]))),
+        lib.optional(
+            i.gui_support().and(i.stdenv.host_platform.is_darwin()),
+            i.fetchpatch().call(nix_record! {
+                "name": "gitk_check_main_window_visibility_before_waiting_for_it_to_show.patch",
+                "url": "https://github.com/git/git/commit/1db62e44b7ec93b6654271ef34065b31496cd02e.patch",
+                "hash": "sha256-ntvnrYFFsJ1Ebzc6vM9/AMFLHMS1THts73PIOG5DkQo=",
+            }),
+        ),
     ]);
 
     let native_build_inputs = lib.concat_lists([
@@ -282,15 +268,13 @@ fn attributes(i: &Inputs, final_attrs: NixValue) -> NixValue {
     let installed_test = final_attrs
         .select("finalPackage.overrideAttrs")
         .call(NixValue::function(|_| {
-            NixValue::record([("doInstallCheck", true.into())])
+            nix_record! { "doInstallCheck": true }
         }));
-    let passthru_tests = lib.as_value().clone().select("mergeAttrs").apply([
-        NixValue::record([
-            ("withInstallCheck", installed_test),
-            ("buildbot-integration", i.nixos_tests.buildbot()),
-        ]),
-        i.tests.fetchgit(),
-    ]);
+    let passthru_tests = nix_record! {
+        "withInstallCheck": installed_test,
+        "buildbot-integration": i.nixos_tests.buildbot(),
+    }
+    .merge_attrs(i.tests.fetchgit());
 
     Derivation {
         pname: NixValue::concat_text([
@@ -299,16 +283,10 @@ fn attributes(i: &Inputs, final_attrs: NixValue) -> NixValue {
             lib.optional_text(minimal, "-minimal"),
         ]),
         version: "2.47.0",
-        src: i.fetchurl().call(NixValue::record([
-            (
-                "url",
-                "https://www.kernel.org/pub/software/scm/git/git-2.47.0.tar.xz".into(),
-            ),
-            (
-                "hash",
-                "sha256-HOEU2ohwQnG0PgJ8UeBNk5n4yI6e91Qtrnrrrn2HvE4=".into(),
-            ),
-        ])),
+        src: i.fetchurl().call(nix_record! {
+            "url": "https://www.kernel.org/pub/software/scm/git/git-2.47.0.tar.xz",
+            "hash": "sha256-HOEU2ohwQnG0PgJ8UeBNk5n4yI6e91Qtrnrrrn2HvE4=",
+        }),
         outputs: lib.concat_lists([
             NixValue::list(["out".into()]),
             lib.optional(i.with_manual(), "doc"),
@@ -366,13 +344,11 @@ fn attributes(i: &Inputs, final_attrs: NixValue) -> NixValue {
             nix_text!("PERL_PATH={perl}/bin/perl", perl = i.build_packages.perl()),
         ]),
         native_install_check_inputs: lib.optional(
-            lib.as_value().clone().select("any").apply([
-                NixValue::function(|x| x),
-                NixValue::list([
-                    i.stdenv.host_platform.is_darwin().into(),
-                    i.stdenv.host_platform.is_free_bsd().into(),
-                ]),
-            ]),
+            NixValue::if_else(
+                i.stdenv.host_platform.is_darwin(),
+                true,
+                i.stdenv.host_platform.is_free_bsd(),
+            ),
             i.sysctl(),
         ),
         pre_install_check: pre_install_check(i),
@@ -382,11 +358,11 @@ fn attributes(i: &Inputs, final_attrs: NixValue) -> NixValue {
             "bin",
             "share/git/contrib/credential/libsecret",
         ],
-        passthru: NixValue::record([
-            ("shellPath", "/bin/git-shell".into()),
-            ("tests", passthru_tests),
-            ("updateScript", i.file("update.sh")),
-        ]),
+        passthru: nix_record! {
+            "shellPath": "/bin/git-shell",
+            "tests": passthru_tests,
+            "updateScript": i.file("update.sh"),
+        },
         meta: metadata(i),
     }
     .try_into_nix_value()
@@ -395,21 +371,21 @@ fn attributes(i: &Inputs, final_attrs: NixValue) -> NixValue {
 
 /// Describe the pinned release, retaining licenses, platforms and maintainers from Nix.
 fn metadata(i: &Inputs) -> NixValue {
-    NixValue::record([
-        ("homepage", "https://git-scm.com/".into()),
-        ("description", "Distributed version control system".into()),
-        ("license", i.lib.licenses.gpl2()),
-        ("changelog", "https://github.com/git/git/blob/v2.47.0/Documentation/RelNotes/2.47.0.txt".into()),
-        ("longDescription", "Git, a popular distributed version control system designed to\nhandle very large projects with speed and efficiency.\n".into()),
-        ("platforms", i.lib.platforms.all()),
-        ("maintainers", NixValue::list([
+    nix_record! {
+        "homepage": "https://git-scm.com/",
+        "description": "Distributed version control system",
+        "license": i.lib.licenses.gpl2(),
+        "changelog": "https://github.com/git/git/blob/v2.47.0/Documentation/RelNotes/2.47.0.txt",
+        "longDescription": "Git, a popular distributed version control system designed to\nhandle very large projects with speed and efficiency.\n",
+        "platforms": i.lib.platforms.all(),
+        "maintainers": NixValue::list([
             i.lib.maintainers.primeos(),
             i.lib.maintainers.wmertens(),
             i.lib.maintainers.globin(),
             i.lib.maintainers.kashw2(),
-        ])),
-        ("mainProgram", "git".into()),
-    ])
+        ]),
+        "mainProgram": "git",
+    }
 }
 
 /// Patch-phase commands that embed gettext and fix test-script interpreter paths.

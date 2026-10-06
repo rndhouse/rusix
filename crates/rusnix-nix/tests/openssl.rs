@@ -48,7 +48,10 @@ fn releases_recipes_outputs_sources_metadata_tests_and_family_match() {
         assert_eq!(value["version"], release.version());
         compare("family", release, [("probe", "family".into())]);
         let args = compare("arguments", release, [("probe", "arguments".into())]);
-        assert_eq!(args.as_object().unwrap().len(), inputs::ARGUMENTS.len());
+        assert_eq!(
+            args.as_object().unwrap().len(),
+            inputs::args::argument_names().len()
+        );
         assert_eq!(
             args.as_object()
                 .unwrap()
