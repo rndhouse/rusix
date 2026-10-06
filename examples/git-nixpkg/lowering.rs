@@ -44,42 +44,30 @@ pub fn factory() -> NixValue {
             }));
         let checks = [
             (
-                lib.apply(
-                    "any",
-                    [
-                        NixValue::function(|x| x),
-                        NixValue::list([
-                            (!inputs.osxkeychain_support()).into(),
-                            inputs.stdenv.host_platform.is_darwin().into(),
-                        ]),
-                    ],
-                ),
+                lib.as_value().clone().select("any").apply([
+                    NixValue::function(|x| x),
+                    NixValue::list([
+                        (!inputs.osxkeychain_support()).into(),
+                        inputs.stdenv.host_platform.is_darwin().into(),
+                    ]),
+                ]),
                 "osxkeychainSupport requires Darwin",
             ),
             (
-                lib.apply(
-                    "any",
-                    [
-                        NixValue::function(|x| x),
-                        NixValue::list([
-                            (!inputs.send_email_support()).into(),
-                            inputs.perl_support().into(),
-                        ]),
-                    ],
-                ),
+                lib.as_value().clone().select("any").apply([
+                    NixValue::function(|x| x),
+                    NixValue::list([
+                        (!inputs.send_email_support()).into(),
+                        inputs.perl_support().into(),
+                    ]),
+                ]),
                 "sendEmailSupport requires perlSupport",
             ),
             (
-                lib.apply(
-                    "any",
-                    [
-                        NixValue::function(|x| x),
-                        NixValue::list([
-                            (!inputs.svn_support()).into(),
-                            inputs.perl_support().into(),
-                        ]),
-                    ],
-                ),
+                lib.as_value().clone().select("any").apply([
+                    NixValue::function(|x| x),
+                    NixValue::list([(!inputs.svn_support()).into(), inputs.perl_support().into()]),
+                ]),
                 "svnSupport requires perlSupport",
             ),
         ];
@@ -87,7 +75,7 @@ pub fn factory() -> NixValue {
             .into_iter()
             .rev()
             .fold(derivation, |body, (condition, message)| {
-                lib.apply("throwIfNot", [condition, message.into(), body])
+                lib.throw_if_not(condition, message, body)
             });
 
         (defaults, body)
@@ -290,16 +278,13 @@ fn attributes(i: &Inputs, final_attrs: NixValue) -> NixValue {
         .call(NixValue::function(|_| {
             NixValue::record([("doInstallCheck", true.into())])
         }));
-    let passthru_tests = lib.apply(
-        "mergeAttrs",
-        [
-            NixValue::record([
-                ("withInstallCheck", installed_test),
-                ("buildbot-integration", i.nixos_tests.buildbot()),
-            ]),
-            i.tests.fetchgit(),
-        ],
-    );
+    let passthru_tests = lib.as_value().clone().select("mergeAttrs").apply([
+        NixValue::record([
+            ("withInstallCheck", installed_test),
+            ("buildbot-integration", i.nixos_tests.buildbot()),
+        ]),
+        i.tests.fetchgit(),
+    ]);
 
     Derivation {
         pname: NixValue::concat_text([
@@ -343,7 +328,7 @@ fn attributes(i: &Inputs, final_attrs: NixValue) -> NixValue {
         configure_flags: lib.concat_lists([
             NixValue::list([nix_text!(
                 "ac_cv_prog_CURL_CONFIG={curl}/bin/curl-config",
-                curl = lib.apply("getDev", [i.curl()])
+                curl = lib.as_value().clone().select("getDev").apply([i.curl()])
             )]),
             lib.optionals(
                 !i.native(),
@@ -372,16 +357,13 @@ fn attributes(i: &Inputs, final_attrs: NixValue) -> NixValue {
             nix_text!("PERL_PATH={perl}/bin/perl", perl = i.build_packages.perl()),
         ]),
         native_install_check_inputs: lib.optional(
-            lib.apply(
-                "any",
-                [
-                    NixValue::function(|x| x),
-                    NixValue::list([
-                        i.stdenv.host_platform.is_darwin().into(),
-                        i.stdenv.host_platform.is_free_bsd().into(),
-                    ]),
-                ],
-            ),
+            lib.as_value().clone().select("any").apply([
+                NixValue::function(|x| x),
+                NixValue::list([
+                    i.stdenv.host_platform.is_darwin().into(),
+                    i.stdenv.host_platform.is_free_bsd().into(),
+                ]),
+            ]),
             i.sysctl(),
         ),
         pre_install_check: pre_install_check(i),
@@ -622,20 +604,17 @@ fn perl_install(i: &Inputs) -> NixValue {
         perl_prefix = i.perl_packages.perl.lib_prefix(),
         perl_path = i.perl_packages.make_perl_path().call(i.perl_libs()),
         gzip = i.gzip(),
-        gitweb_libs = lib.apply(
-            "concatStringsSep",
-            [
-                " ".into(),
-                NixValue::list([
-                    i.perl_packages.cgi(),
-                    i.perl_packages.html_parser(),
-                    i.perl_packages.cgi_fast(),
-                    i.perl_packages.fcgi(),
-                    i.perl_packages.fcgi_proc_manager(),
-                    i.perl_packages.html_tag_cloud(),
-                ])
-            ]
-        )
+        gitweb_libs = lib.as_value().clone().select("concatStringsSep").apply([
+            " ".into(),
+            NixValue::list([
+                i.perl_packages.cgi(),
+                i.perl_packages.html_parser(),
+                i.perl_packages.cgi_fast(),
+                i.perl_packages.fcgi(),
+                i.perl_packages.fcgi_proc_manager(),
+                i.perl_packages.html_tag_cloud(),
+            ])
+        ])
     )
 }
 

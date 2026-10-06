@@ -27,7 +27,10 @@ reconstructing the complete argument record. Declared subtrees
 marked `#[rusnix(value)]` expose `as_value()` when the whole opaque record is
 needed. Naming follows the same rules as `#[rusnix::options]`. Generic condition/list
 helpers use `NixLibrary::from_value(inputs.lib.as_value())`, preserving the
-caller's library overrides. Boolean `!` and `Expr<bool>::and` stay symbolic and
+caller's library overrides. Feature checks use `throw_if_not`; their order remains
+explicit in the package factory. Other library functions use the visibly dynamic
+`lib.as_value().clone().select(...).apply(...)` escape hatch.
+Boolean `!` and `Expr<bool>::and` stay symbolic and
 independent of library overrides. Only the local native-build predicate and pinned
 Git asset paths remain as Inputs helpers.
 

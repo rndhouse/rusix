@@ -129,12 +129,11 @@ fn effective_package() -> NixValue {
 fn default_package() -> NixValue {
     let pg = options::root().services.postgresql;
     let removed = |version: &str| {
-        Nixpkgs::new().function("throwIfNot").apply([
-            false.into(),
-            format!("postgresql_{version} was removed, please upgrade your postgresql version.")
-                .into(),
+        Nixpkgs::new().library().throw_if_not(
+            false,
+            format!("postgresql_{version} was removed, please upgrade your postgresql version."),
             NixValue::null(),
-        ])
+        )
     };
 
     // Preserve state-version defaults and lazy errors for removed versions.

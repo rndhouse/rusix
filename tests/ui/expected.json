@@ -567,5 +567,14 @@
       "Expr<bool>",
       "Expr<i64>"
     ]
+  },
+  {
+    "file": "library-private-apply.rs",
+    "code": "E0624",
+    "count": 1,
+    "source": "lib.apply",
+    "reason_tokens": [
+      "private"
+    ]
   }
 ]

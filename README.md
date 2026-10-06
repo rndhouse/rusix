@@ -1017,11 +1017,17 @@ runtime traversal or whole-config handle. The [view tests](crates/rusnix-nix/tes
 exercise opaque/typed leaves, exact keys, provenance, lazy evaluation and ordinary
 Nix overrides of the same artifact; UI fixtures check the compile-time boundary.
 
-Generic package lowering can bind a small library vocabulary to the caller's
-opaque `lib` with `NixLibrary::from_value(inputs.lib.as_value())`. Its `apply`,
-`optional`, `optionals`, `optional_text`, `all` and `concat_lists` methods call
-that exact library, so caller overrides remain authoritative. For the pinned
-library used by `Nixpkgs::function`, explicitly choose `Nixpkgs::library()`.
+`lib` is nixpkgs' utility library, a record of functions separate from the Nix
+language's `builtins`. Bind its supported Rust helpers to a caller's library with
+`NixLibrary::from_value(inputs.lib.as_value())`. The `optional`, `optionals`,
+`optional_text`, `all`, `concat_lists` and `throw_if_not` methods call that exact
+library, including caller overrides. `throw_if_not(condition, message, value)`
+validates an expression when Nix evaluates it; it is separate from the NixOS
+assertion collection. Arbitrary functions remain accessible through
+`lib.as_value().clone().select("getDev").apply([package])`.
+Named helpers grow from demonstrated real-world usage; arbitrary nixpkgs `lib`
+access remains available through the generic `NixValue` escape hatch.
+For the pinned library, explicitly choose `Nixpkgs::library()`.
 Boolean `!` works on `Expr<bool>` and opaque NixValue; `Expr<bool>::and` provides
 lazy conjunction independent of library overrides. Both stay deferred and
 check actual boolean types in Nix. These operations preserve child origins,

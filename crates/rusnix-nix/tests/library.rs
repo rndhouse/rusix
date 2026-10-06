@@ -54,10 +54,10 @@ fn standard_helpers_handle_concrete_values_empty_lists_and_false_conditions() {
             ("typedNot", (!Expr::boolean(false)).into()),
             (
                 "curried",
-                lib.apply(
-                    "concatStringsSep",
-                    ["/".into(), NixValue::list(["a".into(), "b".into()])]
-                )
+                lib.as_value()
+                    .clone()
+                    .select("concatStringsSep")
+                    .apply(["/".into(), NixValue::list(["a".into(), "b".into()])])
             ),
         ])),
         serde_json::json!({
@@ -85,8 +85,8 @@ fn library_helpers_accept_typed_symbolic_argument_values() {
                 ("optionals", lib.optionals(args.enabled(), items.clone())),
                 ("text", lib.optional_text(args.enabled(), args.text())),
                 (
-                    "applied",
-                    lib.apply("optional", [args.enabled().into(), args.number().into()]),
+                    "validated",
+                    lib.throw_if_not(args.enabled(), "disabled", args.number()),
                 ),
                 ("all", lib.all([args.enabled(), args.enabled()])),
                 ("lists", lib.concat_lists([items.clone(), items])),
@@ -104,7 +104,7 @@ fn library_helpers_accept_typed_symbolic_argument_values() {
             ("text", "deferred".into()),
         ]))),
         serde_json::json!({
-            "optional": [42], "optionals": [42], "text": "deferred", "applied": [42], "all": true,
+            "optional": [42], "optionals": [42], "text": "deferred", "validated": 42, "all": true,
             "lists": [42, 42], "not": false, "and": true,
         }),
     );
@@ -132,7 +132,10 @@ fn standard_conditionals_and_all_leave_excluded_or_short_circuited_values_lazy()
             ),
             (
                 "headOnly",
-                lib.apply("length", [lib.optional(true, failure.clone())])
+                lib.as_value()
+                    .clone()
+                    .select("length")
+                    .apply([lib.optional(true, failure.clone())])
             ),
         ])),
         serde_json::json!({
@@ -143,7 +146,12 @@ fn standard_conditionals_and_all_leave_excluded_or_short_circuited_values_lazy()
 
     // concatLists must not force individual elements merely to construct the list.
     assert_eq!(
-        evaluate(lib.apply("length", [lib.concat_lists([NixValue::list([failure])])])),
+        evaluate(
+            lib.as_value()
+                .clone()
+                .select("length")
+                .apply([lib.concat_lists([NixValue::list([failure])])])
+        ),
         1,
     );
 }
@@ -184,6 +192,20 @@ fn every_library_helper_uses_the_supplied_record_including_overridden_functions(
                 NixValue::record([("function", "concatLists".into()), ("lists", lists)])
             }),
         ),
+        (
+            "throwIfNot",
+            NixValue::function(|condition| {
+                NixValue::function(move |message| {
+                    NixValue::function(move |value| {
+                        NixValue::record([
+                            ("condition", condition),
+                            ("message", message),
+                            ("value", value),
+                        ])
+                    })
+                })
+            }),
+        ),
         ("custom", replacement("custom")),
     ]);
     let lib = NixLibrary::from_value(library);
@@ -196,7 +218,17 @@ fn every_library_helper_uses_the_supplied_record_including_overridden_functions(
             ("text", lib.optional_text(false, "caller text")),
             ("all", lib.all([false])),
             ("lists", lib.concat_lists([values])),
-            ("custom", lib.apply("custom", [true.into(), 7_i64.into()])),
+            (
+                "validated",
+                lib.throw_if_not(false, "caller message", 7_i64)
+            ),
+            (
+                "custom",
+                lib.as_value()
+                    .clone()
+                    .select("custom")
+                    .apply([true.into(), 7_i64.into()])
+            ),
         ])),
         serde_json::json!({
             "optional": {"function":"optional", "condition":false, "value":42},
@@ -204,6 +236,7 @@ fn every_library_helper_uses_the_supplied_record_including_overridden_functions(
             "text": {"function":"optionalString", "condition":false, "value":"caller text"},
             "all": {"function":"all", "identityResult":true, "conditions":[false]},
             "lists": {"function":"concatLists", "lists":[[42]]},
+            "validated": {"condition":false, "message":"caller message", "value":7},
             "custom": {"function":"custom", "condition":true, "value":7},
         }),
     );
@@ -212,13 +245,16 @@ fn every_library_helper_uses_the_supplied_record_including_overridden_functions(
 #[test]
 fn helper_failures_capture_the_public_call_site_and_keep_the_nix_trace() {
     let lib = NixLibrary::from_value(NixValue::record([] as [(&str, NixValue); 0]));
+    let lookup_line = line!() + 1;
+    let missing = lib.as_value().clone().select("missing").call(true);
     let cases = [
-        (lib.apply("missing", [true.into()]), line!()),
+        (missing, lookup_line),
         (lib.optional(true, "value"), line!()),
         (lib.optionals(true, NixValue::list([])), line!()),
         (lib.optional_text(true, "text"), line!()),
         (lib.all([true]), line!()),
         (lib.concat_lists([]), line!()),
+        (lib.throw_if_not(true, "unused", 42_i64), line!()),
     ];
 
     for (value, line) in cases {
@@ -240,12 +276,13 @@ fn child_expression_failures_remain_more_precise_than_helper_boundaries() {
     let line = line!() + 1;
     let failure: NixValue = Expr::int(1).divide(Expr::int(0)).into();
     let values = [
-        lib.apply("optional", [true.into(), failure.clone()]),
         lib.optional(true, failure.clone()),
         lib.optionals(true, failure.clone()),
         lib.optional_text(true, failure.clone()),
         lib.all([failure.clone()]),
         lib.concat_lists([NixValue::list([failure.clone()])]),
+        lib.throw_if_not(true, "unused", failure.clone()),
+        lib.throw_if_not(failure.clone(), "unused", 42_i64),
         !failure.clone(),
         (!failure.into_expr::<bool>()).into(),
     ];
@@ -260,6 +297,38 @@ fn child_expression_failures_remain_more_precise_than_helper_boundaries() {
         assert_eq!(diagnostic.reason, "division by zero");
         assert!(!diagnostic.raw_nix.is_empty());
     }
+}
+
+#[test]
+fn throw_if_not_preserves_lazy_branches_and_reports_the_validation_call() {
+    let lib = Nixpkgs::new().library();
+    let failure: NixValue = Expr::int(1).divide(Expr::int(0)).into();
+
+    // A successful check does not evaluate the failure message.
+    assert_eq!(
+        evaluate(lib.throw_if_not(true, failure.clone(), 42_i64)),
+        42
+    );
+    let line = line!() + 1;
+    let rejected = lib.throw_if_not(false, "feature combination rejected", failure);
+
+    // Constructing a rejected expression does not force it if Nix never uses it.
+    assert_eq!(
+        evaluate(
+            NixValue::record([("good", 42_i64.into()), ("bad", rejected.clone())]).select("good")
+        ),
+        42,
+    );
+
+    let diagnostic = NixSession::new()
+        .unwrap()
+        .evaluate_interop(&compile(&Config::new().set("result", rejected)).unwrap())
+        .unwrap_err();
+    assert!(diagnostic.reason.contains("feature combination rejected"));
+    assert!(!diagnostic.reason.contains("division by zero"));
+    assert_eq!(diagnostic.primary.as_ref().unwrap().file, file!());
+    assert_eq!(diagnostic.primary.as_ref().unwrap().line, line);
+    assert!(!diagnostic.raw_nix.is_empty());
 }
 
 #[test]
@@ -336,6 +405,12 @@ fn optional_text_keeps_exact_bytes_and_store_dependency_context() {
         evaluate(NixValue::record([
             ("bytesEqual", selected.clone().equals(text.clone())),
             (
+                "validatedContextEqual",
+                context
+                    .call(lib.throw_if_not(true, "unused", selected.clone()))
+                    .equals(context.call(selected.clone()))
+            ),
+            (
                 "contextsEqual",
                 context.call(selected.clone()).equals(context.call(text))
             ),
@@ -349,7 +424,7 @@ fn optional_text_keeps_exact_bytes_and_store_dependency_context() {
             ("excludedContext", context.call(excluded)),
         ])),
         serde_json::json!({
-            "bytesEqual":true,"contextsEqual":true,"contextNotEmpty":true,
+            "bytesEqual":true,"validatedContextEqual":true,"contextsEqual":true,"contextNotEmpty":true,
             "excluded":"","excludedContext":{},
         }),
     );

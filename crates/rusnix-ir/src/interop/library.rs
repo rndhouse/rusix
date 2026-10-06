@@ -1,12 +1,15 @@
 //! Call common functions from nixpkgs’ utility library without evaluating them in Rust.
+// Promote named helpers from demonstrated real-world usage; keep arbitrary lib
+// access on the existing NixValue escape hatch rather than mirroring nixpkgs.
 use super::NixValue;
 
 /// A Rust handle for nixpkgs’ utility library, `lib`.
 ///
-/// In Nix, an *attribute set* is a collection of named values, like a Rust map or
-/// record. nixpkgs supplies a `lib` attribute set containing utility functions
-/// such as `optional` and `concatLists`. This wrapper provides Rust methods for
-/// calling a small selection of those functions.
+/// `lib` is nixpkgs’ utility library: a collection of named values, called an
+/// *attribute set*, containing functions such as `lib.optional`, `lib.concatLists`
+/// and `lib.throwIfNot`. It is separate from the Nix language’s `builtins`
+/// namespace, which provides functions such as `builtins.map` and `builtins.getAttr`.
+/// This wrapper provides named Rust helpers for a small supported subset of `lib`.
 ///
 /// The methods construct expressions for Nix to evaluate later; Rust does not
 /// read the library or execute its functions. Nix checks the arguments’ actual
@@ -15,6 +18,8 @@ use super::NixValue;
 /// If a package caller supplies `lib`, wrap that value with [`Self::from_value`].
 /// All methods use that exact library, including any functions the caller replaces.
 /// [`super::Nixpkgs::library`] instead selects Rusnix’s pinned nixpkgs library.
+/// Functions without a named helper remain available through [`Self::as_value`]
+/// using the generic [`NixValue`] selection and application methods.
 ///
 /// ```
 /// use rusnix_ir::interop::Nixpkgs;
@@ -24,29 +29,64 @@ use super::NixValue;
 /// ```
 #[derive(Clone, Debug)]
 pub struct NixLibrary {
-    /// The Nix expression representing the nixpkgs `lib` attribute set.
-    /// Methods select and call utility functions from this value.
+    /// The deferred Nix value representing the nixpkgs `lib` attribute set.
+    /// Methods look up and call utility functions on this exact value; Rust does
+    /// not evaluate its contents.
     value: NixValue,
 }
 
 impl NixLibrary {
-    /// Wrap a Nix value representing the nixpkgs `lib` attribute set.
-    /// Rust does not evaluate or check its contents. Use this for a package caller’s
-    /// library; use [`super::Nixpkgs::library`] to select the pinned library.
+    /// Wrap a deferred Nix value representing nixpkgs `lib`.
+    /// Methods call functions from this exact library value. Rust does not evaluate
+    /// or check its contents; [`super::Nixpkgs::library`] selects the pinned library.
     pub fn from_value(value: NixValue) -> Self {
         Self { value }
     }
 
-    /// Look up a utility function and pass its arguments in order.
-    /// For example, `apply("optional", [condition, value])` represents
-    /// `lib.optional condition value`. Nix functions commonly take one argument at a
-    /// time; this repeated application is called *currying*.
+    /// Access the deferred nixpkgs `lib` value wrapped by this handle.
     ///
-    /// Dots in `name` select nested fields. For a single field containing a literal
-    /// dot, use [`NixValue::select_segments`]. Nix checks arguments and result types.
+    /// Use this escape hatch for functions without a supported helper. Clone the
+    /// value, then use [`NixValue::select`] and [`NixValue::apply`] to describe the
+    /// call. Rust does not read the library or execute the function.
+    ///
+    /// ```
+    /// use rusnix_ir::interop::Nixpkgs;
+    /// let lib = Nixpkgs::new().library();
+    /// let headers = lib.as_value().clone().select("getDev")
+    ///     .apply([Nixpkgs::new().get("curl").into()]);
+    /// // Represents lib.getDev pkgs.curl, evaluated later by Nix.
+    /// ```
+    pub fn as_value(&self) -> &NixValue {
+        &self.value
+    }
+
+    // Common dispatch for supported helpers; track_caller preserves their callers.
     #[track_caller]
-    pub fn apply(&self, name: &str, arguments: impl IntoIterator<Item = NixValue>) -> NixValue {
+    fn apply(&self, name: &str, arguments: impl IntoIterator<Item = NixValue>) -> NixValue {
         self.value.clone().select(name).apply(arguments)
+    }
+
+    /// Return `value` when `condition` is true, otherwise throw `message` in Nix.
+    /// This represents `lib.throwIfNot condition message value`.
+    ///
+    /// Rust only constructs the expression; Nix evaluates the condition later.
+    /// The standard nixpkgs function does not evaluate `value` when the condition
+    /// is false, or `message` when it is true. This calls the wrapped library’s
+    /// function, so a caller’s replacement remains authoritative.
+    ///
+    /// This validates an expression when it is evaluated. It does not contribute
+    /// to NixOS’s assertion collection; use [`crate::nixos::assertion`] for that.
+    #[track_caller]
+    pub fn throw_if_not(
+        &self,
+        condition: impl Into<NixValue>,
+        message: impl Into<NixValue>,
+        value: impl Into<NixValue>,
+    ) -> NixValue {
+        self.apply(
+            "throwIfNot",
+            [condition.into(), message.into(), value.into()],
+        )
     }
 
     /// Return a Nix expression for a one-element list when `condition` is true,
