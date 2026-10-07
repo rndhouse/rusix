@@ -1,4 +1,4 @@
-use rusix_ir::{Expr, interop::{NixExpression, Nixpkgs, Package}};
+use rusix::{Expr, interop::{NixExpression, Nixpkgs, Package}};
 
 fn main() {
     let package: Package = Nixpkgs::new().get("openssl").into();

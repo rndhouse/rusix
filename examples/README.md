@@ -9,7 +9,7 @@ Start with [enum-option.rs](enum-option.rs) for a small model, or
 [nix-interop.rs](nix-interop.rs) to reuse existing packages. From the repository root:
 
 ```bash
-cargo run --locked -p rusix-nix --example enum-option
+cargo run --locked -p rusix --example enum-option
 ```
 
 The executable prints Nix source. It does not evaluate Nix, build packages or
@@ -117,7 +117,7 @@ dynamic fields retain ordinary Rust iterators and `NixValue::record`.
 For local configuration, one inline module boundary supplies structural lowering:
 
 ```rust
-use rusix_ir::{self as rusix, nixos::NixosModule};
+use rusix::{ nixos::NixosModule};
 
 #[rusix::config]
 mod config {
@@ -156,7 +156,7 @@ still applies, so the factory above constructs its private fields inside the mod
 The generated paths include `services.example.listenPort`. No prefix strings are
 needed, and each add still contributes an independent NixOS module.
 
-The attribute is available as `rusix_ir::config`; these examples alias the crate
+The attribute is available as `rusix::config`; these examples alias the crate
 as `rusix` for `#[rusix::config]`. It supports inline modules only. It does not
 load `mod config;`, inspect imports, recurse into child modules/function-local
 items, or expand types produced by other macros. Such types use the existing
@@ -221,12 +221,12 @@ Imports and overlays remain explicit NixosModule/Nixpkgs boundary operations.
 
 Derived bindings carry the conversion/add caller location and stable path-specific
 IDs. Captured expression/reference origins survive; primitive initializer spans
-are not captured separately. The [derive tests](../crates/rusix-nix/tests/derive.rs)
+are not captured separately. The [derive tests](../crates/rusix/tests/derive.rs)
 check structure, values, provenance, real package resolution, NixOS merges,
 priorities and two-origin conflicts. The
-[module tests](../crates/rusix-nix/tests/config_module.rs) also cover external
+[module tests](../crates/rusix/tests/config_module.rs) also cover external
 reusable values, explicit/manual conversions and multiple roots. The older
-[authoring tests](../crates/rusix-nix/tests/authoring.rs) still verify handwritten
+[authoring tests](../crates/rusix/tests/authoring.rs) still verify handwritten
 adapter compatibility. Nix-interop uses Config::set_dynamic for its labelled dynamic
 escape hatch; package examples export factories and selected packages through
 typed roots. Dynamic assignments remain available for unsupported/runtime paths.
@@ -381,7 +381,7 @@ continues checking its primitive option types.
 The runnable file authors a valid upstream SSH contribution using a local config
 module for SshContribution<T>, Services<T> and options, plus a reusable Port value,
 then prints generated Nix.
-[typed_examples.rs](../crates/rusix-nix/tests/typed_examples.rs) assembles two port
+[typed_examples.rs](../crates/rusix/tests/typed_examples.rs) assembles two port
 records that collide inside one flattened contribution and verifies the IR error.
 It separately uses Config::set_dynamic to introduce an unsupported option and verifies
 NixOS rejects it. Those deliberate invalid assemblies and diagnostic assertions
@@ -413,7 +413,7 @@ file is not needed for source generation. The integration tests instead supply
 which contains actual overlay, package and module outputs plus failure controls.
 It is local test data, not a flake fetch.
 
-[interop.rs](../crates/rusix-nix/tests/interop.rs) reuses the example's package
+[interop.rs](../crates/rusix/tests/interop.rs) reuses the example's package
 contribution and combined module. Tests verify hello, nested requests, the
 Nix overlay's hello alias, an external package/module, upstream SSH ports `[22]`,
 and `toUpper("rusix") = "RUSIX"`. Test-only schema imports and priority selection
@@ -434,7 +434,7 @@ The example also calls `pkgs.pkgs_function("writeTextFile")` with a structured
 `NixValue::record`: literals and a real package handle share one opaque argument.
 `function("toUpper")` refers to lib; `pkgs_function` refers to the package set.
 Chained `.call` operations support curried functions such as writeText.
-[structured_interop.rs](../crates/rusix-nix/tests/structured_interop.rs) verifies
+[structured_interop.rs](../crates/rusix/tests/structured_interop.rs) verifies
 writeText/writeTextFile/runCommand without building, nested lists/maps and native
 references, and symbolic text following an ordinary Nix override on the same
 artifact. It also checks call/operation provenance and unforced sibling values.
@@ -482,7 +482,7 @@ The generated dependency is equivalent to:
 ```
 
 The example prints the concrete Rust command and generated symbolic module.
-[symbolic_options.rs](../crates/rusix-nix/tests/symbolic_options.rs) reuses its
+[symbolic_options.rs](../crates/rusix/tests/symbolic_options.rs) reuses its
 derived ExampleService and supplies the option declarations and ordinary Nix
 contributors from [the Nix fixture](../tests/fixtures/symbolic-options.nix).
 The integration tests verify that the same generated Rusix artifact evaluates
@@ -588,7 +588,7 @@ fixed point. `Nixpkgs::from_module()` uses NixOS's package set and overlays.
 Package variants/withPackages, writeText, writeTextDir and runCommand remain opaque
 Nix operations. Text templates contain shell/SQL/configuration data, not Nix syntax.
 
-[The integration suite](../crates/rusix-nix/tests/postgresql.rs) evaluates the full
+[The integration suite](../crates/rusix/tests/postgresql.rs) evaluates the full
 pinned NixOS module set twice: once with upstream PostgreSQL, once replacing that
 import slot with the complete generated Rust module, including declarations.
 It compares settings, authentication/ident files, generated-file derivation
@@ -597,7 +597,7 @@ Unix accounts, package identities and check recipes. Store paths and Nix string
 contexts are compared exactly. Only the set-like pathsToLink list is sorted;
 SQL, package, argument and executable-string ordering remain significant.
 
-[Schema tests](../crates/rusix-nix/tests/postgresql_schema.rs) compare all 29 ordinary
+[Schema tests](../crates/rusix/tests/postgresql_schema.rs) compare all 29 ordinary
 and nested declarations plus three migration options: type names/descriptions,
 actual defaults, defaultText, examples and public documentation. They also compare
 valid/invalid ordinary Nix inputs, coercions, freeform values, list/attrset merges,
@@ -642,9 +642,9 @@ and comparison machinery belong to tests. There is no PostgreSQL type in core.
 ## Verification and limits
 
 ```bash
-cargo run --locked -p rusix-nix --example invalid-states
-cargo run --locked -p rusix-nix --example nix-interop
-cargo run --locked -p rusix-nix --example symbolic-option
+cargo run --locked -p rusix --example invalid-states
+cargo run --locked -p rusix --example nix-interop
+cargo run --locked -p rusix --example symbolic-option
 ```
 
 Run the shared [workspace verification checks](../README.md#verification) for
@@ -717,13 +717,13 @@ PostgreSQL's private lowering uses `nix_text!` to keep shell and SQL readable:
 
 ```rust
 let port = pg.settings.port();
-let command = rusix_ir::nix_text!("postgres --port={port}", port = port);
+let command = rusix::nix_text!("postgres --port={port}", port = port);
 ```
 
 For multiline text, use an indented leading-newline block:
 
 ```rust
-let command = rusix_ir::nix_text!(
+let command = rusix::nix_text!(
     r#"
         postgres --port={port}
     "#,
@@ -738,7 +738,7 @@ Put the closing delimiter on the last content line to omit the final newline.
 Content-first templates stay verbatim, and interpolated values are never reindented.
 Named holes stay symbolic; NixOS resolves the final option after merging. Use
 `{{` / `}}` for literal braces.
-[symbolic_text.rs](../crates/rusix-nix/tests/symbolic_text.rs) verifies
+[symbolic_text.rs](../crates/rusix/tests/symbolic_text.rs) verifies
 string dependency contexts, caller provenance, lazy evaluation and artifact reuse;
 the full PostgreSQL suite verifies unchanged scripts, SQL and derivation inputs.
 

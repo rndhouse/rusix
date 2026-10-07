@@ -1,12 +1,11 @@
 //! Refer to PostgreSQL options after NixOS combines definitions from all modules.
 //! Accessors describe deferred `config.*` lookups; they do not declare options or read values in Rust.
-use rusix_ir as rusix;
 
 /// Declares accessors for the final NixOS settings used by the PostgreSQL implementation.
 /// References follow config.* after merging, including defaults and choices from other modules.
 #[rusix::options]
 mod references {
-    use rusix_ir::interop::raw::NixValue;
+    use rusix::interop::raw::NixValue;
 
     /// The parts of the final NixOS configuration needed to configure PostgreSQL.
     #[rusix(root)]

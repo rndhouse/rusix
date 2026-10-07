@@ -1,8 +1,8 @@
 //! Reproduces the pinned Git package recipe using real nixpkgs builders and helpers.
 //! Helpers construct deferred values and shell scripts; they never execute build commands in Rust.
 use super::inputs::{Inputs, args};
-use rusix_ir::interop::raw::NixRepresentation;
-use rusix_ir::{
+use rusix::interop::raw::NixRepresentation;
+use rusix::{
     Expr, IntoRusixValue,
     interop::{
         FinalAttrs, NixAttrs, NixCallable, NixExpression, NixLibrary, NixList, Package,

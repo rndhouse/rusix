@@ -3,7 +3,7 @@
 //! These macros turn ordinary Rust structure into Nix configuration, or describe
 //! field lookups that Nix will evaluate later. They do not serialize Nix packages
 //! into plain data or read Nix results into Rust. Normal users access the macros
-//! through their re-exports in `rusix_ir`, alongside its conversion traits.
+//! through their re-exports in `rusix`, alongside its conversion traits.
 #![warn(missing_docs)]
 
 use proc_macro::TokenStream;
@@ -32,7 +32,7 @@ pub fn symbolic_text(input: TokenStream) -> TokenStream {
 ///
 /// Unmarked structs and unit enums receive nested value conversions. Imported
 /// types must implement their own conversion traits. Multiple roots are allowed;
-/// external module files are not inspected. See `rusix_ir::config` for a small
+/// external module files are not inspected. See `rusix::config` for a small
 /// example and the supported field naming and omission attributes.
 #[proc_macro_attribute]
 pub fn config(args: TokenStream, input: TokenStream) -> TokenStream {
@@ -58,7 +58,7 @@ pub fn config(args: TokenStream, input: TokenStream) -> TokenStream {
 /// Use an inline module with one `#[rusix(root)]` struct. Nested structs describe
 /// field paths; leaf methods create existing `OptionRef` expressions and record
 /// the call location. NixOS checks existence and actual types. See
-/// `rusix_ir::options` for usage and supported leaf types.
+/// `rusix::options` for usage and supported leaf types.
 #[proc_macro_attribute]
 pub fn options(args: TokenStream, input: TokenStream) -> TokenStream {
     if !args.is_empty() {
@@ -82,7 +82,7 @@ pub fn options(args: TokenStream, input: TokenStream) -> TokenStream {
 ///
 /// Nested structs describe nested fields. Naming, leaf types and optional
 /// whole-subtree access match `options`; the difference is the supplied argument
-/// value rather than NixOS’s final configuration. See `rusix_ir::args` for usage.
+/// value rather than NixOS’s final configuration. See `rusix::args` for usage.
 #[proc_macro_attribute]
 pub fn args(args: TokenStream, input: TokenStream) -> TokenStream {
     if !args.is_empty() {
@@ -382,7 +382,7 @@ fn expand(input: DeriveInput, rooted: bool) -> syn::Result<proc_macro2::TokenStr
                 generics
                     .make_where_clause()
                     .predicates
-                    .push(parse_quote!(#ty: ::rusix_ir::IntoRusixValue));
+                    .push(parse_quote!(#ty: ::rusix::IntoRusixValue));
 
                 let key = if flatten {
                     quote!(None)
@@ -394,12 +394,12 @@ fn expand(input: DeriveInput, rooted: bool) -> syn::Result<proc_macro2::TokenStr
                 values.push(if omit {
                     quote_spanned!(field.span()=>
                         if let ::core::option::Option::Some(__rusix_value) = self.#name {
-                            __rusix_fields.push((#key, ::rusix_ir::IntoRusixValue::into_value(__rusix_value)));
+                            __rusix_fields.push((#key, ::rusix::IntoRusixValue::into_value(__rusix_value)));
                         }
                     )
                 } else {
                     quote_spanned!(field.span()=>
-                        __rusix_fields.push((#key, ::rusix_ir::IntoRusixValue::into_value(self.#name)));
+                        __rusix_fields.push((#key, ::rusix::IntoRusixValue::into_value(self.#name)));
                     )
                 });
             }
@@ -409,7 +409,7 @@ fn expand(input: DeriveInput, rooted: bool) -> syn::Result<proc_macro2::TokenStr
 
                 #(#values)*
 
-                ::rusix_ir::RusixValue::__record(__rusix_fields)
+                ::rusix::RusixValue::__record(__rusix_fields)
             })
         }
         Fields::Unnamed(fields) if !rooted && fields.unnamed.len() == 1 => {
@@ -425,8 +425,8 @@ fn expand(input: DeriveInput, rooted: bool) -> syn::Result<proc_macro2::TokenStr
             generics
                 .make_where_clause()
                 .predicates
-                .push(parse_quote!(#ty: ::rusix_ir::IntoRusixValue));
-            quote!(::rusix_ir::IntoRusixValue::into_value(self.0))
+                .push(parse_quote!(#ty: ::rusix::IntoRusixValue));
+            quote!(::rusix::IntoRusixValue::into_value(self.0))
         }
         _ => {
             return Err(syn::Error::new_spanned(
@@ -441,9 +441,9 @@ fn expand(input: DeriveInput, rooted: bool) -> syn::Result<proc_macro2::TokenStr
     let config_impl = rooted.then(|| config_impl(&input.ident, &generics));
 
     Ok(quote!(
-        impl #impl_generics ::rusix_ir::IntoRusixValue for #name #ty_generics #where_clause {
+        impl #impl_generics ::rusix::IntoRusixValue for #name #ty_generics #where_clause {
             #[track_caller]
-            fn into_value(self) -> ::rusix_ir::RusixValue { #body }
+            fn into_value(self) -> ::rusix::RusixValue { #body }
         }
 
         #config_impl
@@ -546,7 +546,7 @@ fn enum_value(
 
         arms.push(quote_spanned!(variant.span()=>
             #(#gates)*
-            Self::#variant_name => ::rusix_ir::IntoRusixValue::into_value(#name)
+            Self::#variant_name => ::rusix::IntoRusixValue::into_value(#name)
         ));
     }
 
@@ -554,9 +554,9 @@ fn enum_value(
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
     Ok(quote!(
-        impl #impl_generics ::rusix_ir::IntoRusixValue for #name #ty_generics #where_clause {
+        impl #impl_generics ::rusix::IntoRusixValue for #name #ty_generics #where_clause {
             #[track_caller]
-            fn into_value(self) -> ::rusix_ir::RusixValue {
+            fn into_value(self) -> ::rusix::RusixValue {
                 match self { #(#arms),* }
             }
         }
@@ -568,13 +568,13 @@ fn config_impl(name: &syn::Ident, generics: &syn::Generics) -> proc_macro2::Toke
     generics
         .make_where_clause()
         .predicates
-        .push(parse_quote!(Self: ::rusix_ir::IntoRusixValue));
+        .push(parse_quote!(Self: ::rusix::IntoRusixValue));
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     quote!(
-        impl #impl_generics ::rusix_ir::IntoConfig for #name #ty_generics #where_clause {
+        impl #impl_generics ::rusix::IntoConfig for #name #ty_generics #where_clause {
             #[track_caller]
-            fn into_config(self) -> ::rusix_ir::Config {
-                ::rusix_ir::Config::from_value(::rusix_ir::IntoRusixValue::into_value(self))
+            fn into_config(self) -> ::rusix::Config {
+                ::rusix::Config::from_value(::rusix::IntoRusixValue::into_value(self))
             }
         }
     )

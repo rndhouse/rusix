@@ -180,7 +180,7 @@ local stores, with no package builds or network fetches.
 
 ## Authoring and raw interop
 
-`rusix_ir::prelude` exports typed authoring, configuration macros and conversion
+`rusix::prelude` exports typed authoring, configuration macros and conversion
 traits. It excludes `NixValue` and representation access. Import
 `interop::raw::{NixValue, NixRepresentation}` only when an adapter needs dynamic
 Nix operations or an unchecked external interface expectation.
@@ -209,13 +209,13 @@ The public surface has three entry points:
 | --- | --- | --- |
 | Package/configuration authors | `prelude`, `interop`, `nixos` | typed packages, factories, calls, lists, views, macros |
 | Adapters needing dynamic Nix values | `interop::raw` | `NixValue`, `NixRepresentation`, raw lookup/call traits |
-| Compiler/backend implementers | `ir` | nodes, origins, source/reference metadata, lowering/inspection traits |
+| Compiler/backend implementers | `ir`, `compiler::ast` | nodes, origins, source/reference metadata, lowering/inspection traits |
 
 `raw` names a representation boundary; attaching an interface remains lazy.
 These operations stay supported when the typed surface cannot describe an external
 interface. Raw type names and extension traits are absent from the authoring
 prelude. Import them explicitly when writing dynamic adapters. Raw IR construction is public under `ir`
-because `rusix-nix` is a separate crate; crate-only constructors stay restricted.
+for explicit inspection and compiler extensions; implementation-only constructors stay restricted.
 Macro implementation hooks remain public where generated external code requires
 them and use hidden documentation rather than claiming to be private.
 

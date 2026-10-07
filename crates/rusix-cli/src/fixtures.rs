@@ -1,4 +1,4 @@
-use rusix_ir::{Config, Expr};
+use rusix::{Config, Expr};
 
 pub fn config(name: &str) -> Option<Config> {
     Some(match name {

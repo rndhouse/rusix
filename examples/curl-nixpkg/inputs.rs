@@ -1,12 +1,11 @@
 //! Declare dependencies and feature choices supplied to curl's Nix package function.
 //! Accessors describe deferred lookups; Rust does not evaluate the arguments.
-use rusix_ir as rusix;
 
 /// Declares named accessors for curl's Nix function arguments and the dependency fields it uses.
 /// Rust constructs references through these views; Nix resolves the selected values later.
 #[rusix::args]
 pub(super) mod args {
-    use rusix_ir::interop::{NixCallable, Overridable, Package, raw::NixValue};
+    use rusix::interop::{NixCallable, Overridable, Package, raw::NixValue};
 
     /// Deferred package dependencies and features, resolved by callPackage or an ordinary caller.
     #[rusix(root)]
@@ -131,7 +130,7 @@ pub(super) mod args {
         mk_derivation: NixCallable<Package>,
         /// Platform where the resulting curl runs.
         #[rusix(expression)]
-        host_platform: rusix_ir::interop::Platform,
+        host_platform: rusix::interop::Platform,
         /// Compiler metadata for the explicit C++ command names.
         cc: Compiler,
     }

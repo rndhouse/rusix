@@ -25,7 +25,7 @@ let choices = model::Git {
     ..model::Git::defaults()
 };
 let factory = lowering::factory();
-let git = rusix_ir::interop::Nixpkgs::new()
+let git = rusix::interop::Nixpkgs::new()
     .try_call_package(&factory, inputs::arguments(choices))
     .expect("fixed authoring arguments");
 ```
@@ -36,7 +36,7 @@ set through `callPackage`. Run the executable from the repository root to print
 the reusable `factory` and selected `git` expressions:
 
 ```bash
-cargo run --locked -p rusix-nix --example git-nixpkg
+cargo run --locked -p rusix --example git-nixpkg
 ```
 
 `args::from_value(arguments)` binds the view to the record supplied by the native
@@ -105,7 +105,7 @@ needed.
 
 ## Mechanical proof
 
-[`git.rs`](../../crates/rusix-nix/tests/git.rs) and the ordinary Nix
+[`git.rs`](../../crates/rusix/tests/git.rs) and the ordinary Nix
 [comparison fixture](../../tests/fixtures/git-equivalence.nix) instantiate both
 factories in the same package scope. They compare exact `.drv` ATerm recipes,
 derivation/output paths, source recipes, dependency identities, outputs, patches,
@@ -142,7 +142,7 @@ records the earlier runtime-context measurements. The [pretty-printer](../../doc
 uses a 100-character target, formatting functions, dependency lists and fields
 while recording their source spans. Normal output has no fine-grained origin
 comments. For manual inspection,
-`rusix_nix::compile_with_options` accepts `RenderOptions { origin_comments: true }`,
+`rusix::compile_with_options` accepts `RenderOptions { origin_comments: true }`,
 adding origin comments. Both modes retain the same mapped origins; each source
 map has offsets for its own text. Historical sizes are recorded in the renderer
 audits and vary as the authored recipe changes.

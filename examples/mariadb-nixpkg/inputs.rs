@@ -1,12 +1,11 @@
 //! Describes the dependencies and feature switches accepted by the pinned MariaDB Nix function.
 //! Rust accessors generate references; Nix resolves their values only when the recipe needs them.
-use rusix_ir as rusix;
 
 /// Declares the release, dependencies and features supplied to MariaDB's Nix function.
 /// Accessors describe argument lookups without reading those values in Rust.
 #[rusix::args]
 pub mod args {
-    use rusix_ir::interop::{NixCallable, NixLibrary, Package, Stdenv, raw::NixValue};
+    use rusix::interop::{NixCallable, NixLibrary, Package, Stdenv, raw::NixValue};
 
     /// Deferred common and server dependencies plus the four upstream feature defaults.
     #[rusix(root)]

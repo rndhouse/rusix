@@ -5,30 +5,30 @@ cd "$(dirname "$0")/.."
 cargo run --locked --quiet -p rusix-derive --bin check-rust-spacing
 
 # Real evaluator round-trips compare the committed Rusix diagnostic snapshots.
-cargo test --locked -p rusix-nix --lib context_audit
-cargo test --locked -p rusix-nix --lib render_audit
-cargo test --locked -p rusix-nix --lib render::tests
-cargo test --locked -p rusix-nix --lib render::precedence_tests
-cargo test --locked -p rusix-nix --test roundtrip
-cargo test --locked -p rusix-nix --test nixos
-cargo test --locked -p rusix-nix --test session
-cargo test --locked -p rusix-nix --test merges
-cargo test --locked -p rusix-nix --test authoring
-cargo test --locked -p rusix-nix --test symbolic_options
-cargo test --locked -p rusix-nix --test derive
-cargo test --locked -p rusix-nix --test config_module
-cargo test --locked -p rusix-nix --test options --test args
-cargo test --locked -p rusix-nix --test postgresql
-cargo test --locked -p rusix-nix --test schema --test postgresql_schema
-cargo test --locked -p rusix-nix --test symbolic_text
-cargo test --locked -p rusix-nix --test structured_interop --test library --test typed_interop
-cargo test --locked -p rusix-nix --test package --test package_functions --test git --test curl --test nix_operations
-cargo test --locked -p rusix-nix --test openssl --test mariadb --test composed --test backend_provenance --test backend_correlation
-cargo test --locked -p rusix-nix --test overlay
-cargo test --locked -p rusix-nix --test typed_examples --test ui --test interop
+cargo test --locked -p rusix --lib context_audit
+cargo test --locked -p rusix --lib render_audit
+cargo test --locked -p rusix --lib compiler::render::tests
+cargo test --locked -p rusix --lib compiler::render::precedence_tests
+cargo test --locked -p rusix --test roundtrip
+cargo test --locked -p rusix --test nixos
+cargo test --locked -p rusix --test session
+cargo test --locked -p rusix --test merges
+cargo test --locked -p rusix --test authoring
+cargo test --locked -p rusix --test symbolic_options
+cargo test --locked -p rusix --test derive
+cargo test --locked -p rusix --test config_module
+cargo test --locked -p rusix --test options --test args
+cargo test --locked -p rusix --test postgresql
+cargo test --locked -p rusix --test schema --test postgresql_schema
+cargo test --locked -p rusix --test symbolic_text
+cargo test --locked -p rusix --test structured_interop --test library --test typed_interop
+cargo test --locked -p rusix --test package --test package_functions --test git --test curl --test nix_operations
+cargo test --locked -p rusix --test openssl --test mariadb --test composed --test backend_provenance --test backend_correlation
+cargo test --locked -p rusix --test overlay
+cargo test --locked -p rusix --test typed_examples --test ui --test interop
 
 for example in enum-option typed-submodule invalid-states function-contracts exhaustive-match typed-values layered-validation nix-interop symbolic-option postgresql-nixos-module git-nixpkg curl-nixpkg openssl-nixpkg mariadb-nixpkg composed-packages overlay; do
-    cargo run --locked --quiet -p rusix-nix --example "$example"
+    cargo run --locked --quiet -p rusix --example "$example"
 done
 
 # Preserve reviewable outputs from the executable harness as well.

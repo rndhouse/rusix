@@ -41,7 +41,7 @@ and curl once, retaining `Package` on the lexical parameters. Typed argument rec
 lower at calls; neither packages nor factories need `as_value` conversions.
 See [typed package authoring](../../docs/typed-package-values.md).
 
-From the repository root, run `cargo run --locked -p rusix-nix --example composed-packages`.
+From the repository root, run `cargo run --locked -p rusix --example composed-packages`.
 It prints generated Nix with a `packages` field containing the four connected
 package expressions; Rust does not evaluate Nix or build the packages.
 
@@ -50,7 +50,7 @@ package expressions; Rust does not evaluate Nix or build the packages.
 See the [verified report](REPORT.md) for the source matrix, exact derivation
 identities, source attribution results and full verification.
 
-`cargo test --locked -p rusix-nix --test composed` compares exact ATerm recipe
+`cargo test --locked -p rusix --test composed` compares exact ATerm recipe
 bytes, derivation identities and all output paths. Tags attached through the
 OpenSSL factory result's normal `overrideAttrs` interface must be observable in
 curl's OpenSSL passthru and Git's actual buildInputs;

@@ -1,4 +1,4 @@
-use rusix_ir::IntoConfig;
+use rusix::IntoConfig;
 
 #[derive(IntoConfig)]
 #[rusix(rename_all = "kebab-case")]

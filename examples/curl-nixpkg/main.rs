@@ -5,7 +5,7 @@ mod lowering;
 
 pub mod model;
 
-use rusix_ir::{
+use rusix::{
     IntoConfig,
     interop::{Nixpkgs, Package, PackageFunction},
 };
@@ -32,7 +32,7 @@ fn main() {
 
     // Export the reusable function and the selected recipe as Nix attributes.
     // This prints source; evaluating or building curl happens separately.
-    let artifact = rusix_nix::compile(Output { factory, curl })
-        .expect("the example has valid structural values");
+    let artifact =
+        rusix::compile(Output { factory, curl }).expect("the example has valid structural values");
     println!("{}", artifact.source);
 }

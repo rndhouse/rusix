@@ -1,7 +1,7 @@
 //! Reproduces curlMinimal's complete pinned package recipe with real nixpkgs builders.
 use super::inputs::{Inputs, args};
-use rusix_ir::interop::raw::NixRepresentation;
-use rusix_ir::{
+use rusix::interop::raw::NixRepresentation;
+use rusix::{
     Expr, IntoRusixValue,
     interop::{
         FinalAttrs, NixAttrs, NixCallable, NixExpression, NixLibrary, NixList, NixOverridable,

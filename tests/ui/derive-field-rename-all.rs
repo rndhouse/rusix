@@ -1,4 +1,4 @@
-use rusix_ir::IntoConfig;
+use rusix::IntoConfig;
 
 #[derive(IntoConfig)]
 struct Config {

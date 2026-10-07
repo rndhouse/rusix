@@ -3,16 +3,13 @@
 //! The fictional service needs separate option declarations; Rust's OptionRef generates a
 //! reference without reading the port.
 
-use rusix_ir::{
-    self as rusix,
-    nixos::{NixosModule, OptionRef},
-};
+use rusix::nixos::{NixosModule, OptionRef};
 
 /// Places service settings and a dependent startup command in their NixOS option paths.
 /// The command can refer to the final port that NixOS resolves after merging definitions.
 #[rusix::config]
 mod config {
-    use rusix_ir::Expr;
+    use rusix::Expr;
 
     /// A rooted contribution combining service inputs with a dependent systemd command.
     /// Nested structs determine the Nix attribute paths; this is an ordinary Rust model.
@@ -98,6 +95,6 @@ fn main() {
 
     // Generate a module whose command follows the final port when NixOS evaluates it.
     // Printing the source does not start the service or evaluate the port.
-    let artifact = rusix_nix::nixos::compile_module(&module).unwrap();
+    let artifact = rusix::nixos::compile_module(&module).unwrap();
     println!("{}", artifact.module.source);
 }

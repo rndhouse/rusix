@@ -2,8 +2,8 @@
 //! Rust describes their use without inspecting their contents; Nix resolves them when the
 //! output is evaluated.
 
-use rusix_ir::interop::raw::NixFunctionExt;
-use rusix_ir::{
+use rusix::interop::raw::NixFunctionExt;
+use rusix::{
     self as rusix, Config, IntoRusixValue, RusixValue,
     interop::{InputRef, ModuleRef, NixFunction, Nixpkgs, OverlayRef, PackageRef, raw::NixValue},
     nix_record,
@@ -136,20 +136,20 @@ fn main() {
     let owned = OwnedContribution {
         demo: Transport::Plain,
     };
-    println!("{}", rusix_nix::compile(owned).unwrap().source);
+    println!("{}", rusix::compile(owned).unwrap().source);
 
     // Describe imports and package references from an existing Nix file and nixpkgs.
     // Nix loads input.nix and merges module settings when the generated module is evaluated.
     let local = InputRef::local("example", "input.nix");
     let module = module(local);
-    let artifact = rusix_nix::nixos::compile_module(&module).unwrap();
+    let artifact = rusix::nixos::compile_module(&module).unwrap();
     println!("{}", artifact.module.source);
 
     // Describe the Nix call toUpper "rusix"; the Rust call records that expression.
     // Nix computes "RUSIX" later, when the generated result is evaluated.
     let uppercase: NixFunction = Nixpkgs::new().function("toUpper");
     let value: NixValue = uppercase.call("rusix");
-    let generated = rusix_nix::compile(FunctionResult { result: value }).unwrap();
+    let generated = rusix::compile(FunctionResult { result: value }).unwrap();
     println!("{}", generated.source);
 
     // writeTextFile takes a Nix attribute set describing a file to produce.
@@ -165,6 +165,6 @@ fn main() {
     // Record the file recipe and print its Nix expression. Creating the file requires
     // building that recipe separately; this Rust program does not write example.conf.
     let file = pkgs.pkgs_function("writeTextFile").call(args);
-    let generated = rusix_nix::compile(FunctionResult { result: file }).unwrap();
+    let generated = rusix::compile(FunctionResult { result: file }).unwrap();
     println!("{}", generated.source);
 }

@@ -1,7 +1,7 @@
 //! Wire OpenSSL into curl and Git, then wire curl into MariaDB.
 //! The pinned nixpkgs package set supplies the other dependencies.
-use rusix_ir::interop::raw::NixRepresentation;
-use rusix_ir::interop::raw::NixpkgsExt;
+use rusix::interop::raw::NixRepresentation;
+use rusix::interop::raw::NixpkgsExt;
 
 #[path = "../openssl-nixpkg/mod.rs"]
 pub mod openssl;
@@ -15,8 +15,8 @@ pub mod git;
 #[path = "../mariadb-nixpkg/mod.rs"]
 pub mod mariadb;
 
-use rusix_ir::interop::{NixAttrs, NixExpression, Nixpkgs, Package, raw::NixValue};
-use rusix_ir::{IntoRusixValue, RusixValue, nix_record};
+use rusix::interop::{NixAttrs, NixExpression, Nixpkgs, Package, raw::NixValue};
+use rusix::{IntoRusixValue, RusixValue, nix_record};
 
 pub fn arguments() -> NixAttrs {
     NixAttrs::new([] as [(&str, NixValue); 0])

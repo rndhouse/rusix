@@ -1,4 +1,4 @@
-use rusix_ir::{self as rusix, Expr};
+use rusix::{ Expr};
 
 #[rusix::args]
 mod args {
@@ -11,5 +11,5 @@ mod args {
 fn needs_boolean(_: Expr<bool>) {}
 
 fn main() {
-    needs_boolean(args::from_value(rusix_ir::interop::raw::NixValue::null()).port());
+    needs_boolean(args::from_value(rusix::interop::raw::NixValue::null()).port());
 }

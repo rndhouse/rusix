@@ -144,11 +144,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 
 [[package]]
+name = "rusix"
+version = "0.1.0"
+dependencies = [
+ "rusix-derive",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+]
+
+[[package]]
 name = "rusix-cli"
 version = "0.1.0"
 dependencies = [
- "rusix-ir",
- "rusix-nix",
+ "rusix",
  "serde",
  "serde_json",
  "tempfile",
@@ -161,25 +171,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "rusix-ir"
-version = "0.1.0"
-dependencies = [
- "rusix-derive",
- "serde",
-]
-
-[[package]]
-name = "rusix-nix"
-version = "0.1.0"
-dependencies = [
- "rusix-ir",
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
 ]
 
 [[package]]

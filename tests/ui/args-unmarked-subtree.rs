@@ -1,4 +1,3 @@
-use rusix_ir as rusix;
 
 #[rusix::args]
 mod args {
@@ -13,7 +12,7 @@ mod args {
 }
 
 fn main() {
-    let _ = args::from_value(rusix_ir::interop::raw::NixValue::null())
+    let _ = args::from_value(rusix::interop::raw::NixValue::null())
         .subtree
         .as_value();
 }

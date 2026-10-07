@@ -1,6 +1,6 @@
 //! Demonstrates validation layers: Rust checks field types, Rusix checks bindings,
 //! and NixOS checks the final configuration against its option declarations.
-use rusix_ir::{self as rusix, IntoRusixValue};
+use rusix::IntoRusixValue;
 
 /// A reusable port-domain number; Rusix lowers the inner u16 without checking NixOS's schema.
 #[derive(IntoRusixValue)]
@@ -14,7 +14,7 @@ pub struct Port(
 #[rusix::config]
 mod config {
     use super::Port;
-    use rusix_ir::nixos::NixosModule;
+    use rusix::nixos::NixosModule;
 
     /// Defines only this contribution's tree, not a Rust binding for all NixOS services.
     #[rusix(root)]
@@ -62,6 +62,6 @@ fn main() {
 
     // Compilation checks the Rust description and emits a NixOS module.
     // It does not run the NixOS option checks or change the system's SSH service.
-    let artifact = rusix_nix::nixos::compile_module(&module).unwrap();
+    let artifact = rusix::nixos::compile_module(&module).unwrap();
     println!("{}", artifact.module.source);
 }

@@ -1,5 +1,5 @@
 //! Optional Rust-native choices; the public Nix factory still accepts upstream booleans.
-use rusix_ir::IntoRusixValue;
+use rusix::IntoRusixValue;
 
 /// A concrete Rust choice can select at most one TLS implementation.
 /// Ordinary Nix callers retain independent booleans, checked by the factory in Nix.

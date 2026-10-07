@@ -1,13 +1,12 @@
 //! Describes the dependencies and feature switches accepted by the pinned OpenSSL Nix function.
 //! Rust accessors generate references; Nix resolves their values only when the recipe needs them.
-use rusix_ir as rusix;
 
 /// Declares the dependencies and feature arguments accepted by the OpenSSL Nix function.
 /// Its views retain the caller's values for Nix to resolve when the recipe needs them.
 #[rusix::args]
 #[allow(dead_code)] // Upstream retains unused coreutils/writeShellScript parameters.
 pub mod args {
-    use rusix_ir::interop::{NixCallable, NixLibrary, NixNullable, Package, Stdenv, raw::NixValue};
+    use rusix::interop::{NixCallable, NixLibrary, NixNullable, Package, Stdenv, raw::NixValue};
 
     /// Caller-owned dependencies and lazy policy arguments.
     #[rusix(root)]

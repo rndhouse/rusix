@@ -1,4 +1,4 @@
-use rusix_ir::IntoRusixValue;
+use rusix::IntoRusixValue;
 
 #[derive(IntoRusixValue)]
 #[rusix(rename_all = "PascalCase", rename_all = "lowerCamelCase")]

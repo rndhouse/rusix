@@ -1,5 +1,5 @@
 use crate::fixture_support::ExistingModule;
-use rusix_ir::{
+use rusix::{
     Config,
     nixos::{DefinitionPriority, NixosModule},
 };

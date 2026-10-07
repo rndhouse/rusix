@@ -25,7 +25,7 @@ let choices = model::Curl {
     websocket: false,
 };
 let factory = lowering::factory();
-let curl = rusix_ir::interop::Nixpkgs::new()
+let curl = rusix::interop::Nixpkgs::new()
     .try_call_package(&factory, choices.arguments())
     .expect("fixed authoring arguments");
 ```
@@ -36,8 +36,8 @@ set through `callPackage`. The executable prints `factory` and `curl` expression
 Rust does not evaluate Nix or build curl.
 
 ```bash
-cargo run --locked -p rusix-nix --example curl-nixpkg > target/curl.nix
-cargo test --locked -p rusix-nix --test curl
+cargo run --locked -p rusix --example curl-nixpkg > target/curl.nix
+cargo test --locked -p rusix --test curl
 ```
 
 The complete `#[rusix::args]` view supplies `args::argument_names()` to the
@@ -96,7 +96,7 @@ ordered multi-check helper or package-validation DSL.
 
 ## Equivalence evidence and limits
 
-[`curl.rs`](../../crates/rusix-nix/tests/curl.rs) compares the candidate with the
+[`curl.rs`](../../crates/rusix/tests/curl.rs) compares the candidate with the
 pinned expression using the same real `callPackage` dependency scope. It compares
 complete derivation recipes (including hash-relevant environment, builder, inputs,
 outputs and scripts), exact derivation/output paths, source recipe/URLs, dependency
@@ -105,7 +105,7 @@ Nothing affecting a derivation hash is normalized away. Linux's default recipe i
 `/nix/store/cb2y179hgas7837a8wnx08gxawn61p1m-curl-8.11.0.drv`.
 
 The suite compares full package projections, the public-function interface and
-paired rejection cases. [Generic-operation tests](../../crates/rusix-nix/tests/nix_operations.rs)
+paired rejection cases. [Generic-operation tests](../../crates/rusix/tests/nix_operations.rs)
 cover builtin access, native assertions and record union, including laziness and
 precise source attribution.
 

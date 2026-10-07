@@ -5,7 +5,7 @@
 //! demo = { mode = "client"; firewall.allowedPorts = []; service.acceptsConnections = false; };
 //! ```
 
-use rusix_ir::{self as rusix};
+use rusix::{self as rusix};
 
 /// Computes firewall and service choices from one Rust mode and places them under demo in Nix.
 /// Both policies are decided in Rust before their resulting fields are emitted.
@@ -95,7 +95,7 @@ pub use config::{Mode, firewall_policy, model, service_policy};
 fn main() {
     // Rust computes both policies from the same mode before generating Nix.
     // Nix receives their resulting fields, not the Rust enum or its match expressions.
-    let generated = rusix_nix::compile(model()).unwrap();
+    let generated = rusix::compile(model()).unwrap();
 
     // Emit configuration data; printing firewall settings does not apply them.
     println!("{}", generated.source);

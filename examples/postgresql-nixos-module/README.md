@@ -29,11 +29,11 @@ NixOS remains responsible for checking and merging the generated module.
 From the repository root:
 
 ```bash
-cargo run --locked -p rusix-nix --example postgresql-nixos-module
+cargo run --locked -p rusix --example postgresql-nixos-module
 ```
 
-[Implementation tests](../../crates/rusix-nix/tests/postgresql.rs) and
-[schema tests](../../crates/rusix-nix/tests/postgresql_schema.rs) compare evaluated
+[Implementation tests](../../crates/rusix/tests/postgresql.rs) and
+[schema tests](../../crates/rusix/tests/postgresql_schema.rs) compare evaluated
 results against the pinned upstream module in disposable isolated Nix stores.
 The candidate imports no original PostgreSQL module. This experiment covers
 module evaluation; it does not build or start PostgreSQL, and runtime equivalence

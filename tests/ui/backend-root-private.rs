@@ -1,3 +1,3 @@
-use rusix_ir::Origin;
+use rusix::Origin;
 
 fn main() {}

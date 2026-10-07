@@ -7,7 +7,7 @@ mod merge_fixtures;
 
 mod nixos_fixtures;
 
-use rusix_nix::{Diagnostic, Evaluation, Generated, NixSession, compile};
+use rusix::{Diagnostic, Evaluation, Generated, NixSession, compile};
 use std::{
     env, fs,
     path::{Path, PathBuf},
@@ -81,7 +81,7 @@ fn run() -> Result<(), String> {
 }
 
 fn run_nixos(args: &[String]) -> Result<(), String> {
-    use rusix_nix::nixos::{DRIVER, compile_module, evaluation_source};
+    use rusix::nixos::{DRIVER, compile_module, evaluation_source};
 
     if !matches!(args.len(), 4 | 6)
         || args[2] != "--out"
@@ -205,8 +205,8 @@ fn save_diagnostic(out: &Path, diagnostic: &Diagnostic) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rusix_ir::{Config, nixos::NixosModule};
-    use rusix_nix::nixos::compile_module;
+    use rusix::nixos::compile_module;
+    use rusix::{Config, nixos::NixosModule};
 
     #[test]
     fn module_compilation_failures_replace_stale_artifacts_with_diagnostics() {

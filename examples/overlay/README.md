@@ -71,8 +71,8 @@ and can be passed in a Nix import's `overlays` list.
 From the repository root:
 
 ```bash
-cargo run --locked -p rusix-nix --example overlay
-cargo test --locked -p rusix-nix --test overlay
+cargo run --locked -p rusix --example overlay
+cargo test --locked -p rusix --test overlay
 ```
 
 The executable prints generated Nix without invoking Nix. Tests evaluate the

@@ -1,5 +1,5 @@
 use crate::fixture_support::{ExistingModule, OpenSsh};
-use rusix_ir::{Config, Expr, IntoConfig, nixos::NixosModule};
+use rusix::{Config, Expr, IntoConfig, nixos::NixosModule};
 
 pub fn module(name: &str) -> Option<NixosModule> {
     Some(match name {

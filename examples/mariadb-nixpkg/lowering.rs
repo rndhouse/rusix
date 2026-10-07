@@ -5,8 +5,8 @@ use super::{
     model::Release,
     scripts,
 };
-use rusix_ir::interop::raw::NixRepresentation;
-use rusix_ir::{
+use rusix::interop::raw::NixRepresentation;
+use rusix::{
     self as rusix, Expr, IntoRusixValue,
     interop::{
         NixAttrs, NixExpression, NixLibrary, NixList, NixPath, Nixpkgs, Package, PackageFunction,
@@ -378,7 +378,7 @@ fn server(i: &Inputs, lib: &NixLibrary, common: &common_view::Common) -> Package
 #[derive(IntoRusixValue)]
 struct Common {
     // Source release shared by client and server.
-    version: rusix_ir::Expr<String>,
+    version: rusix::Expr<String>,
     // Archive-fetching recipe with the caller's URL version and expected checksum.
     src: Package,
     // Separate store outputs for installed files and manual pages.
@@ -392,7 +392,7 @@ struct Common {
     // Checked-in patch files shared by both recipes, applied in order.
     patches: NixList<NixPath>,
     // Shared CMake switches and platform-dependent configuration choices.
-    cmake_flags: NixList<rusix_ir::Expr<String>>,
+    cmake_flags: NixList<rusix::Expr<String>>,
     // Shell text that removes development files unless the embedded server is requested.
     post_install: Expr<String>,
     // Shell text that supplies the mytop monitoring script's program search path.
@@ -407,7 +407,7 @@ struct Common {
 /// The views retain the complete shared recipe so each variant can extend it in Nix.
 #[rusix::args]
 mod common_view {
-    use rusix_ir::interop::{NixList, NixPath, Package};
+    use rusix::interop::{NixList, NixPath, Package};
 
     /// Arguments carrying the recipe shared by both MariaDB package variants.
     #[rusix(root)]
@@ -428,7 +428,7 @@ mod common_view {
         /// Shared tools that execute on the build machine, including during cross-compilation.
         native_build_inputs: NixList<Package>,
         /// Shared CMake switches extended with client- or server-specific choices.
-        cmake_flags: NixList<rusix_ir::Expr<String>>,
+        cmake_flags: NixList<rusix::Expr<String>>,
         /// Shared shell commands to run after installation during a Nix build.
         post_install: String,
     }

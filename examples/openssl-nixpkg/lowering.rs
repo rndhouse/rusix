@@ -5,8 +5,8 @@ use super::{
     model::Release,
     scripts,
 };
-use rusix_ir::interop::raw::NixRepresentation;
-use rusix_ir::{
+use rusix::interop::raw::NixRepresentation;
+use rusix::{
     Expr, IntoRusixValue,
     interop::{
         FinalAttrs, NixAttrs, NixCallable, NixExpression, NixLibrary, NixList, NixPath, Nixpkgs,

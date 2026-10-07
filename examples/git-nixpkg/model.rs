@@ -1,5 +1,5 @@
 //! Ordinary Rust choices for Git; nixpkgs still supplies builders and dependencies.
-use rusix_ir::interop::raw::NixValue;
+use rusix::interop::raw::NixValue;
 
 /// Perl-dependent features cannot be requested when Perl is disabled.
 pub enum Perl {

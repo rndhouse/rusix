@@ -1,6 +1,6 @@
 //! Selects one of four MariaDB releases for the shared client/server recipe.
 //! Version numbers and source checksums are fixed Rust data; package dependencies remain deferred.
-use rusix_ir::{
+use rusix::{
     IntoRusixValue,
     interop::{Nixpkgs, Package},
 };

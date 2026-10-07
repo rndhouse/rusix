@@ -17,6 +17,6 @@ fn main() {
 
     // Generate a NixOS module, which provides settings for a larger configuration.
     // Printing it does not evaluate that configuration or start PostgreSQL.
-    let artifact = rusix_nix::nixos::compile_module(&module).unwrap();
+    let artifact = rusix::nixos::compile_module(&module).unwrap();
     println!("{}", artifact.module.source);
 }

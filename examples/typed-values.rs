@@ -6,7 +6,7 @@
 //! demo = { port = 1000; host = "admin"; userId = 1000; owner = "admin"; };
 //! ```
 
-use rusix_ir::{self as rusix, IntoRusixValue};
+use rusix::IntoRusixValue;
 
 /// A listening-port domain value; the inner u16 lowers to a Nix integer.
 /// The distinction from UserId is checked by Rust, not by a range validator.
@@ -93,7 +93,7 @@ pub use config::model;
 fn main() {
     // Rust keeps ports, user IDs and names distinct; Nix receives integers and strings.
     // Conversion flattens the ownership fields into demo beside the listener fields.
-    let generated = rusix_nix::compile(model()).unwrap();
+    let generated = rusix::compile(model()).unwrap();
 
     // Emit configuration data; generating this source does not create a user or listener.
     println!("{}", generated.source);

@@ -23,6 +23,6 @@ fn main() {
     };
 
     // Generate and print Nix source. Nix evaluation is a separate step.
-    let artifact = rusix_nix::compile(output).expect("the overlay has valid structural values");
+    let artifact = rusix::compile(output).expect("the overlay has valid structural values");
     println!("{}", artifact.source);
 }

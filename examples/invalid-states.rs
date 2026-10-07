@@ -10,7 +10,7 @@
 //! };
 //! ```
 
-use rusix_ir::{self as rusix, IntoRusixValue, RusixValue};
+use rusix::{IntoRusixValue, RusixValue};
 
 /// An ordinary Rust sum type: credentials exist only in the TLS alternative.
 /// This shape cannot express disabled TLS with credentials or TLS missing a key.
@@ -111,7 +111,7 @@ impl IntoRusixValue for Transport {
 fn main() {
     // Rust requires both credentials for TLS; conversion emits them beside tls = true.
     // The credential paths become Nix strings without reading the files.
-    let generated = rusix_nix::compile(model()).unwrap();
+    let generated = rusix::compile(model()).unwrap();
 
     // Emit configuration data. Whether the referenced files exist is a separate check.
     println!("{}", generated.source);

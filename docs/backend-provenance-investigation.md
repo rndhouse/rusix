@@ -35,7 +35,7 @@ backend validation failure **after that expression has returned successfully**.
   privileged operations occur. All evaluation is offline.
 
 ```bash
-cargo test --locked -p rusix-nix --test backend_provenance
+cargo test --locked -p rusix --test backend_provenance
 ```
 
 Seven tests cover 240 minimal backend cases, 20 real-package input failures,

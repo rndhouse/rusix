@@ -6,7 +6,7 @@
 //! demo = { endpoint = { host = "service.internal"; port = 8080; }; transport.tls = false; };
 //! ```
 
-use rusix_ir::{self as rusix, IntoRusixValue, RusixValue};
+use rusix::{IntoRusixValue, RusixValue};
 
 /// A reusable hostname-domain string; no hostname syntax check is implied.
 #[derive(IntoRusixValue)]
@@ -126,7 +126,7 @@ impl IntoRusixValue for Transport {
 fn main() {
     // The service function runs in Rust; its result becomes nested Nix attribute sets.
     // Hostnames and ports become strings and integers, keeping the chosen field layout.
-    let generated = rusix_nix::compile(model()).unwrap();
+    let generated = rusix::compile(model()).unwrap();
 
     // This is configuration data. Using it as NixOS settings also needs declarations
     // for the fictional demo options, which NixOS checks during evaluation.

@@ -1,6 +1,6 @@
 //! Rust values returned by the overlay and its build-attribute update.
 //! Each struct becomes a Nix attribute set using the usual Rusix field naming.
-use rusix_ir::{
+use rusix::{
     Expr, IntoConfig, IntoRusixValue,
     interop::{NixList, Overlay, Package},
 };

@@ -1,8 +1,8 @@
-use rusix_ir::{self as rusix, interop::Nixpkgs};
+use rusix::{ interop::Nixpkgs};
 
 #[rusix::config]
 mod config {
-    use rusix_ir::interop::PackageRef;
+    use rusix::interop::PackageRef;
 
     #[rusix(root)]
     pub struct Machine {

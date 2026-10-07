@@ -4,8 +4,8 @@ use super::{
     model::{Clause, Database, Postgresql, Role, RoleClauses},
     options,
 };
-use rusix_ir::interop::raw::{NixFunctionExt, NixpkgsExt};
-use rusix_ir::{
+use rusix::interop::raw::{NixFunctionExt, NixpkgsExt};
+use rusix::{
     self as rusix, Config, Expr, IntoConfig, IntoRusixValue,
     interop::{Nixpkgs, PackageRef, raw::NixValue},
     nix_record as record, nix_text,

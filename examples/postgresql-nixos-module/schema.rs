@@ -2,9 +2,8 @@
 //! The optional Rust authoring model lives in model.rs; this file defines accepted options and defaults.
 
 // Public documentation mirrors pinned nixpkgs (MIT).
-use rusix_ir::interop::raw::{NixFunctionExt, NixpkgsExt};
-use rusix_ir::{
-    self as rusix,
+use rusix::interop::raw::{NixFunctionExt, NixpkgsExt};
+use rusix::{
     interop::{Nixpkgs, raw::NixValue},
     nix_record,
     nixos::{NixosModule, OptionDecl, OptionType},

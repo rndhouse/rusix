@@ -90,7 +90,7 @@ not become evidence of package/store identities.
 
 ## Retained implementation and matching rules
 
-`backend.rs` reads structured IR before rendering. It retains dependency fields,
+`compiler/provenance.rs` reads structured IR before rendering. It retains dependency fields,
 known list prefixes (including bounded nested lists), supplier and consumer
 origins, mkDerivation origins, demanded assignment scopes and owner edges.
 Lexical bindings, direct-application named defaults, plain record merges,

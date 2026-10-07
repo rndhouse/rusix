@@ -1,6 +1,6 @@
 //! User-defined PostgreSQL configuration types and an example server configuration.
 //! Package references and arbitrary server settings can stay deferred to Nix; lowering.rs handles NixOS compatibility.
-use rusix_ir::interop::{PackageRef, raw::NixValue};
+use rusix::interop::{PackageRef, raw::NixValue};
 use std::collections::BTreeMap;
 
 /// Models role-clause intent using ordinary Rust; Rusix core knows nothing about PostgreSQL.

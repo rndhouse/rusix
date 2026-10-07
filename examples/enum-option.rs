@@ -6,7 +6,7 @@
 //! demo = { mode = "server"; acceptsConnections = true; };
 //! ```
 
-use rusix_ir::{self as rusix};
+use rusix::{self as rusix};
 
 /// Defines the connection mode and Rust policy emitted under the demo Nix attribute set.
 /// Enum variants become strings and nested structs determine the output's fields.
@@ -61,7 +61,7 @@ pub use config::{Mode, accepts_connections, model};
 fn main() {
     // Rust chooses the mode and connection policy before Nix is involved.
     // Conversion turns the enum into "server" and the nested structs into Nix fields.
-    let generated = rusix_nix::compile(model()).unwrap();
+    let generated = rusix::compile(model()).unwrap();
 
     // Emit configuration data; generating source does not configure a service.
     println!("{}", generated.source);

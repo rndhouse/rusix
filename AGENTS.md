@@ -43,7 +43,7 @@ human Git identity only; never add AI/LLM/assistant/agent/harness/tool/vendor
 co-author or attribution trailers.
 
 All Nix subprocesses, including version checks, must go through
-`crates/rusix-nix/src/isolated.rs`. Each command explicitly selects a fresh
+`crates/rusix/src/evaluation.rs`. Each command explicitly selects a fresh
 disposable local store. Never invoke Nix directly against the host store, even
 for evaluation. Do not run activation, deployment, profile, rebuild, host GC,
 privileged operations, or change host Nix configuration. Do not add network

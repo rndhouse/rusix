@@ -1,7 +1,7 @@
 //! Describes the dependencies and feature switches accepted by the pinned Git Nix function.
 //! Rust accessors generate references; Nix resolves their values only when the recipe needs them.
-use rusix_ir::interop::raw::NixpkgsExt;
-use rusix_ir::{
+use rusix::interop::raw::NixpkgsExt;
+use rusix::{
     self as rusix, IntoRusixValue, RusixValue,
     interop::{NixPath, Nixpkgs, Package, raw::NixValue},
 };
@@ -10,7 +10,7 @@ use rusix_ir::{
 /// The views describe lookups; Nix supplies their values when applying the function.
 #[rusix::args]
 pub(super) mod args {
-    use rusix_ir::{
+    use rusix::{
         Expr,
         interop::{NixCallable, NixList, Package, raw::NixValue},
     };
@@ -148,7 +148,7 @@ pub(super) mod args {
         mk_derivation: NixCallable<Package>,
         /// Platform where Git will run.
         #[rusix(expression)]
-        host_platform: rusix_ir::interop::Platform,
+        host_platform: rusix::interop::Platform,
         /// Compiler metadata needed for the glibc linker workaround.
         cc: Compiler,
         /// Shell executable selected by stdenv.

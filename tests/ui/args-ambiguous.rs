@@ -1,4 +1,3 @@
-use rusix_ir as rusix;
 
 #[rusix::args]
 mod args {

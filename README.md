@@ -5,18 +5,18 @@ working loop is Rust type checking → semantic IR → validation → Nix AST �
 generated Nix → isolated evaluation → a diagnostic pointing back to Rust.
 Generated Nix is compiler output. Edit Rust configuration functions.
 
-For API documentation, run `cargo doc -p rusix-ir --no-deps --open`. Start with
-`rusix_ir`: Rust values describe configuration now, while `Expr`, `OptionRef`
+For API documentation, run `cargo doc -p rusix --no-deps --open`. Start with
+`rusix`: Rust values describe configuration now, while `Expr`, `OptionRef`
 and `NixValue` describe expressions that Nix evaluates later. Its rustdoc
 introduces packages, utility functions and NixOS modules before their Rusix
-wrappers. `rusix_nix` documents compilation and isolated evaluation.
+wrappers. `rusix::compiler` documents compilation; `NixSession` documents isolated evaluation.
 
 [Typed deferred package authoring](docs/typed-package-values.md) preserves package,
 function, list, record and scalar interfaces through lazy bindings and composition.
 The OpenSSL, curl, Git and MariaDB examples use these interfaces; dynamic interop
 uses `interop::raw::NixValue`. Normal authors can import
-`rusix_ir::prelude::*`; raw representation access requires a separate import.
-Compiler IR types and inspection hooks live in `rusix_ir::ir`.
+`rusix::prelude::*`; raw representation access requires a separate import.
+Compiler IR types and inspection hooks live in `rusix::ir`.
 
 ```text
 User-defined Rust domain model
@@ -106,7 +106,7 @@ its full history. Once initialized, evaluation is offline. See [vendor/README.md
 
 ```bash
 cargo test --workspace --locked
-cargo run --locked -p rusix-nix --example nix-interop
+cargo run --locked -p rusix --example nix-interop
 cargo run --locked -p rusix-cli -- check good --out target/demo/good
 cargo run --locked -p rusix-cli -- check nested --out target/demo/nested
 ```
@@ -166,7 +166,7 @@ JSON serialization demands only the selected value and its children.
 ## Rust API and boundaries
 
 ```rust
-use rusix_ir::{self as rusix, nixos::NixosModule};
+use rusix::{ nixos::NixosModule};
 
 #[rusix::config]
 mod config {
@@ -189,7 +189,7 @@ let module = NixosModule::empty().add(config::model());
 Struct nesting defines Nix attribute nesting: this contribution defines
 `services.example.enable` and `services.example.port`. The fictional service
 needs an ordinary NixOS option declaration for module evaluation. Plain-data
-examples can also use `rusix_nix::compile(config::model())` directly.
+examples can also use `rusix::compile(config::model())` directly.
 No prefix strings are needed. Rust `snake_case` fields lower to Nix-style
 `lowerCamelCase` by default. Struct-level `#[rusix(rename_all = "PascalCase")]`
 selects a convention for schemas such as systemd; explicit field renames are
@@ -202,7 +202,7 @@ chosen at runtime and deliberately invalid diagnostic fixtures. Rust cannot
 check those paths or their expected value types. The legacy `Config::set` is
 deprecated in favor of typed roots or explicit dynamic assignments.
 
-The module attribute is reexported as `rusix_ir::config` (aliased above). It adds
+The module attribute is reexported as `rusix::config` (aliased above). It adds
 the existing derives to immediate local structs and IntoConfig to explicitly
 marked roots; multiple roots are supported. It retains explicit conversions
 spelled with the canonical IntoConfig/IntoRusixValue names and imports external
@@ -268,18 +268,18 @@ The sealed value conversion trait deliberately keeps the API small.
 
 | Component | Responsibility |
 | --- | --- |
-| `rusix-ir` | Structural conversion, semantic nodes, origin capture, validation |
+| `rusix::prelude`, `interop`, `package`, `nixos` | Typed authoring and structural conversion |
+| `rusix::ir` | Semantic nodes, origin capture and validation |
 | `rusix-derive` | Structural authoring/reference macros, conversion derives, text interpolation |
-| `rusix-nix/ast.rs` | Backend expression syntax, separate from semantic values |
-| `rusix-nix/lib.rs` | Semantic lowering into the AST |
-| `rusix-nix/render.rs` | Escaped Nix source, optional inspection comments, contexts, byte source map |
-| `rusix-nix/isolated.rs` | Sole Nix subprocess boundary and disposable store owner |
-| `rusix-nix/diagnostic.rs` | JSON/text adaptation into owned Rusix diagnostics |
+| `rusix/src/compiler/ast.rs` | Backend expression syntax, separate from semantic values |
+| `rusix/src/compiler.rs` | Semantic lowering into the AST |
+| `rusix/src/compiler/render.rs` | Escaped Nix source, optional inspection comments, contexts, byte source map |
+| `rusix/src/evaluation.rs` | Sole Nix subprocess boundary and disposable store owner |
+| `rusix/src/diagnostic.rs` | JSON/text adaptation into owned Rusix diagnostics |
 | `rusix-cli` | Reviewable fixture artifacts and exit status |
 
 Build the public API documentation with `cargo doc --workspace --no-deps`;
-start at `target/doc/rusix_ir/index.html` for authoring or
-`target/doc/rusix_nix/index.html` for compilation and isolated evaluation.
+start at `target/doc/rusix/index.html` for authoring, compilation and isolated evaluation.
 The library crates warn on missing public docs. Documentation verification uses
 `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps`.
 
@@ -436,7 +436,7 @@ Evaluations sharing a `NixSession` run serially, including staging, parsing and
 diagnostic translation. This prevents concurrent calls from overwriting the
 session's input files. Separate sessions keep separate stores. Checked minimal
 nixpkgs files are staged once per session and reused by later evaluations;
-[session tests](crates/rusix-nix/tests/session.rs) cover concurrent calls and
+[session tests](crates/rusix/tests/session.rs) cover concurrent calls and
 staging reuse.
 
 Nix's chroot local store still uses logical `/nix/store` names. The **physical**
@@ -490,12 +490,12 @@ deployment and alternate backends remain outside this experiment.
 
 ## NixOS module experiment
 
-The module frontend lives in `rusix-ir/nixos.rs`; lowering, pinned source staging,
-and module-specific diagnostic translation live in `rusix-nix/nixos.rs`.
+The module frontend lives in `crates/rusix/src/nixos.rs`; lowering, pinned source staging,
+and module-specific diagnostic translation live in `crates/rusix/src/nixos/compile.rs`.
 The existing IR, AST, renderer, source maps, and subprocess boundary are reused.
 
 ```rust
-use rusix_ir::{IntoConfig, IntoRusixValue, nixos::NixosModule};
+use rusix::{IntoConfig, IntoRusixValue, nixos::NixosModule};
 
 #[derive(IntoConfig)]
 struct Machine {
@@ -836,8 +836,8 @@ bindings or metadata are duplicated in Rust. The example prints generated Nix;
 integration tests evaluate these objects and also exercise `lib.getName`. Run:
 
 ```bash
-cargo run --locked -p rusix-nix --example nix-interop
-cargo test --locked -p rusix-nix --test interop
+cargo run --locked -p rusix --example nix-interop
+cargo test --locked -p rusix --test interop
 ```
 
 The [overlay example](examples/overlay/README.md) authors ordinary
@@ -854,7 +854,7 @@ overlay, including the ordinary downstream `curlpp` dependency, and verify
 `final`/`prev`, laziness and Rust operation provenance. The package examples
 replace package definitions; this example replaces overlay/customization code.
 
-`rusix_ir::interop` owns distinct PackageRef/ModuleRef/OverlayRef/NixFunction
+`rusix::interop` owns distinct PackageRef/ModuleRef/OverlayRef/NixFunction
 handles and InputRef. `Overlay` represents an authored or referenced overlay
 expression and supports direct placement in `Config`. The explicit NixValue
 escape hatch lives in `interop::raw`. A reference carries its
@@ -900,14 +900,14 @@ Primitive values, Expr leaves and opaque handles support explicit `.into()`;
 boundary conversion, not a general serialization framework or Option derive.
 
 ```rust
-use rusix_ir::interop::{Nixpkgs, raw::{NixFunctionExt, NixValue}};
+use rusix::interop::{Nixpkgs, raw::{NixFunctionExt, NixValue}};
 
 let pkgs = Nixpkgs::new();
 let args = NixValue::record([
     ("name", "example.conf".into()),
-    ("text", rusix_ir::nix_text!("workers = {workers}\n", workers = 4).into()),
+    ("text", rusix::nix_text!("workers = {workers}\n", workers = 4).into()),
     ("executable", false.into()),
-    ("passthru", rusix_ir::nix_record! {
+    ("passthru", rusix::nix_record! {
         "package": pkgs.get("hello"),
         "labels": NixValue::list(["a".into(), "b".into()]),
     }),
@@ -932,7 +932,7 @@ arguments are dependencies and feature options. Construct it with
 named defaults and body construction as `NixValue::function_attrs`.
 
 ```rust
-use rusix_ir::{Expr, IntoConfig, interop::{raw::NixValue, Nixpkgs, PackageFunction}};
+use rusix::{Expr, IntoConfig, interop::{raw::NixValue, Nixpkgs, PackageFunction}};
 
 #[derive(IntoConfig)]
 struct Output {
@@ -948,7 +948,7 @@ let factory: PackageFunction<Expr<String>> =
         )
     });
 let result = Nixpkgs::new().call_package(&factory, NixValue::record([] as [(&str, NixValue); 0]));
-let generated = rusix_nix::compile(Output { factory, result })?;
+let generated = rusix::compile(Output { factory, result })?;
 ```
 
 `call_package<R>(&PackageFunction<R>, impl Into<NixValue>) -> R` represents the
@@ -1020,7 +1020,7 @@ remain; tabs are not expanded. Other templates stay verbatim. Interpolated value
 are never dedented or reindented.
 
 ```rust
-let command = rusix_ir::nix_text!(
+let command = rusix::nix_text!(
     r#"
         if test -d {data}; then
           echo ready
@@ -1046,7 +1046,7 @@ A single string literal is now a template and follows the brace-escaping rules.
 `NixValue::join_text(separator, opaque_list)` also accepts lists produced by
 deferred Nix callbacks. None of these operations evaluates deferred values in Rust.
 
-NixOS definition helpers live in `rusix_ir::nixos`: `nixos::merge(values)` emits
+NixOS definition helpers live in `rusix::nixos`: `nixos::merge(values)` emits
 `mkMerge`; `value.when(condition)` emits `mkIf`; `value.priority(priority)` uses
 the existing DefinitionPriority enum; `.before()` and `.after()` emit ordering
 metadata. NixOS decides merge, priority and ordering semantics. `.when` describes
@@ -1065,7 +1065,7 @@ follow the override. Its tiny option schema is test data, not a PostgreSQL rewri
 Unused calls and nested fallible values remain lazy. Immediate call failures
 identify the Rust call; nested expression failures retain their operation origin.
 
-[structured_interop.rs](crates/rusix-nix/tests/structured_interop.rs) exercises
+[structured_interop.rs](crates/rusix/tests/structured_interop.rs) exercises
 writeText, writeTextFile, runCommand, lib.recursiveUpdate and lib.isFloat with
 mixed values, arbitrary escaped keys, scopes, laziness and failure provenance.
 It evaluates derivation attributes/paths in disposable stores and verifies that
@@ -1119,12 +1119,12 @@ checks and authoritative fixture manifest.
 ## Explicit symbolic NixOS dependencies
 
 Run the single-file [symbolic-option example](examples/symbolic-option.rs) with
-`cargo run --locked -p rusix-nix --example symbolic-option` to see a concrete
+`cargo run --locked -p rusix --example symbolic-option` to see a concrete
 Rust command and generated symbolic module. Tests verify the default and ordinary
 Nix override against the same generated artifact; the example does not invoke Nix.
 
 A concrete Rust value is computed before lowering. A
-`rusix_ir::nixos::OptionRef<T>` instead declares a dependency resolved by NixOS
+`rusix::nixos::OptionRef<T>` instead declares a dependency resolved by NixOS
 after merging. It has no operation to read or resolve the value in Rust.
 The author's expected type controls expression composition; it does not prove
 the schema of a string-named NixOS option. NixOS remains authoritative there.
@@ -1195,7 +1195,7 @@ or ambiguous views and unsupported types are rejected. External aliases and
 finite views can use `#[rusix(expression)]` fields when they implement
 `NixExpression`; one-off references can still use OptionRef directly. Container derives, skip and
 flatten are intentionally unsupported in reference declarations. There is no
-runtime traversal or whole-config handle. The [view tests](crates/rusix-nix/tests/options.rs)
+runtime traversal or whole-config handle. The [view tests](crates/rusix/tests/options.rs)
 exercise opaque/typed leaves, exact keys, provenance, lazy evaluation and ordinary
 Nix overrides of the same artifact; UI fixtures check the compile-time boundary.
 
@@ -1260,7 +1260,7 @@ explicit in the native function builder.
 
 The [Git argument declaration](examples/git-nixpkg/inputs.rs) exercises this API without
 changing defaults, `functionArgs`, `callPackage`, `.override` or `.overrideAttrs`.
-The [argument-view tests](crates/rusix-nix/tests/args.rs) verify literal path keys,
+The [argument-view tests](crates/rusix/tests/args.rs) verify literal path keys,
 caller provenance, laziness and ordinary Nix callers reusing the same artifact.
 
 Native argument selections lower directly to lexical bindings such as
@@ -1274,7 +1274,7 @@ generated positions.
 `NixValue::into_expr::<T>()` attaches a supported expected scalar type while
 retaining the existing deferred expression and origin.
 
-The [symbolic dependency tests](crates/rusix-nix/tests/symbolic_options.rs) add
+The [symbolic dependency tests](crates/rusix/tests/symbolic_options.rs) add
 an ordinary Nix option-declaration fixture and an independent default-priority
 port contribution of 5432. Each contribution retains its own `_file` identity.
 Only contributions containing references become `{ config, ... }:` functions;
@@ -1301,7 +1301,7 @@ only that ordinary Nix input: `"example --port=5432"` becomes
 Another ordinary module's `lib.mkForce 7432` wins over both the normal definition
 and Rusix's default. NixOS alone selects the final value.
 
-[Symbolic option tests](crates/rusix-nix/tests/symbolic_options.rs) cover the base
+[Symbolic option tests](crates/rusix/tests/symbolic_options.rs) cover the base
 value, unchanged-artifact override, priority selection,
 the same symbolic text accepted by the real upstream OpenSSH `banner` option,
 division-by-zero provenance and source-map fallback, missing-reference provenance,
@@ -1329,7 +1329,7 @@ there is no whole-config handle, dynamic traversal, symbolic iteration or Rust
 fixed-point execution. All evaluations use the unchanged disposable-store helper.
 
 
-[Derive integration tests](crates/rusix-nix/tests/derive.rs) cover nested
+[Derive integration tests](crates/rusix/tests/derive.rs) cover nested
 placement, literal renames, newtypes, flatten/skip, generics/lifetimes,
 automatic unit-enum lowering, explicit structural enum mappings, record-list
 laziness and provenance, independent NixOS merges/priorities and two-origin
@@ -1338,7 +1338,7 @@ conventions. Proc-macro and UI tests cover naming rules and invalid annotations.
 NixOS can inspect scalar heads while processing freeform namespaces; list
 elements remain deferred.
 
-[Inline-module tests](crates/rusix-nix/tests/config_module.rs) cover local
+[Inline-module tests](crates/rusix/tests/config_module.rs) cover local
 structure, external reusable values, automatic unit enums/custom converters,
 multiple roots, NixOS merges/priorities, two-origin conflicts, operation
 provenance/laziness, symbolic/opaque handles and package resolution. The symbolic
@@ -1373,7 +1373,7 @@ Ordinary NixOS modules use the same `services.postgresql.*` interface.
 
 Typed owned-database provisioning and three-state role clauses coexist with
 finite final-option dependencies and opaque package/build-helper calls.
-The [equivalence suite](crates/rusix-nix/tests/postgresql.rs) compares full NixOS
+The [equivalence suite](crates/rusix/tests/postgresql.rs) compares full NixOS
 evaluation, generated-file/check derivation recipes and string dependency contexts,
 including ordinary downstream overrides of the same generated artifact. It builds
 and activates nothing. See [the example notes](examples/README.md#postgresql-compatibility-rewrite)

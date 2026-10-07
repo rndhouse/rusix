@@ -1,7 +1,7 @@
 //! Print Nix for the package set assembled by composition::packages.
 pub mod composition;
 
-use rusix_ir::{
+use rusix::{
     IntoConfig,
     interop::{NixAttrs, Package},
 };
@@ -17,7 +17,7 @@ struct Output {
 fn main() {
     // Connect package recipes: our OpenSSL feeds curl and Git, and curl feeds MariaDB.
     // Rust records these dependencies; Nix resolves their recipes when needed.
-    let generated = rusix_nix::compile(Output {
+    let generated = rusix::compile(Output {
         packages: composition::packages(),
     })
     .unwrap();

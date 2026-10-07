@@ -1,4 +1,4 @@
-use rusix_ir::{self as rusix, Expr};
+use rusix::{ Expr};
 
 #[rusix::options]
 mod options {

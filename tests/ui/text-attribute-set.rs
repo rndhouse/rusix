@@ -1,4 +1,4 @@
-use rusix_ir::{Expr, interop::NixAttrs, nix_text};
+use rusix::{Expr, interop::NixAttrs, nix_text};
 
 fn main() {
     let attrs = NixAttrs::new([("text", Expr::<String>::from("value"))]);

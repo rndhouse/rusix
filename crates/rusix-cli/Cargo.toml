@@ -6,8 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
-rusix-ir.workspace = true
-rusix-nix.workspace = true
+rusix.workspace = true
 serde_json.workspace = true
 serde.workspace = true
 

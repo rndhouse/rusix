@@ -1,3 +1,3 @@
 fn main() {
-    let _ = rusix_ir::nix_text!("literal", unused = "value");
+    let _ = rusix::nix_text!("literal", unused = "value");
 }

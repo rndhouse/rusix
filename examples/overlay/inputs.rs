@@ -3,9 +3,9 @@
 
 /// Declares accessors for existing nixpkgs packages, builder attributes and package metadata.
 /// These views describe the fields used by the overlay without supplying their implementations.
-#[rusix_ir::args]
+#[rusix::args]
 mod views {
-    use rusix_ir::{
+    use rusix::{
         Expr,
         interop::{NixList, Package},
     };

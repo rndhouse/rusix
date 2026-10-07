@@ -5,7 +5,7 @@ one recipe across four pinned releases. Start with [model.rs](model.rs) to choos
 a release, then [main.rs](main.rs) to see how it becomes generated Nix.
 
 ```rust
-use rusix_ir::interop::Nixpkgs;
+use rusix::interop::Nixpkgs;
 
 let release = model::Release::V1011;
 let factory = lowering::factory();
@@ -24,7 +24,7 @@ The resulting server package also exposes separate `client` and `server` members
 From the repository root:
 
 ```bash
-cargo run --locked -p rusix-nix --example mariadb-nixpkg
+cargo run --locked -p rusix --example mariadb-nixpkg
 ```
 
 The executable prints the shared `factory`, a `family` containing all four
@@ -76,7 +76,7 @@ closure is rewritten and no derivations are built or fetched.
 
 ## Verification
 
-Run `cargo test --locked -p rusix-nix --test mariadb`. It compares exact server
+Run `cargo test --locked -p rusix --test mariadb`. It compares exact server
 and client recipes, identities, outputs, source recipes, patch bytes/store paths,
 flags, phase bytes and contexts, metadata, default argument interfaces and family
 membership. All 16 combinations of Mroonga, RocksDB, embedded and NUMA switches
