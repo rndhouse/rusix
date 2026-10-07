@@ -1,7 +1,9 @@
 # Rusix
 
-Rusix lets you define Nix packages and NixOS configuration in Rust.
-It compiles those definitions into Nix expressions.
+Rusix is a Rust library for defining packages and NixOS configuration in ordinary
+Rust, as an alternative to the Nix language. It compiles these definitions into Nix
+expressions that can use existing Nix packages and modules. Existing Nix code can
+import and use the generated definitions.
 
 - Define configuration with your own Rust types.
 - Nix evaluates the generated expressions when their values are needed.
