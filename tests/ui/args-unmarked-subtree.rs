@@ -1,8 +1,8 @@
-use rusnix_ir as rusnix;
+use rusix_ir as rusix;
 
-#[rusnix::args]
+#[rusix::args]
 mod args {
-    #[rusnix(root)]
+    #[rusix(root)]
     struct Root {
         subtree: Subtree,
     }
@@ -13,7 +13,7 @@ mod args {
 }
 
 fn main() {
-    let _ = args::from_value(rusnix_ir::interop::raw::NixValue::null())
+    let _ = args::from_value(rusix_ir::interop::raw::NixValue::null())
         .subtree
         .as_value();
 }

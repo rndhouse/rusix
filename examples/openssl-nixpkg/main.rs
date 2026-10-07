@@ -7,7 +7,7 @@ mod model;
 
 mod scripts;
 
-use rusnix_ir::{
+use rusix_ir::{
     IntoConfig,
     interop::{NixAttrs, Nixpkgs, Package, PackageFunction},
     nix_record,
@@ -33,7 +33,7 @@ fn main() {
 
     // Export a reusable function for the release family alongside our selection.
     // Generating this Nix source neither fetches sources nor builds OpenSSL.
-    let generated = rusnix_nix::compile(Output {
+    let generated = rusix_nix::compile(Output {
         family: lowering::family_factory(),
         openssl,
     })

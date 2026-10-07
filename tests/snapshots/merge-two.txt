@@ -1,21 +1,21 @@
 error[nixos-merge]: conflicting definitions for a NixOS option
 
-  --> crates/rusnix-cli/src/merge_fixtures.rs:13:36
+  --> crates/rusix-cli/src/merge_fixtures.rs:16:23
    |
- 13 |     NixosModule::new(Config::new().set("services.openssh.authorizedKeysCommandUser", "nobody"))
-   |                                    ^
+ 16 |         Config::new().set_dynamic("services.openssh.authorizedKeysCommandUser", "nobody"),
+   |                       ^
    = origin: set services.openssh.authorizedKeysCommandUser
    = conflicting definition
 
-  --> crates/rusnix-cli/src/merge_fixtures.rs:9:36
+  --> crates/rusix-cli/src/merge_fixtures.rs:10:23
    |
-  9 |     NixosModule::new(Config::new().set("services.openssh.authorizedKeysCommandUser", "root"))
-   |                                    ^
+ 10 |         Config::new().set_dynamic("services.openssh.authorizedKeysCommandUser", "root"),
+   |                       ^
    = origin: set services.openssh.authorizedKeysCommandUser
    = conflicting definition
 
    = option: services.openssh.authorizedKeysCommandUser
    = Nix: The option `services.openssh.authorizedKeysCommandUser' has conflicting definition values:
-     - In `Rust crates/rusnix-cli/src/merge_fixtures.rs:13:36': "nobody"
-     - In `Rust crates/rusnix-cli/src/merge_fixtures.rs:9:36': "root"
+     - In `Rust crates/rusix-cli/src/merge_fixtures.rs:16:23': "nobody"
+     - In `Rust crates/rusix-cli/src/merge_fixtures.rs:10:23': "root"
      Use `lib.mkForce value` or `lib.mkDefault value` to change the priority on any of these definitions.

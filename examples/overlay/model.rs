@@ -1,19 +1,19 @@
 //! Rust values returned by the overlay and its build-attribute update.
-//! Each struct becomes a Nix attribute set using the usual Rusnix field naming.
-use rusnix_ir::{
-    Expr, IntoConfig, IntoRusnixValue,
+//! Each struct becomes a Nix attribute set using the usual Rusix field naming.
+use rusix_ir::{
+    Expr, IntoConfig, IntoRusixValue,
     interop::{NixList, Overlay, Package},
 };
 
 /// Package definitions replaced by the overlay; other packages stay unchanged.
-#[derive(IntoRusnixValue)]
+#[derive(IntoRusixValue)]
 pub struct Changes {
     /// Curl with the DICT protocol disabled.
     pub curl: Package,
 }
 
 /// Builder attributes replaced by overrideAttrs; other recipe fields stay unchanged.
-#[derive(IntoRusnixValue)]
+#[derive(IntoRusixValue)]
 pub struct ConfigureChanges {
     /// Existing configure flags followed by the flag that disables DICT.
     pub configure_flags: NixList<Expr<String>>,

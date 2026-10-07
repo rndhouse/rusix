@@ -1,4 +1,4 @@
-use rusnix_ir::{Config, interop::Nixpkgs, nixos::NixosModule};
+use rusix_ir::{Config, interop::Nixpkgs, nixos::NixosModule};
 
 fn main() {
     let module = Nixpkgs::new().module("misc/label.nix");

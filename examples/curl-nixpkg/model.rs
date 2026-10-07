@@ -1,5 +1,5 @@
 //! Optional Rust-native choices; the public Nix factory still accepts upstream booleans.
-use rusnix_ir::IntoRusnixValue;
+use rusix_ir::IntoRusixValue;
 
 /// A concrete Rust choice can select at most one TLS implementation.
 /// Ordinary Nix callers retain independent booleans, checked by the factory in Nix.
@@ -61,8 +61,8 @@ pub fn model() -> Curl {
 }
 
 /// Explicit choices; absent TLS flags preserve the native dependent defaults.
-#[derive(IntoRusnixValue)]
-#[rusnix(omit_none)]
+#[derive(IntoRusixValue)]
+#[rusix(omit_none)]
 pub struct Arguments {
     /// Adds the HTTP/3 dependencies and configure flags through the Nix package function.
     http3_support: bool,

@@ -1,4 +1,4 @@
-use rusnix_ir::nixos::{NixosModule, OptionRef};
+use rusix_ir::nixos::{NixosModule, OptionRef};
 
 fn main() {
     let port = OptionRef::<i64>::new("services.example.port");

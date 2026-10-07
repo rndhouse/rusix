@@ -1,19 +1,19 @@
 //! Shows how a Rust enum constrains configuration choices before emitting a fictional `demo` tree.
-//! Rust computes the connection policy; Rusnix maps variant and field names to Nix strings and
+//! Rust computes the connection policy; Rusix maps variant and field names to Nix strings and
 //! attributes.
 //!
 //! ```nix
 //! demo = { mode = "server"; acceptsConnections = true; };
 //! ```
 
-use rusnix_ir::{self as rusnix};
+use rusix_ir::{self as rusix};
 
 /// Defines the connection mode and Rust policy emitted under the demo Nix attribute set.
 /// Enum variants become strings and nested structs determine the output's fields.
-#[rusnix::config]
+#[rusix::config]
 mod config {
-    /// A choice defined by this configuration, not a built-in Rusnix type.
-    /// Rusnix maps these unit variants to "server" and "client" automatically.
+    /// A choice defined by this configuration, not a built-in Rusix type.
+    /// Rusix maps these unit variants to "server" and "client" automatically.
     pub enum Mode {
         /// Accept incoming connections.
         Server,
@@ -38,7 +38,7 @@ mod config {
     }
 
     /// A rooted contribution whose nested fields define the generated attribute paths.
-    #[rusnix(root)]
+    #[rusix(root)]
     pub struct Root {
         // Places the policy under the fictional `demo` option tree.
         demo: ConnectionPolicy,
@@ -61,7 +61,7 @@ pub use config::{Mode, accepts_connections, model};
 fn main() {
     // Rust chooses the mode and connection policy before Nix is involved.
     // Conversion turns the enum into "server" and the nested structs into Nix fields.
-    let generated = rusnix_nix::compile(model()).unwrap();
+    let generated = rusix_nix::compile(model()).unwrap();
 
     // Emit configuration data; generating source does not configure a service.
     println!("{}", generated.source);

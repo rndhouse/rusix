@@ -1,9 +1,9 @@
 //! User-defined PostgreSQL configuration types and an example server configuration.
 //! Package references and arbitrary server settings can stay deferred to Nix; lowering.rs handles NixOS compatibility.
-use rusnix_ir::interop::{PackageRef, raw::NixValue};
+use rusix_ir::interop::{PackageRef, raw::NixValue};
 use std::collections::BTreeMap;
 
-/// Models role-clause intent using ordinary Rust; Rusnix core knows nothing about PostgreSQL.
+/// Models role-clause intent using ordinary Rust; Rusix core knows nothing about PostgreSQL.
 pub enum Clause {
     /// Leave this clause unchanged on an existing role; new roles use PostgreSQL's default.
     Preserve,
@@ -54,7 +54,7 @@ pub enum Database {
     },
 }
 
-/// Rust inputs for this example's PostgreSQL component, not built-in Rusnix domain types.
+/// Rust inputs for this example's PostgreSQL component, not built-in Rusix domain types.
 /// Unset optional fields and empty collections contribute no definitions; NixOS defaults still apply.
 #[derive(Default)]
 pub struct Postgresql {

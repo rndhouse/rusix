@@ -1,4 +1,4 @@
-# OpenSSL authored in Rusnix
+# OpenSSL authored in Rusix
 
 This example defines OpenSSL build recipes in Rust for three releases from the
 pinned nixpkgs checkout. Start with [model.rs](model.rs) to choose a release, then
@@ -7,7 +7,7 @@ pinned nixpkgs checkout. Start with [model.rs](model.rs) to choose a release, th
 The authoring code uses an ordinary Rust enum:
 
 ```rust
-use rusnix_ir::{interop::Nixpkgs, nix_record};
+use rusix_ir::{interop::Nixpkgs, nix_record};
 
 let release = model::Release::Preview;
 let factory = lowering::factory(release);
@@ -23,7 +23,7 @@ evaluating Nix or building OpenSSL.
 From the repository root:
 
 ```bash
-cargo run --locked -p rusnix-nix --example openssl-nixpkg
+cargo run --locked -p rusix-nix --example openssl-nixpkg
 ```
 
 The executable prints `family` as a function returning all three releases and
@@ -72,7 +72,7 @@ or patch is downloaded and no package is built by this experiment.
 
 ## Verification
 
-Run `cargo test --locked -p rusnix-nix --test openssl`. The suite compares exact
+Run `cargo test --locked -p rusix-nix --test openssl`. The suite compares exact
 `.drv` identities and recipe bytes, output paths, source recipes, patch bytes and
 store paths, phase text and string contexts, flags, metadata, family membership,
 argument defaults and recursive pkg-config tests. It covers every release,

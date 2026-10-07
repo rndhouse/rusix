@@ -1,9 +1,9 @@
-//! Demonstrates validation layers: Rust checks field types, Rusnix checks bindings,
+//! Demonstrates validation layers: Rust checks field types, Rusix checks bindings,
 //! and NixOS checks the final configuration against its option declarations.
-use rusnix_ir::{self as rusnix, IntoRusnixValue};
+use rusix_ir::{self as rusix, IntoRusixValue};
 
-/// A reusable port-domain number; Rusnix lowers the inner u16 without checking NixOS's schema.
-#[derive(IntoRusnixValue)]
+/// A reusable port-domain number; Rusix lowers the inner u16 without checking NixOS's schema.
+#[derive(IntoRusixValue)]
 pub struct Port(
     /// Listening port emitted as an integer in Nix.
     pub u16,
@@ -11,13 +11,13 @@ pub struct Port(
 
 /// Contributes SSH settings and imports the upstream NixOS module that declares their options.
 /// Rust structs provide the setting paths; NixOS checks their values during evaluation.
-#[rusnix::config]
+#[rusix::config]
 mod config {
     use super::Port;
-    use rusnix_ir::nixos::NixosModule;
+    use rusix_ir::nixos::NixosModule;
 
     /// Defines only this contribution's tree, not a Rust binding for all NixOS services.
-    #[rusnix(root)]
+    #[rusix(root)]
     pub struct SshContribution<T> {
         /// Places the supplied service values under the existing NixOS `services` namespace.
         pub services: Services<T>,
@@ -62,6 +62,6 @@ fn main() {
 
     // Compilation checks the Rust description and emits a NixOS module.
     // It does not run the NixOS option checks or change the system's SSH service.
-    let artifact = rusnix_nix::nixos::compile_module(&module).unwrap();
+    let artifact = rusix_nix::nixos::compile_module(&module).unwrap();
     println!("{}", artifact.module.source);
 }

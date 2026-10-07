@@ -1,4 +1,4 @@
-use rusnix_ir::interop::Nixpkgs;
+use rusix_ir::interop::Nixpkgs;
 
 fn main() {
     let lib = Nixpkgs::new().library();

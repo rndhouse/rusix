@@ -6,25 +6,25 @@
 //! demo = { port = 1000; host = "admin"; userId = 1000; owner = "admin"; };
 //! ```
 
-use rusnix_ir::{self as rusnix, IntoRusnixValue};
+use rusix_ir::{self as rusix, IntoRusixValue};
 
 /// A listening-port domain value; the inner u16 lowers to a Nix integer.
 /// The distinction from UserId is checked by Rust, not by a range validator.
-#[derive(IntoRusnixValue)]
+#[derive(IntoRusixValue)]
 pub struct Port(
     /// Listening port emitted as an integer in Nix.
     pub u16,
 );
 
 /// A username-domain string, distinct from other strings in typed function calls.
-#[derive(IntoRusnixValue)]
+#[derive(IntoRusixValue)]
 pub struct UserName(
     /// Account name emitted as a Nix string, distinct from a hostname in Rust.
     pub String,
 );
 
 /// A Unix-user identity with the same primitive representation as Port.
-#[derive(IntoRusnixValue)]
+#[derive(IntoRusixValue)]
 pub struct UserId(
     /// User identifier emitted as a Nix integer, distinct from a port in Rust.
     pub u16,
@@ -37,7 +37,7 @@ pub fn listen(port: Port) -> Port {
 
 /// Defines the demo listener's Nix fields, including renamed and flattened ownership values.
 /// Rust domain types become primitive values while the structs determine their placement.
-#[rusnix::config]
+#[rusix::config]
 mod config {
     use super::{Port, UserId, UserName, listen};
 
@@ -52,7 +52,7 @@ mod config {
         // Becomes `userId`, but cannot be passed to an API expecting Port in Rust.
         user_id: UserId,
         // This semantic rename calls the lowered username `owner`.
-        #[rusnix(rename = "owner")]
+        #[rusix(rename = "owner")]
         name: UserName,
     }
 
@@ -63,12 +63,12 @@ mod config {
         /// Hostname emitted beside the port as a Nix string.
         host: Hostname,
         // Put Identity's fields beside port and host in the generated Nix record.
-        #[rusnix(flatten)]
+        #[rusix(flatten)]
         owner: Identity,
     }
 
     /// Places the listener in the fictional `demo` option tree.
-    #[rusnix(root)]
+    #[rusix(root)]
     pub struct Root {
         /// Listener fields emitted under demo, with user identity fields flattened beside them.
         demo: Listener,
@@ -93,7 +93,7 @@ pub use config::model;
 fn main() {
     // Rust keeps ports, user IDs and names distinct; Nix receives integers and strings.
     // Conversion flattens the ownership fields into demo beside the listener fields.
-    let generated = rusnix_nix::compile(model()).unwrap();
+    let generated = rusix_nix::compile(model()).unwrap();
 
     // Emit configuration data; generating this source does not create a user or listener.
     println!("{}", generated.source);

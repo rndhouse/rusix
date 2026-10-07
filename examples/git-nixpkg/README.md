@@ -1,6 +1,6 @@
 # Git nixpkgs package rewrite
 
-This example authors Git **2.47.0** in Rust/Rusnix, replacing the package expression
+This example authors Git **2.47.0** in Rust/Rusix, replacing the package expression
 at `pkgs/applications/version-management/git/default.nix` in nixpkgs revision
 **`8b27c1239e5c421a2bbc2c65d52e4a6fbf2ff296`**. The reference is the repository's
 checked, pinned `vendor/nixpkgs` submodule. This is a **package definition**, complementing
@@ -8,7 +8,7 @@ the [PostgreSQL NixOS module](../postgresql-nixos-module/README.md).
 
 - `model.rs`: ordinary Rust feature choices. `Perl` groups SVN/send-email with the
   Perl support they require; platform-dependent defaults remain deferred to Nix.
-- `inputs.rs`: a local `#[rusnix::args]` structural view of the deferred native Nix
+- `inputs.rs`: a local `#[rusix::args]` structural view of the deferred native Nix
   argument record. Scalar accessors are typed; packages and functions stay opaque.
 - `lowering.rs`: feature/platform policy, the fixed derivation record, readable
   shell templates, metadata and passthru values.
@@ -25,7 +25,7 @@ let choices = model::Git {
     ..model::Git::defaults()
 };
 let factory = lowering::factory();
-let git = rusnix_ir::interop::Nixpkgs::new()
+let git = rusix_ir::interop::Nixpkgs::new()
     .try_call_package(&factory, inputs::arguments(choices))
     .expect("fixed authoring arguments");
 ```
@@ -36,7 +36,7 @@ set through `callPackage`. Run the executable from the repository root to print
 the reusable `factory` and selected `git` expressions:
 
 ```bash
-cargo run --locked -p rusnix-nix --example git-nixpkg
+cargo run --locked -p rusix-nix --example git-nixpkg
 ```
 
 `args::from_value(arguments)` binds the view to the record supplied by the native
@@ -44,8 +44,8 @@ Nix function. Access such as `inputs.stdenv.host_platform.is_darwin()` construct
 a lexical Nix dependency such as `stdenv.hostPlatform.isDarwin`; Rust never reads
 the platform flags. Dependent defaults use the same lexical scope without
 reconstructing the complete argument record. Declared subtrees
-marked `#[rusnix(value)]` expose `as_value()` when the whole opaque record is
-needed. Naming follows the same rules as `#[rusnix::options]`. Generic condition/list
+marked `#[rusix(value)]` expose `as_value()` when the whole opaque record is
+needed. Naming follows the same rules as `#[rusix::options]`. Generic condition/list
 helpers use `NixLibrary::from_expression(inputs.lib.as_expression())`, preserving the
 caller's library overrides. Feature checks use native `NixValue::assert`; their
 order remains explicit in the package factory, and an overridden `lib.throwIfNot`
@@ -68,7 +68,7 @@ feature argument lists remain ordinary Rust collections.
 The generated artifact exposes `factory` and `git`. Ordinary Nix can pass `factory`
 to `pkgs.callPackage` with the same explicit framework/Perl-library arguments used
 by upstream Git; the resulting package supports `.override` and `.overrideAttrs`.
-The compiler artifact uses the pinned source tree staged by Rusnix's evaluator.
+The compiler artifact uses the pinned source tree staged by Rusix's evaluator.
 
 ## What remains in Nix
 
@@ -105,7 +105,7 @@ needed.
 
 ## Mechanical proof
 
-[`git.rs`](../../crates/rusnix-nix/tests/git.rs) and the ordinary Nix
+[`git.rs`](../../crates/rusix-nix/tests/git.rs) and the ordinary Nix
 [comparison fixture](../../tests/fixtures/git-equivalence.nix) instantiate both
 factories in the same package scope. They compare exact `.drv` ATerm recipes,
 derivation/output paths, source recipes, dependency identities, outputs, patches,
@@ -142,7 +142,7 @@ records the earlier runtime-context measurements. The [pretty-printer](../../doc
 uses a 100-character target, formatting functions, dependency lists and fields
 while recording their source spans. Normal output has no fine-grained origin
 comments. For manual inspection,
-`rusnix_nix::compile_with_options` accepts `RenderOptions { origin_comments: true }`,
+`rusix_nix::compile_with_options` accepts `RenderOptions { origin_comments: true }`,
 adding origin comments. Both modes retain the same mapped origins; each source
 map has offsets for its own text. Historical sizes are recorded in the renderer
 audits and vary as the authored recipe changes.
@@ -158,7 +158,7 @@ let factory: PackageFunction<Package> = lowering::factory();
 let git: Package = Nixpkgs::new().try_call_package(&factory, inputs::arguments(model::model()))?;
 ```
 
-Argument records implement `IntoRusnixValue` and lower only at the call boundary.
+Argument records implement `IntoRusixValue` and lower only at the call boundary.
 Dependency accessors return `Package`, sources return through `NixCallable<Package>`,
 phase text uses `Expr<String>`, and package/flag lists retain their element types.
 A typed output root exports the factory and package directly. Dynamic fields remain

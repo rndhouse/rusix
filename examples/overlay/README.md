@@ -6,7 +6,7 @@ before this overlay, and `final` refers to the set after all overlays. Reference
 to `final` let packages depend on each other's final versions; Nix resolves only
 the values an evaluation needs.
 
-This example authors the same function in Rust/Rusnix. It modifies ordinary
+This example authors the same function in Rust/Rusix. It modifies ordinary
 pinned nixpkgs `curl` with `prev.curl.overrideAttrs`, appending `--disable-dict`
 to its existing configure flags to disable the DICT protocol. Curl's source,
 dependencies and upstream package definition stay in nixpkgs. The remaining
@@ -27,7 +27,7 @@ let output = model::Output {
 ```
 
 Rust field names supply the Nix attribute names, so lookups and replacements use
-accessors and struct fields. Names follow Rusnix's usual lowerCamelCase mapping:
+accessors and struct fields. Names follow Rusix's usual lowerCamelCase mapping:
 `configure_flags` becomes `configureFlags`, and `drv_path` becomes `drvPath`.
 The executable compiles `output` directly and prints the overlay function
 and an expression selecting the customized curl's build-recipe path. Nix applies
@@ -65,14 +65,14 @@ calls apply overlays in order. The method also accepts an `OverlayRef` from a
 local Nix file. `Overlay` supports direct placement in `Config`, as shown above,
 and can be passed in a Nix import's `overlays` list.
 
-- Rusnix package examples replace package definitions written in Nixlang.
+- Rusix package examples replace package definitions written in Nixlang.
 - This overlay example replaces overlay/customization code written in Nixlang.
 
 From the repository root:
 
 ```bash
-cargo run --locked -p rusnix-nix --example overlay
-cargo test --locked -p rusnix-nix --test overlay
+cargo run --locked -p rusix-nix --example overlay
+cargo test --locked -p rusix-nix --test overlay
 ```
 
 The executable prints generated Nix without invoking Nix. Tests evaluate the

@@ -1,8 +1,8 @@
-use rusnix_ir as rusnix;
+use rusix_ir as rusix;
 
-#[rusnix::args]
+#[rusix::args]
 mod args {
-    #[rusnix(root)]
+    #[rusix(root)]
     struct Root {
         nested: Nested,
     }

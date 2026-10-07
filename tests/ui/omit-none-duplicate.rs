@@ -1,8 +1,8 @@
-use rusnix_ir as rusnix;
+use rusix_ir as rusix;
 
-#[rusnix::config]
+#[rusix::config]
 mod config {
-    #[rusnix(root, omit_none, omit_none)]
+    #[rusix(root, omit_none, omit_none)]
     struct Root {
         value: Option<String>,
     }

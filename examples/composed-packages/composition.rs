@@ -1,7 +1,7 @@
 //! Wire OpenSSL into curl and Git, then wire curl into MariaDB.
 //! The pinned nixpkgs package set supplies the other dependencies.
-use rusnix_ir::interop::raw::NixRepresentation;
-use rusnix_ir::interop::raw::NixpkgsExt;
+use rusix_ir::interop::raw::NixRepresentation;
+use rusix_ir::interop::raw::NixpkgsExt;
 
 #[path = "../openssl-nixpkg/mod.rs"]
 pub mod openssl;
@@ -15,8 +15,8 @@ pub mod git;
 #[path = "../mariadb-nixpkg/mod.rs"]
 pub mod mariadb;
 
-use rusnix_ir::interop::{NixAttrs, NixExpression, Nixpkgs, Package, raw::NixValue};
-use rusnix_ir::{IntoRusnixValue, RusnixValue, nix_record};
+use rusix_ir::interop::{NixAttrs, NixExpression, Nixpkgs, Package, raw::NixValue};
+use rusix_ir::{IntoRusixValue, RusixValue, nix_record};
 
 pub fn arguments() -> NixAttrs {
     NixAttrs::new([] as [(&str, NixValue); 0])
@@ -71,10 +71,10 @@ impl CurlArguments {
     }
 }
 
-impl IntoRusnixValue for CurlArguments {
+impl IntoRusixValue for CurlArguments {
     #[track_caller]
-    fn into_value(self) -> RusnixValue {
-        RusnixValue::leaf(
+    fn into_value(self) -> RusixValue {
+        RusixValue::leaf(
             NixAttrs::from_expression(nix_record! {
                 "openssl": self.openssl,
                 "idnSupport": true,
@@ -90,7 +90,7 @@ impl IntoRusnixValue for CurlArguments {
 pub fn compose(
     openssl: Package,
     make_curl: impl FnOnce(&Nixpkgs, &Package) -> Package,
-    mariadb_arguments: impl IntoRusnixValue,
+    mariadb_arguments: impl IntoRusixValue,
 ) -> NixAttrs<Package> {
     let pkgs = Nixpkgs::new();
     // Existing callbacks supply lazy lexical bindings, sharing each dependency once.

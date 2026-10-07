@@ -1,7 +1,7 @@
-use rusnix_ir::IntoRusnixValue;
+use rusix_ir::IntoRusixValue;
 
-#[derive(IntoRusnixValue)]
-#[rusnix(rename_all = "PascalCase")]
+#[derive(IntoRusixValue)]
+#[rusix(rename_all = "PascalCase")]
 struct Port(u16);
 
 fn main() {}

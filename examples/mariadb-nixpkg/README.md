@@ -1,11 +1,11 @@
-# MariaDB authored in Rusnix
+# MariaDB authored in Rusix
 
 This example defines MariaDB's client and server build recipes in Rust, sharing
 one recipe across four pinned releases. Start with [model.rs](model.rs) to choose
 a release, then [main.rs](main.rs) to see how it becomes generated Nix.
 
 ```rust
-use rusnix_ir::interop::Nixpkgs;
+use rusix_ir::interop::Nixpkgs;
 
 let release = model::Release::V1011;
 let factory = lowering::factory();
@@ -24,7 +24,7 @@ The resulting server package also exposes separate `client` and `server` members
 From the repository root:
 
 ```bash
-cargo run --locked -p rusnix-nix --example mariadb-nixpkg
+cargo run --locked -p rusix-nix --example mariadb-nixpkg
 ```
 
 The executable prints the shared `factory`, a `family` containing all four
@@ -76,7 +76,7 @@ closure is rewritten and no derivations are built or fetched.
 
 ## Verification
 
-Run `cargo test --locked -p rusnix-nix --test mariadb`. It compares exact server
+Run `cargo test --locked -p rusix-nix --test mariadb`. It compares exact server
 and client recipes, identities, outputs, source recipes, patch bytes/store paths,
 flags, phase bytes and contexts, metadata, default argument interfaces and family
 membership. All 16 combinations of Mroonga, RocksDB, embedded and NUMA switches
@@ -91,7 +91,7 @@ reconstructs both client and server. An attribute override changes only the oute
 server and drops the extra client/server members added after mkDerivation; the
 suite explicitly compares that behavior rather than inventing recursive semantics.
 
-Two pinned backend limitations are tested as paired upstream/Rusnix rejections:
+Two pinned backend limitations are tested as paired upstream/Rusix rejections:
 FreeBSD cross evaluation cannot supply a runnable emulator, and the
 `mysql-autobackup` NixOS test defines nonexistent `nodes.machine.automysqlbackup`.
 The other four real NixOS passthru tests are compared by exact test derivation

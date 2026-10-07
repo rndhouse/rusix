@@ -4,7 +4,7 @@ use super::{
     inputs::{BuildAttrs, Packages},
     model::{Changes, ConfigureChanges},
 };
-use rusnix_ir::interop::{NixList, Nixpkgs, Overlay};
+use rusix_ir::interop::{NixList, Nixpkgs, Overlay};
 
 /// Describes an overlay using the declared package view and ordinary Rust result structs.
 /// In Nix, prev is the package set before this overlay and final includes all overlays.

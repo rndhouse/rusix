@@ -1,4 +1,4 @@
-use rusnix_ir::{Expr, interop::NixNullable};
+use rusix_ir::{Expr, interop::NixNullable};
 
 fn main() {
     let value = NixNullable::<Expr<String>>::null();

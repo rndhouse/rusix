@@ -1,5 +1,5 @@
-//! Fixture-only helpers, not Rusnix API or a proposed service catalogue.
-use rusnix_ir::{Config, IntoConfig};
+//! Fixture-only helpers, not Rusix API or a proposed service catalogue.
+use rusix_ir::{Config, IntoConfig};
 
 pub struct OpenSsh {
     config: Config,

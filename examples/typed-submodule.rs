@@ -6,25 +6,25 @@
 //! demo.endpoint = { host = "service.internal"; port = 443; };
 //! ```
 
-use rusnix_ir::{self as rusnix, IntoRusnixValue};
+use rusix_ir::{self as rusix, IntoRusixValue};
 
 /// An ordinary Rust domain type; its inner value lowers to a Nix string.
 /// This separates names from other strings without adding hostname validation.
-#[derive(IntoRusnixValue)]
+#[derive(IntoRusixValue)]
 pub struct Hostname(
     /// Hostname preserved as text in the generated Nix value.
     pub String,
 );
 
 /// A distinct Rust type for a listening port; its inner value lowers to an integer.
-#[derive(IntoRusnixValue)]
+#[derive(IntoRusixValue)]
 pub struct Port(
     /// Listening port emitted as an integer in Nix.
     pub u16,
 );
 
 /// A reusable record that can appear wherever a parent places it.
-#[derive(IntoRusnixValue)]
+#[derive(IntoRusixValue)]
 pub struct Endpoint {
     /// Requires a hostname-domain value rather than an arbitrary domain string.
     pub host: Hostname,
@@ -34,12 +34,12 @@ pub struct Endpoint {
 
 /// Places the reusable endpoint under demo.endpoint in the generated Nix attribute set.
 /// Parent structs define its location while the endpoint retains its own value conversion.
-#[rusnix::config]
+#[rusix::config]
 mod config {
     use super::{Endpoint, Hostname, Port};
 
     /// Places the reusable Endpoint in this configuration's attribute tree.
-    #[rusnix(root)]
+    #[rusix(root)]
     pub struct Root {
         /// Fictional demo namespace where the reusable endpoint becomes nested Nix fields.
         demo: Demo,
@@ -68,7 +68,7 @@ pub use config::model;
 fn main() {
     // The parent structs place the endpoint at demo.endpoint in the Nix attribute set.
     // Hostname and Port become a string and an integer, rather than nested wrappers.
-    let generated = rusnix_nix::compile(model()).unwrap();
+    let generated = rusix_nix::compile(model()).unwrap();
 
     // Emit configuration data; using it with NixOS needs declarations for the demo options.
     println!("{}", generated.source);

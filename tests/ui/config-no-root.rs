@@ -1,6 +1,6 @@
-use rusnix_ir as rusnix;
+use rusix_ir as rusix;
 
-#[rusnix::config]
+#[rusix::config]
 mod config {
     struct Machine {
         enable: bool,

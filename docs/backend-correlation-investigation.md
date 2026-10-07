@@ -279,7 +279,7 @@ All final checks passed on the retained source:
 
 The implementation/report are one coherent commit on `backend-provenance`, above
 `e00fe587`; the worktree remains at
-`/home/user/dev/worktrees/rusnix-backend-provenance`. Primary checkout is still
+`/home/user/dev/worktrees/rusix-backend-provenance`. Primary checkout is still
 clean at `fcbdf6b742e400327ed3dc7f02b280fb79929439`. Only configured human identity
 `rndhouse <rndhouse@protonmail.com>` is used. No Nix fetch/build/profile/host-store
 or privileged operation occurred. Ignored evidence and verification artifacts

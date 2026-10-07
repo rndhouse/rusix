@@ -1,12 +1,12 @@
-use rusnix_ir as rusnix;
+use rusix_ir as rusix;
 
 type External = String;
 
-#[rusnix::options]
+#[rusix::options]
 mod options {
     use super::External;
 
-    #[rusnix(root)]
+    #[rusix(root)]
     struct Root {
         external: External,
     }

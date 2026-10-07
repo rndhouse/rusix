@@ -16,9 +16,9 @@
     opensslInputs = builtins.filter (p: (p.pname or "") == "openssl") graph.git.buildInputs;
   in matches // pkgs.lib.optionalAttrs reverse {
     reverseEdges = {
-      curlOpenSSL = (pkgs.curl.override { openssl = graph.openssl; }).openssl.rusnixAuthor;
-      gitOpenSSL = (builtins.head (builtins.filter (p: (p.pname or "") == "openssl") (pkgs.git.override { openssl = graph.openssl; }).buildInputs)).rusnixAuthor;
-      mariadbCurl = (builtins.head (builtins.filter (p: (p.pname or "") == "curl") (pkgs.mariadb.override { curl = graph.curl; }).buildInputs)).rusnixAuthor;
+      curlOpenSSL = (pkgs.curl.override { openssl = graph.openssl; }).openssl.rusixAuthor;
+      gitOpenSSL = (builtins.head (builtins.filter (p: (p.pname or "") == "openssl") (pkgs.git.override { openssl = graph.openssl; }).buildInputs)).rusixAuthor;
+      mariadbCurl = (builtins.head (builtins.filter (p: (p.pname or "") == "curl") (pkgs.mariadb.override { curl = graph.curl; }).buildInputs)).rusixAuthor;
     };
     reverseConsumers = {
       curl = project (pkgs.curl.override { openssl = graph.openssl; });
@@ -28,10 +28,10 @@
   } // pkgs.lib.optionalAttrs probe {
     # Neither marker exists on pkgs.openssl. It must come from the supplied value.
     edges = {
-      curlOpenSSL = graph.curl.openssl.rusnixAuthor;
-      gitOpenSSL = (builtins.head opensslInputs).rusnixAuthor;
+      curlOpenSSL = graph.curl.openssl.rusixAuthor;
+      gitOpenSSL = (builtins.head opensslInputs).rusixAuthor;
       sameOpenSSL = graph.curl.openssl.drvPath == graph.openssl.drvPath;
-      mariadbCurl = (builtins.head (builtins.filter (p: (p.pname or "") == "curl") graph.mariadb.buildInputs)).rusnixAuthor;
+      mariadbCurl = (builtins.head (builtins.filter (p: (p.pname or "") == "curl") graph.mariadb.buildInputs)).rusixAuthor;
     };
   };
 }

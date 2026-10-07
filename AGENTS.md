@@ -1,4 +1,4 @@
-# Rusnix development
+# Rusix development
 
 Keep the Rust → semantic IR → Nix AST → Nix → Rust diagnostic loop small.
 Users edit Rust; generated Nix is compiler output.
@@ -14,7 +14,7 @@ Rust doc comments and explain what the field actually represents.
 
 For core/library code:
 
-- Explain the underlying Nix concept in plain language before Rusnix semantics.
+- Explain the underlying Nix concept in plain language before Rusix semantics.
 - Public structs, enums, traits and macros explain what they represent and why
   an author would use them. Avoid leading with unexplained jargon.
 - Method docs describe observable behavior before implementation details.
@@ -29,7 +29,7 @@ For examples:
 - Treat examples as executable documentation showing normal user-facing Rust
   with minimal boilerplate. Prefer ordinary structs and enums where possible.
 - Start with 1–2 sentences of module-level `//!` purpose documentation.
-- Comment important structs and fields to explain Nix concepts and Rusnix
+- Comment important structs and fields to explain Nix concepts and Rusix
   behavior; do not narrate obvious Rust syntax.
 - Keep substantial examples' model, inputs, lowering and main separate so the
   authoring surface is easy to find without reading compatibility plumbing.
@@ -43,7 +43,7 @@ human Git identity only; never add AI/LLM/assistant/agent/harness/tool/vendor
 co-author or attribution trailers.
 
 All Nix subprocesses, including version checks, must go through
-`crates/rusnix-nix/src/isolated.rs`. Each command explicitly selects a fresh
+`crates/rusix-nix/src/isolated.rs`. Each command explicitly selects a fresh
 disposable local store. Never invoke Nix directly against the host store, even
 for evaluation. Do not run activation, deployment, profile, rebuild, host GC,
 privileged operations, or change host Nix configuration. Do not add network
@@ -69,7 +69,7 @@ does not enforce it. Run the structural spacing check (also run by workspace
 tests and the fixture script):
 
 ```bash
-cargo run --locked --quiet -p rusnix-derive --bin check-rust-spacing
+cargo run --locked --quiet -p rusix-derive --bin check-rust-spacing
 ```
 
 After rustfmt, its `--fix` option inserts missing blank lines. The checker parses

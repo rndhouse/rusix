@@ -1,6 +1,6 @@
 //! Shell commands used by the pinned MariaDB build recipes.
 //! Interpolated package paths retain their dependencies for Nix to resolve during builds.
-use rusnix_ir::{Expr, nix_text};
+use rusix_ir::{Expr, nix_text};
 
 pub fn pre_patch() -> Expr<String> {
     nix_text!(

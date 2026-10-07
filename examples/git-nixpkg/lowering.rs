@@ -1,9 +1,9 @@
 //! Reproduces the pinned Git package recipe using real nixpkgs builders and helpers.
 //! Helpers construct deferred values and shell scripts; they never execute build commands in Rust.
 use super::inputs::{Inputs, args};
-use rusnix_ir::interop::raw::NixRepresentation;
-use rusnix_ir::{
-    Expr, IntoRusnixValue,
+use rusix_ir::interop::raw::NixRepresentation;
+use rusix_ir::{
+    Expr, IntoRusixValue,
     interop::{
         FinalAttrs, NixAttrs, NixCallable, NixExpression, NixLibrary, NixList, Package,
         PackageFunction, raw::NixValue,
@@ -68,7 +68,7 @@ pub fn factory() -> PackageFunction<Package> {
 }
 
 // Fixed recipe fields retain their Rust interfaces and deferred Nix semantics.
-#[derive(IntoRusnixValue)]
+#[derive(IntoRusixValue)]
 struct Derivation {
     /// Feature-sensitive package name, including the upstream minimal/SVN suffixes.
     pname: Expr<String>,
@@ -93,7 +93,7 @@ struct Derivation {
     /// Host dependencies selected by the enabled features and platform.
     build_inputs: NixList<Package>,
     /// Platform-specific linker options retain their standard external name.
-    #[rusnix(rename = "NIX_LDFLAGS")]
+    #[rusix(rename = "NIX_LDFLAGS")]
     nix_ldflags: Expr<String>,
     /// Configure cache entries include cross-compilation answers.
     configure_flags: NixList<Expr<String>>,

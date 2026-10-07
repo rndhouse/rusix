@@ -1,7 +1,7 @@
-use rusnix_ir::IntoRusnixValue;
+use rusix_ir::IntoRusixValue;
 
-#[derive(IntoRusnixValue)]
-#[rusnix(rename_all = "snake_case")]
+#[derive(IntoRusixValue)]
+#[rusix(rename_all = "snake_case")]
 enum Mode {
     ReadOnly,
 }

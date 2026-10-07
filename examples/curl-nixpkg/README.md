@@ -9,7 +9,7 @@ The checked `vendor/nixpkgs` submodule supplies the reference offline.
 
 - `model.rs` offers a small optional Rust authoring surface. `TlsBackend` makes a
   concrete choice of at most one backend; it does not replace the public Nix API.
-- `inputs.rs` declares the finite external interface with `#[rusnix::args]`.
+- `inputs.rs` declares the finite external interface with `#[rusix::args]`.
   Accessors describe later Nix lookups; Rust never reads package or platform data.
 - `lowering.rs` implements the recipe, lazy defaults, native TLS assertion,
   feature flags, scripts, dependencies, recursive checks and metadata.
@@ -25,7 +25,7 @@ let choices = model::Curl {
     websocket: false,
 };
 let factory = lowering::factory();
-let curl = rusnix_ir::interop::Nixpkgs::new()
+let curl = rusix_ir::interop::Nixpkgs::new()
     .try_call_package(&factory, choices.arguments())
     .expect("fixed authoring arguments");
 ```
@@ -36,23 +36,23 @@ set through `callPackage`. The executable prints `factory` and `curl` expression
 Rust does not evaluate Nix or build curl.
 
 ```bash
-cargo run --locked -p rusnix-nix --example curl-nixpkg > target/curl.nix
-cargo test --locked -p rusnix-nix --test curl
+cargo run --locked -p rusix-nix --example curl-nixpkg > target/curl.nix
+cargo test --locked -p rusix-nix --test curl
 ```
 
-The complete `#[rusnix::args]` view supplies `args::argument_names()` to the
+The complete `#[rusix::args]` view supplies `args::argument_names()` to the
 factory, so public argument names are declared once. Defaults remain explicit
 deferred expressions. Fixed opaque records use `nix_record!`; dynamic feature
 arguments remain ordinary Rust collections.
 
 Ordinary Nix code can use `pkgs.callPackage generated.factory { ... }`, inspect
 `builtins.functionArgs generated.factory`, and use `.override` and `.overrideAttrs`.
-The compiler artifact uses the pinned source tree staged by Rusnix's evaluator.
+The compiler artifact uses the pinned source tree staged by Rusix's evaluator.
 The factory preserves upstream's four independent TLS booleans and native Nix
 assertion. The enum constrains Rust authoring only; Nix still validates external
 choices. The candidate never imports the original curl expression.
 
-`stdenv.mkDerivation` is nixpkgs' standard build-recipe constructor. Rusnix supplies
+`stdenv.mkDerivation` is nixpkgs' standard build-recipe constructor. Rusix supplies
 its attributes through a scoped `finalAttrs` callback: version overrides affect
 source URLs and changelog, and `finalAttrs.finalPackage` supplies the eventual
 package to consuming-package overrides and `withCheck`. Fetchers, setup hooks,
@@ -65,7 +65,7 @@ substitutions. `fetchpatch` occurs solely in the existing lazy passthru test gra
 
 ## Pinned-source audit and abstraction decisions
 
-A = existing Rusnix API; B = explicit Nix interop; C = independent evidence for a
+A = existing Rusix API; B = explicit Nix interop; C = independent evidence for a
 deferred candidate; D = missing general operation; E = nixpkgs remains authoritative.
 
 | Source construct | Classification | Implementation / decision |
@@ -96,7 +96,7 @@ ordered multi-check helper or package-validation DSL.
 
 ## Equivalence evidence and limits
 
-[`curl.rs`](../../crates/rusnix-nix/tests/curl.rs) compares the candidate with the
+[`curl.rs`](../../crates/rusix-nix/tests/curl.rs) compares the candidate with the
 pinned expression using the same real `callPackage` dependency scope. It compares
 complete derivation recipes (including hash-relevant environment, builder, inputs,
 outputs and scripts), exact derivation/output paths, source recipe/URLs, dependency
@@ -105,7 +105,7 @@ Nothing affecting a derivation hash is normalized away. Linux's default recipe i
 `/nix/store/cb2y179hgas7837a8wnx08gxawn61p1m-curl-8.11.0.drv`.
 
 The suite compares full package projections, the public-function interface and
-paired rejection cases. [Generic-operation tests](../../crates/rusnix-nix/tests/nix_operations.rs)
+paired rejection cases. [Generic-operation tests](../../crates/rusix-nix/tests/nix_operations.rs)
 cover builtin access, native assertions and record union, including laziness and
 precise source attribution.
 
@@ -142,7 +142,7 @@ let factory: PackageFunction<Package> = lowering::factory();
 let curl: Package = Nixpkgs::new().try_call_package(&factory, model::model().arguments())?;
 ```
 
-Argument records implement `IntoRusnixValue` and lower only at the call boundary.
+Argument records implement `IntoRusixValue` and lower only at the call boundary.
 Dependency accessors return `Package`, sources return through `Overridable<NixCallable<Package>>`,
 phase text uses `Expr<String>`, and package/flag lists retain their element types.
 A typed output root exports the factory and package directly. Dynamic fields remain

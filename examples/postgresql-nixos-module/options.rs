@@ -1,15 +1,15 @@
 //! Refer to PostgreSQL options after NixOS combines definitions from all modules.
 //! Accessors describe deferred `config.*` lookups; they do not declare options or read values in Rust.
-use rusnix_ir as rusnix;
+use rusix_ir as rusix;
 
 /// Declares accessors for the final NixOS settings used by the PostgreSQL implementation.
 /// References follow config.* after merging, including defaults and choices from other modules.
-#[rusnix::options]
+#[rusix::options]
 mod references {
-    use rusnix_ir::interop::raw::NixValue;
+    use rusix_ir::interop::raw::NixValue;
 
     /// The parts of the final NixOS configuration needed to configure PostgreSQL.
-    #[rusnix(root)]
+    #[rusix(root)]
     struct Root {
         /// Service options after NixOS combines the Rust and ordinary Nix contributions.
         services: Services,
@@ -30,10 +30,10 @@ mod references {
         /// Whether to include the database service and its supporting configuration.
         enable: bool,
         /// Whether the selected package should support just-in-time query compilation.
-        #[rusnix(rename = "enableJIT")]
+        #[rusix(rename = "enableJIT")]
         enable_jit: bool,
         /// Whether the server should listen for network connections as well as local sockets.
-        #[rusnix(rename = "enableTCPIP")]
+        #[rusix(rename = "enableTCPIP")]
         enable_tcpip: bool,
         /// Whether NixOS should include the generated PostgreSQL configuration check.
         check_config: bool,
@@ -64,7 +64,7 @@ mod references {
     }
 
     /// Server settings may have arbitrary keys; the value accessor retains the whole Nix attribute set.
-    #[rusnix(value)]
+    #[rusix(value)]
     struct Settings {
         /// Final listening port used by generated configuration and startup commands.
         port: i64,

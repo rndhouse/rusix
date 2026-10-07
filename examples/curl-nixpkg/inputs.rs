@@ -1,15 +1,15 @@
 //! Declare dependencies and feature choices supplied to curl's Nix package function.
 //! Accessors describe deferred lookups; Rust does not evaluate the arguments.
-use rusnix_ir as rusnix;
+use rusix_ir as rusix;
 
 /// Declares named accessors for curl's Nix function arguments and the dependency fields it uses.
 /// Rust constructs references through these views; Nix resolves the selected values later.
-#[rusnix::args]
+#[rusix::args]
 pub(super) mod args {
-    use rusnix_ir::interop::{NixCallable, Overridable, Package, raw::NixValue};
+    use rusix_ir::interop::{NixCallable, Overridable, Package, raw::NixValue};
 
     /// Deferred package dependencies and features, resolved by callPackage or an ordinary caller.
-    #[rusnix(root)]
+    #[rusix(root)]
     struct Inputs {
         /// Utility functions and metadata from this exact package caller.
         lib: Lib,
@@ -20,7 +20,7 @@ pub(super) mod args {
         /// Apple framework packages used by the Darwin dependency branch.
         darwin: Darwin,
         /// Build-platform tool that supplies dependency flags.
-        #[rusnix(rename = "pkg-config")]
+        #[rusix(rename = "pkg-config")]
         pkg_config: Package,
         /// Build-platform interpreter used by curl scripts.
         perl: Package,
@@ -31,10 +31,10 @@ pub(super) mod args {
         /// Brotli library propagated when that decompression feature is selected.
         brotli: Package,
         /// Selects asynchronous DNS resolution through c-ares.
-        #[rusnix(rename = "c-aresSupport")]
+        #[rusix(rename = "c-aresSupport")]
         c_ares_support: bool,
         /// Minimal c-ares package used by the asynchronous DNS branch.
-        #[rusnix(rename = "c-aresMinimal")]
+        #[rusix(rename = "c-aresMinimal")]
         c_ares_minimal: Package,
         /// Selects GnuTLS; the native Nix assertion excludes other simultaneous TLS backends.
         gnutls_support: bool,
@@ -91,7 +91,7 @@ pub(super) mod args {
         /// Selects Rustls and the platform-specific CA-bundle configure switch.
         rustls_support: bool,
         /// Existing Rustls FFI package; its implementation stays in nixpkgs.
-        #[rusnix(rename = "rustls-ffi")]
+        #[rusix(rename = "rustls-ffi")]
         rustls_ffi: Package,
         /// Enables zlib and controls the dependent OpenSSL/SCP defaults.
         zlib_support: bool,
@@ -125,13 +125,13 @@ pub(super) mod args {
 
     /// Existing builder and the finite compiler/platform properties this recipe needs.
     /// Whole-subtree access retains the entire supplied stdenv for build/host equality.
-    #[rusnix(value)]
+    #[rusix(value)]
     struct Stdenv {
         /// Real mkDerivation function, including recursive finalAttrs and overrides.
         mk_derivation: NixCallable<Package>,
         /// Platform where the resulting curl runs.
-        #[rusnix(expression)]
-        host_platform: rusnix_ir::interop::Platform,
+        #[rusix(expression)]
+        host_platform: rusix_ir::interop::Platform,
         /// Compiler metadata for the explicit C++ command names.
         cc: Compiler,
     }
@@ -143,7 +143,7 @@ pub(super) mod args {
     }
 
     /// Caller-supplied library dispatch and package metadata.
-    #[rusnix(value)]
+    #[rusix(value)]
     struct Lib {
         /// The pinned package license record from nixpkgs.
         licenses: Licenses,
@@ -174,7 +174,7 @@ pub(super) mod args {
     /// Darwin package hierarchy used for framework dependencies.
     struct Darwin {
         /// The SDK selected by this package caller.
-        #[rusnix(rename = "apple_sdk")]
+        #[rusix(rename = "apple_sdk")]
         apple_sdk: AppleSdk,
     }
 
@@ -187,20 +187,20 @@ pub(super) mod args {
     /// Framework packages remain Nix values rather than Rust SDK bindings.
     struct Frameworks {
         /// Core Foundation dependency.
-        #[rusnix(rename = "CoreFoundation")]
+        #[rusix(rename = "CoreFoundation")]
         core_foundation: Package,
         /// Core Services dependency.
-        #[rusnix(rename = "CoreServices")]
+        #[rusix(rename = "CoreServices")]
         core_services: Package,
         /// System configuration dependency.
-        #[rusnix(rename = "SystemConfiguration")]
+        #[rusix(rename = "SystemConfiguration")]
         system_configuration: Package,
     }
 
     /// The HTTP/3 NixOS test is referenced, never executed by this example.
     struct NixosTests {
         /// Upstream cannot override this test; retain the original test unchanged.
-        #[rusnix(rename = "nginx-http3")]
+        #[rusix(rename = "nginx-http3")]
         nginx_http3: NixValue,
     }
 

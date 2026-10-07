@@ -1,7 +1,7 @@
-use rusnix_ir::IntoRusnixValue;
+use rusix_ir::IntoRusixValue;
 
-#[derive(IntoRusnixValue)]
-#[rusnix(omit_none)]
+#[derive(IntoRusixValue)]
+#[rusix(omit_none)]
 enum Mode {
     Server,
 }

@@ -1,4 +1,4 @@
-use rusnix_ir::{Expr, interop::{NixCallable, NixOverridable}};
+use rusix_ir::{Expr, interop::{NixCallable, NixOverridable}};
 
 fn expects_overrides<T: NixOverridable>(_: T) {}
 

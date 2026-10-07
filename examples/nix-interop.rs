@@ -2,9 +2,9 @@
 //! Rust describes their use without inspecting their contents; Nix resolves them when the
 //! output is evaluated.
 
-use rusnix_ir::interop::raw::NixFunctionExt;
-use rusnix_ir::{
-    self as rusnix, Config, IntoRusnixValue, RusnixValue,
+use rusix_ir::interop::raw::NixFunctionExt;
+use rusix_ir::{
+    self as rusix, Config, IntoRusixValue, RusixValue,
     interop::{InputRef, ModuleRef, NixFunction, Nixpkgs, OverlayRef, PackageRef, raw::NixValue},
     nix_record,
     nixos::NixosModule,
@@ -23,18 +23,18 @@ pub enum Transport {
     },
 }
 
-impl IntoRusnixValue for Transport {
-    fn into_value(self) -> RusnixValue {
+impl IntoRusixValue for Transport {
+    fn into_value(self) -> RusixValue {
         // Our domain chooses these two record shapes; opaque Nix objects need no such model.
         // The plain shape omits credential fields entirely.
-        #[derive(IntoRusnixValue)]
+        #[derive(IntoRusixValue)]
         struct Plain {
             /// Disabled TLS flag; this record shape omits both credential paths.
             tls: bool,
         }
 
         // The TLS shape carries the two paths required by Transport::Tls.
-        #[derive(IntoRusnixValue)]
+        #[derive(IntoRusixValue)]
         struct Tls {
             /// Enabled TLS flag emitted together with both credential paths.
             tls: bool,
@@ -61,19 +61,19 @@ impl IntoRusnixValue for Transport {
 
 /// Defines separate Nix output trees for our transport model, package list and function results.
 /// Each root can be compiled on its own or contributed to a NixOS module.
-#[rusnix::config]
+#[rusix::config]
 mod config {
     use super::{NixValue, PackageRef, Transport};
 
     /// A rooted contribution for the domain model this Rust program owns.
-    #[rusnix(root)]
+    #[rusix(root)]
     pub struct OwnedContribution {
         /// Places our typed Transport at `demo`; NixOS can validate the resulting shape later.
         pub demo: Transport,
     }
 
     /// A separate rooted contribution for packages from the existing Nix ecosystem.
-    #[rusnix(root)]
+    #[rusix(root)]
     pub struct PackageContribution {
         // Introduces the existing NixOS environment namespace.
         environment: Environment,
@@ -94,7 +94,7 @@ mod config {
     }
 
     /// A generic output contribution used to display an opaque function result.
-    #[rusnix(root)]
+    #[rusix(root)]
     pub struct FunctionResult {
         /// Keeps the Nix-side result deferred; Rust does not infer its type or stringify it.
         pub result: NixValue,
@@ -114,11 +114,11 @@ pub fn module(local: InputRef) -> NixosModule {
 
     // Nix applies the overlay; a local input can supply packages and modules too.
     let overlay: OverlayRef = local.overlay("overlays.example");
-    let overlaid = pkgs.with_overlay(overlay).get("rusnixOverlayHello");
+    let overlaid = pkgs.with_overlay(overlay).get("rusixOverlayHello");
     let external = local.package("packages.example");
 
     // Config::set_dynamic is the escape hatch for an option path chosen at runtime.
-    let arbitrary_path = ["services", "rusnixExternal", "enable"].join(".");
+    let arbitrary_path = ["services", "rusixExternal", "enable"].join(".");
     let arbitrary = Config::new().set_dynamic(arbitrary_path, true);
 
     // Each add remains an independent contribution, retaining NixOS merge and priority rules.
@@ -136,20 +136,20 @@ fn main() {
     let owned = OwnedContribution {
         demo: Transport::Plain,
     };
-    println!("{}", rusnix_nix::compile(owned).unwrap().source);
+    println!("{}", rusix_nix::compile(owned).unwrap().source);
 
     // Describe imports and package references from an existing Nix file and nixpkgs.
     // Nix loads input.nix and merges module settings when the generated module is evaluated.
     let local = InputRef::local("example", "input.nix");
     let module = module(local);
-    let artifact = rusnix_nix::nixos::compile_module(&module).unwrap();
+    let artifact = rusix_nix::nixos::compile_module(&module).unwrap();
     println!("{}", artifact.module.source);
 
-    // Describe the Nix call toUpper "rusnix"; the Rust call records that expression.
-    // Nix computes "RUSNIX" later, when the generated result is evaluated.
+    // Describe the Nix call toUpper "rusix"; the Rust call records that expression.
+    // Nix computes "RUSIX" later, when the generated result is evaluated.
     let uppercase: NixFunction = Nixpkgs::new().function("toUpper");
-    let value: NixValue = uppercase.call("rusnix");
-    let generated = rusnix_nix::compile(FunctionResult { result: value }).unwrap();
+    let value: NixValue = uppercase.call("rusix");
+    let generated = rusix_nix::compile(FunctionResult { result: value }).unwrap();
     println!("{}", generated.source);
 
     // writeTextFile takes a Nix attribute set describing a file to produce.
@@ -165,6 +165,6 @@ fn main() {
     // Record the file recipe and print its Nix expression. Creating the file requires
     // building that recipe separately; this Rust program does not write example.conf.
     let file = pkgs.pkgs_function("writeTextFile").call(args);
-    let generated = rusnix_nix::compile(FunctionResult { result: file }).unwrap();
+    let generated = rusix_nix::compile(FunctionResult { result: file }).unwrap();
     println!("{}", generated.source);
 }

@@ -1,7 +1,7 @@
 //! Selects one of four MariaDB releases for the shared client/server recipe.
 //! Version numbers and source checksums are fixed Rust data; package dependencies remain deferred.
-use rusnix_ir::{
-    IntoRusnixValue,
+use rusix_ir::{
+    IntoRusixValue,
     interop::{Nixpkgs, Package},
 };
 
@@ -67,13 +67,13 @@ impl Release {
 }
 
 /// Pinned release inputs; the framework stays a deferred package dependency.
-#[derive(IntoRusnixValue)]
+#[derive(IntoRusixValue)]
 pub struct Arguments {
     // Fixed source version supplied to the shared recipe.
     version: &'static str,
     // Expected checksum supplied to the source fetcher.
     hash: &'static str,
     // Reference to the macOS framework; Rust does not load or build it.
-    #[rusnix(rename = "CoreServices")]
+    #[rusix(rename = "CoreServices")]
     core_services: Package,
 }

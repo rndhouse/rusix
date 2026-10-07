@@ -121,7 +121,7 @@
     "source": "Client(String)",
     "reason_tokens": [
       "unit variants only",
-      "IntoRusnixValue"
+      "IntoRusixValue"
     ]
   },
   {
@@ -189,7 +189,7 @@
     "source": "mod config",
     "reason_tokens": [
       "at least one",
-      "#[rusnix(root)]"
+      "#[rusix(root)]"
     ]
   },
   {
@@ -198,7 +198,7 @@
     "count": 1,
     "source": "root, root",
     "reason_tokens": [
-      "duplicate rusnix root"
+      "duplicate rusix root"
     ]
   },
   {
@@ -446,7 +446,7 @@
     "file": "omit-none-non-option.rs",
     "code": null,
     "count": 1,
-    "source": "#[rusnix(omit_none)]",
+    "source": "#[rusix(omit_none)]",
     "reason_tokens": [
       "omit_none requires an Option<T> field"
     ]
@@ -455,7 +455,7 @@
     "file": "omit-none-flatten.rs",
     "code": null,
     "count": 1,
-    "source": "#[rusnix(omit_none, flatten)]",
+    "source": "#[rusix(omit_none, flatten)]",
     "reason_tokens": [
       "omit_none cannot be combined with skip or flatten"
     ]
@@ -464,7 +464,7 @@
     "file": "omit-none-enum.rs",
     "code": null,
     "count": 1,
-    "source": "#[rusnix(omit_none)]",
+    "source": "#[rusix(omit_none)]",
     "reason_tokens": [
       "omit_none requires a named-field struct"
     ]
@@ -473,7 +473,7 @@
     "file": "omit-none-duplicate.rs",
     "code": null,
     "count": 1,
-    "source": "#[rusnix(root, omit_none, omit_none)]",
+    "source": "#[rusix(root, omit_none, omit_none)]",
     "reason_tokens": [
       "duplicate omit_none"
     ]
@@ -542,7 +542,7 @@
     "file": "args-wrong-scalar.rs",
     "code": "E0308",
     "count": 1,
-    "source": "args::from_value(rusnix_ir::interop::raw::NixValue::null()).port()",
+    "source": "args::from_value(rusix_ir::interop::raw::NixValue::null()).port()",
     "reason_tokens": [
       "Expr<bool>",
       "Expr<i64>"
@@ -790,7 +790,7 @@
     "file": "backend-root-private.rs",
     "code": "E0603",
     "count": 1,
-    "source": "use rusnix_ir::Origin",
+    "source": "use rusix_ir::Origin",
     "reason_tokens": [
       "Origin",
       "private"

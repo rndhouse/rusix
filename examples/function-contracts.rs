@@ -6,24 +6,24 @@
 //! demo = { endpoint = { host = "service.internal"; port = 8080; }; transport.tls = false; };
 //! ```
 
-use rusnix_ir::{self as rusnix, IntoRusnixValue, RusnixValue};
+use rusix_ir::{self as rusix, IntoRusixValue, RusixValue};
 
 /// A reusable hostname-domain string; no hostname syntax check is implied.
-#[derive(IntoRusnixValue)]
+#[derive(IntoRusixValue)]
 pub struct Hostname(
     /// Hostname preserved as text in the generated Nix value.
     pub String,
 );
 
 /// A listening-port value, kept distinct from other integer domains in Rust.
-#[derive(IntoRusnixValue)]
+#[derive(IntoRusixValue)]
 pub struct Port(
     /// Listening port emitted as an integer in Nix.
     pub u16,
 );
 
 /// A reusable input record whose fields keep their semantic types across function calls.
-#[derive(IntoRusnixValue)]
+#[derive(IntoRusixValue)]
 pub struct Endpoint {
     /// Identifies the host using the caller's Hostname type.
     pub host: Hostname,
@@ -54,7 +54,7 @@ pub fn configure_service(endpoint: Endpoint, transport: Transport) -> ServiceCon
 
 /// Places the typed service function's result under demo in the generated Nix attribute set.
 /// The reusable endpoint and transport types supply their own value conversions.
-#[rusnix::config]
+#[rusix::config]
 mod config {
     use super::{Endpoint, Hostname, Port, Transport, configure_service};
 
@@ -67,7 +67,7 @@ mod config {
     }
 
     /// A rooted contribution for the fictional service used in this example.
-    #[rusnix(root)]
+    #[rusix(root)]
     pub struct Root {
         // Places the function's result at `demo`, with nested records beneath it.
         demo: ServiceConfig,
@@ -88,17 +88,17 @@ mod config {
 
 pub use config::{ServiceConfig, model};
 
-impl IntoRusnixValue for Transport {
-    fn into_value(self) -> RusnixValue {
+impl IntoRusixValue for Transport {
+    fn into_value(self) -> RusixValue {
         // This custom mapping chooses the Nix shape for each Rust alternative:
         // Plain emits { tls = false; }; Tls adds both credential paths with tls = true.
-        #[derive(IntoRusnixValue)]
+        #[derive(IntoRusixValue)]
         struct Plain {
             /// Disabled TLS flag; this record shape omits both credential paths.
             tls: bool,
         }
 
-        #[derive(IntoRusnixValue)]
+        #[derive(IntoRusixValue)]
         struct Tls {
             /// Enabled TLS flag emitted together with both credential paths.
             tls: bool,
@@ -126,7 +126,7 @@ impl IntoRusnixValue for Transport {
 fn main() {
     // The service function runs in Rust; its result becomes nested Nix attribute sets.
     // Hostnames and ports become strings and integers, keeping the chosen field layout.
-    let generated = rusnix_nix::compile(model()).unwrap();
+    let generated = rusix_nix::compile(model()).unwrap();
 
     // This is configuration data. Using it as NixOS settings also needs declarations
     // for the fictional demo options, which NixOS checks during evaluation.

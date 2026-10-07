@@ -7,17 +7,17 @@ pub mod model;
 
 pub use inputs::Arguments;
 
-use rusnix_ir as rusnix;
-use rusnix_ir::interop::{Nixpkgs, Package as PackageValue, PackageFunction};
+use rusix_ir as rusix;
+use rusix_ir::interop::{Nixpkgs, Package as PackageValue, PackageFunction};
 
 /// Defines the Nix output containing Git's reusable recipe function and selected package.
 /// Each root field becomes a named attribute that a Nix caller can select.
-#[rusnix::config]
+#[rusix::config]
 mod output {
     use super::{PackageFunction, PackageValue};
 
     /// Exports both the reusable native Nix factory and this example's chosen package.
-    #[rusnix(root)]
+    #[rusix(root)]
     pub(super) struct Package {
         /// Ordinary Nix callers may use callPackage to supply their own package scope.
         pub(super) factory: PackageFunction<PackageValue>,
@@ -39,6 +39,6 @@ fn main() {
 
     // Export both the function and the chosen package as Nix attributes.
     // Generating this source does not evaluate the recipe or build Git.
-    let artifact = rusnix_nix::compile(output::Package { factory, git }).unwrap();
+    let artifact = rusix_nix::compile(output::Package { factory, git }).unwrap();
     println!("{}", artifact.source);
 }

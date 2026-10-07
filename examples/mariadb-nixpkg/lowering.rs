@@ -5,9 +5,9 @@ use super::{
     model::Release,
     scripts,
 };
-use rusnix_ir::interop::raw::NixRepresentation;
-use rusnix_ir::{
-    self as rusnix, Expr, IntoRusnixValue,
+use rusix_ir::interop::raw::NixRepresentation;
+use rusix_ir::{
+    self as rusix, Expr, IntoRusixValue,
     interop::{
         NixAttrs, NixExpression, NixLibrary, NixList, NixPath, Nixpkgs, Package, PackageFunction,
         raw::NixValue,
@@ -375,10 +375,10 @@ fn server(i: &Inputs, lib: &NixLibrary, common: &common_view::Common) -> Package
 
 // Both derivations start with this recipe. Nix's standard builder runs the phase scripts
 // when building a package; creating this Rust record only describes those steps.
-#[derive(IntoRusnixValue)]
+#[derive(IntoRusixValue)]
 struct Common {
     // Source release shared by client and server.
-    version: rusnix_ir::Expr<String>,
+    version: rusix_ir::Expr<String>,
     // Archive-fetching recipe with the caller's URL version and expected checksum.
     src: Package,
     // Separate store outputs for installed files and manual pages.
@@ -392,7 +392,7 @@ struct Common {
     // Checked-in patch files shared by both recipes, applied in order.
     patches: NixList<NixPath>,
     // Shared CMake switches and platform-dependent configuration choices.
-    cmake_flags: NixList<rusnix_ir::Expr<String>>,
+    cmake_flags: NixList<rusix_ir::Expr<String>>,
     // Shell text that removes development files unless the embedded server is requested.
     post_install: Expr<String>,
     // Shell text that supplies the mytop monitoring script's program search path.
@@ -405,19 +405,19 @@ struct Common {
 
 /// Declares accessors for recipe fields shared by MariaDB's client and server variants.
 /// The views retain the complete shared recipe so each variant can extend it in Nix.
-#[rusnix::args]
+#[rusix::args]
 mod common_view {
-    use rusnix_ir::interop::{NixList, NixPath, Package};
+    use rusix_ir::interop::{NixList, NixPath, Package};
 
     /// Arguments carrying the recipe shared by both MariaDB package variants.
-    #[rusnix(root)]
+    #[rusix(root)]
     struct Inputs {
         /// Shared recipe fields bound once and reused by the MariaDB client and server packages.
         common: Common,
     }
 
     /// Shared build choices extended separately for the client and server packages.
-    #[rusnix(value)]
+    #[rusix(value)]
     struct Common {
         /// Shared source version referenced by both deferred build recipes.
         version: String,
@@ -428,7 +428,7 @@ mod common_view {
         /// Shared tools that execute on the build machine, including during cross-compilation.
         native_build_inputs: NixList<Package>,
         /// Shared CMake switches extended with client- or server-specific choices.
-        cmake_flags: NixList<rusnix_ir::Expr<String>>,
+        cmake_flags: NixList<rusix_ir::Expr<String>>,
         /// Shared shell commands to run after installation during a Nix build.
         post_install: String,
     }

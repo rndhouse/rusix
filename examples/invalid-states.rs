@@ -10,7 +10,7 @@
 //! };
 //! ```
 
-use rusnix_ir::{self as rusnix, IntoRusnixValue, RusnixValue};
+use rusix_ir::{self as rusix, IntoRusixValue, RusixValue};
 
 /// An ordinary Rust sum type: credentials exist only in the TLS alternative.
 /// This shape cannot express disabled TLS with credentials or TLS missing a key.
@@ -27,14 +27,14 @@ pub enum Transport {
 }
 
 /// A reusable certificate-path type whose inner string is preserved during lowering.
-#[derive(IntoRusnixValue)]
+#[derive(IntoRusixValue)]
 pub struct Certificate(
     /// Certificate filename emitted as Nix text without reading the file.
     pub String,
 );
 
 /// A separate key-path type; Rust prevents mixing it up with a Certificate.
-#[derive(IntoRusnixValue)]
+#[derive(IntoRusixValue)]
 pub struct PrivateKey(
     /// Private-key filename emitted as Nix text without reading the file.
     pub String,
@@ -42,12 +42,12 @@ pub struct PrivateKey(
 
 /// Places one complete transport choice under demo.transport in the generated Nix record.
 /// The transport conversion decides which credential fields accompany that choice.
-#[rusnix::config]
+#[rusix::config]
 mod config {
     use super::{Certificate, PrivateKey, Transport};
 
     /// Places this service model under the fictional `demo` namespace.
-    #[rusnix(root)]
+    #[rusix(root)]
     pub struct Root {
         /// The complete service contribution; nested fields determine its Nix shape.
         pub demo: ServiceConfig,
@@ -73,17 +73,17 @@ mod config {
 
 pub use config::{Root, ServiceConfig, model};
 
-impl IntoRusnixValue for Transport {
-    fn into_value(self) -> RusnixValue {
+impl IntoRusixValue for Transport {
+    fn into_value(self) -> RusixValue {
         // This custom mapping chooses the Nix shape for each Rust alternative:
         // Plain emits { tls = false; }; Tls adds both credential paths with tls = true.
-        #[derive(IntoRusnixValue)]
+        #[derive(IntoRusixValue)]
         struct Plain {
             /// Disabled TLS flag; this record shape omits both credential paths.
             tls: bool,
         }
 
-        #[derive(IntoRusnixValue)]
+        #[derive(IntoRusixValue)]
         struct Tls {
             /// Enabled TLS flag emitted together with both credential paths.
             tls: bool,
@@ -111,7 +111,7 @@ impl IntoRusnixValue for Transport {
 fn main() {
     // Rust requires both credentials for TLS; conversion emits them beside tls = true.
     // The credential paths become Nix strings without reading the files.
-    let generated = rusnix_nix::compile(model()).unwrap();
+    let generated = rusix_nix::compile(model()).unwrap();
 
     // Emit configuration data. Whether the referenced files exist is a separate check.
     println!("{}", generated.source);

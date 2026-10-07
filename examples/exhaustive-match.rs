@@ -5,13 +5,13 @@
 //! demo = { mode = "client"; firewall.allowedPorts = []; service.acceptsConnections = false; };
 //! ```
 
-use rusnix_ir::{self as rusnix};
+use rusix_ir::{self as rusix};
 
 /// Computes firewall and service choices from one Rust mode and places them under demo in Nix.
 /// Both policies are decided in Rust before their resulting fields are emitted.
-#[rusnix::config]
+#[rusix::config]
 mod config {
-    /// One shared model choice; Rusnix automatically lowers unit variants to strings.
+    /// One shared model choice; Rusix automatically lowers unit variants to strings.
     pub enum Mode {
         /// A server needs both inbound firewall access and a listening service.
         Server,
@@ -71,7 +71,7 @@ mod config {
     }
 
     /// A rooted contribution; the local structs supply automatic structural lowering.
-    #[rusnix(root)]
+    #[rusix(root)]
     pub struct Root {
         // Keeps both Rust-computed policies under the fictional demo namespace.
         demo: Policies,
@@ -95,7 +95,7 @@ pub use config::{Mode, firewall_policy, model, service_policy};
 fn main() {
     // Rust computes both policies from the same mode before generating Nix.
     // Nix receives their resulting fields, not the Rust enum or its match expressions.
-    let generated = rusnix_nix::compile(model()).unwrap();
+    let generated = rusix_nix::compile(model()).unwrap();
 
     // Emit configuration data; printing firewall settings does not apply them.
     println!("{}", generated.source);

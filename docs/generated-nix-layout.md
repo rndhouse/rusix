@@ -1,6 +1,6 @@
 # Generated Nix layout
 
-Rusnix formats its existing Nix AST with a document pretty-printer. The target is
+Rusix formats its existing Nix AST with a document pretty-printer. The target is
 100 characters, with two-space indentation. Layout preserves the AST meaning,
 runtime contexts and NixOS metadata. A separate [precedence policy](nix-expression-rendering.md)
 now chooses necessary parentheses before layout. String contents and quoted paths
@@ -33,7 +33,7 @@ stack; fit lookahead stops at the first break or exhausted width and does not
 rescan large candidate subtrees. Width counts characters; persisted source-map
 positions remain UTF-8 byte offsets.
 
-The [document engine](../crates/rusnix-nix/src/render/layout.rs) retains origin and
+The [document engine](../crates/rusix-nix/src/render/layout.rs) retains origin and
 diagnostic-site metadata. Attributed documents open a range before their first
 output byte and close it after their contents, including nested layout. The
 emitter records occurrence-specific spans and enclosing origins at that point.
@@ -209,7 +209,7 @@ positions and source excerpts. The temporary test edits were reverted.
 
 The existing paired-rendering matrix checks normal versus inspection diagnostics,
 source-map-only failures, reused expressions, lazy siblings/guards and discarded
-priorities. Twelve focused [renderer tests](../crates/rusnix-nix/src/render/tests.rs)
+priorities. Twelve focused [renderer tests](../crates/rusix-nix/src/render/tests.rs)
 cover short/long layouts, argument defaults, nesting, conditionals, lets,
 applications, literals, all AST variants, deterministic text/maps, and a real
 failure after inline Unicode text. Token comparison across flat, formatted and

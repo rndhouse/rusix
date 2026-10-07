@@ -1,7 +1,7 @@
-use rusnix_ir::IntoRusnixValue;
+use rusix_ir::IntoRusixValue;
 
-#[derive(IntoRusnixValue)]
-#[rusnix(rename_all = "PascalCase", rename_all = "lowerCamelCase")]
+#[derive(IntoRusixValue)]
+#[rusix(rename_all = "PascalCase", rename_all = "lowerCamelCase")]
 struct Settings {
     exec_start: String,
 }

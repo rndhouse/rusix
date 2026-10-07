@@ -1,4 +1,4 @@
-use rusnix_ir::{
+use rusix_ir::{
     IntoConfig,
     interop::{Nixpkgs, PackageRef},
 };

@@ -1,8 +1,8 @@
-use rusnix_ir::IntoConfig;
+use rusix_ir::IntoConfig;
 
 #[derive(IntoConfig)]
 struct Example {
-    #[rusnix(skip, rename = "enable")]
+    #[rusix(skip, rename = "enable")]
     enabled: bool,
 }
 

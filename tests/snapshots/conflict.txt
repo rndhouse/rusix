@@ -1,5 +1,5 @@
 error[validation]: invalid Rust configuration IR
-  --> crates/rusnix-cli/src/fixtures.rs:19:14
+  --> crates/rusix-cli/src/fixtures.rs:19:14
    = origin: set service.enable
-   = Rusnix: duplicate or conflicting option path: service.enable
+   = Rusix: duplicate or conflicting option path: service.enable
    = provenance: RustValidation

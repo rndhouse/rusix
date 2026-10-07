@@ -1,6 +1,6 @@
 # PostgreSQL NixOS module
 
-This example rewrites a complete upstream NixOS module in Rust/Rusnix: both its
+This example rewrites a complete upstream NixOS module in Rust/Rusix: both its
 public option declarations and its configuration implementation. Ordinary NixOS
 modules can configure it through the same `services.postgresql.*` interface.
 PostgreSQL packages still come from nixpkgs through opaque Nix handles.
@@ -29,11 +29,11 @@ NixOS remains responsible for checking and merging the generated module.
 From the repository root:
 
 ```bash
-cargo run --locked -p rusnix-nix --example postgresql-nixos-module
+cargo run --locked -p rusix-nix --example postgresql-nixos-module
 ```
 
-[Implementation tests](../../crates/rusnix-nix/tests/postgresql.rs) and
-[schema tests](../../crates/rusnix-nix/tests/postgresql_schema.rs) compare evaluated
+[Implementation tests](../../crates/rusix-nix/tests/postgresql.rs) and
+[schema tests](../../crates/rusix-nix/tests/postgresql_schema.rs) compare evaluated
 results against the pinned upstream module in disposable isolated Nix stores.
 The candidate imports no original PostgreSQL module. This experiment covers
 module evaluation; it does not build or start PostgreSQL, and runtime equivalence

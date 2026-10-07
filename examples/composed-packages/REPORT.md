@@ -5,15 +5,15 @@ The evaluator, derivations, output identities, fetchers, stdenv, builders, setup
 hooks and unreplaced dependencies remain ordinary pinned nixpkgs/Nix.
 
 ```text
-Rusnix OpenSSL
+Rusix OpenSSL
       │
-      ├────────► Rusnix Git
-      │
-      ▼
-Rusnix curl
+      ├────────► Rusix Git
       │
       ▼
-Rusnix MariaDB (server + client)
+Rusix curl
+      │
+      ▼
+Rusix MariaDB (server + client)
 
 Remaining dependency definitions: ordinary pinned nixpkgs
 ```
@@ -22,7 +22,7 @@ Remaining dependency definitions: ordinary pinned nixpkgs
 
 - Primary checkout was clean at `ce0a0675cc482555b58d3099334ecbd8eae62e1b`.
 - All edits, evaluations, checks and commits took place in
-  `/home/user/dev/worktrees/rusnix-composed-packages`, branch `composed-packages`.
+  `/home/user/dev/worktrees/rusix-composed-packages`, branch `composed-packages`.
 - The primary checkout and its HEAD remain unchanged. The worktree is retained.
 - The supplied prerequisite object IDs `6242f8c…` and `c64d91d…` are absent from
   this repository's current object database. Their required changes were already
@@ -96,7 +96,7 @@ is introduced into this low-level recipe.
 
 ## Exact default derivation identities
 
-Every entry below has an identical upstream/Rusnix ATerm recipe and output paths.
+Every entry below has an identical upstream/Rusix ATerm recipe and output paths.
 These are logical store identities produced inside disposable local stores;
 the host store was never selected.
 
@@ -253,7 +253,7 @@ All final checks passed from the requested worktree:
 | Check | Result / retained log |
 | --- | --- |
 | `cargo fmt --check` and `cargo fmt --all --check` | Passed |
-| `cargo run --locked --quiet -p rusnix-derive --bin check-rust-spacing` | 161 Rust files, zero gaps |
+| `cargo run --locked --quiet -p rusix-derive --bin check-rust-spacing` | 161 Rust files, zero gaps |
 | `RUSTDOCFLAGS='-D warnings' cargo test --workspace --locked` | 495 passed, zero failed/ignored, 37 test groups; `target/final-workspace.log` |
 | `cargo clippy --workspace --all-targets --locked -- -D warnings` | Passed; `target/final-clippy.log` |
 | `RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps --locked` | Passed; `target/final-rustdoc.log` |

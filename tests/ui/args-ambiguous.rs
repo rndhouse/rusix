@@ -1,11 +1,11 @@
-use rusnix_ir as rusnix;
+use rusix_ir as rusix;
 
-#[rusnix::args]
+#[rusix::args]
 mod args {
-    #[rusnix(root)]
+    #[rusix(root)]
     struct Root {
         listen_port: i64,
-        #[rusnix(rename = "listenPort")]
+        #[rusix(rename = "listenPort")]
         duplicate: i64,
     }
 }

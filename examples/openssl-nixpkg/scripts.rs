@@ -1,6 +1,6 @@
 //! Shell commands used by the pinned OpenSSL build recipes.
 //! Rust constructs their text; Nix runs them during package builds.
-use rusnix_ir::{
+use rusix_ir::{
     Expr,
     interop::{Package, raw::NixValue},
     nix_text,

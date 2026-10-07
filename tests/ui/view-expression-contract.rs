@@ -1,10 +1,10 @@
-use rusnix_ir as rusnix;
+use rusix_ir as rusix;
 
-#[rusnix::args]
+#[rusix::args]
 mod views {
-    #[rusnix(root)]
+    #[rusix(root)]
     struct Inputs {
-        #[rusnix(expression)]
+        #[rusix(expression)]
         value: std::time::Duration,
     }
 }

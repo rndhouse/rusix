@@ -7,7 +7,7 @@ pub mod model;
 
 mod scripts;
 
-use rusnix_ir::{
+use rusix_ir::{
     IntoConfig,
     interop::{NixAttrs, Nixpkgs, Package, PackageFunction},
 };
@@ -36,7 +36,7 @@ fn main() {
 
     // Export the function, release family and selected package as Nix attributes.
     // These are build descriptions; printing them does not build MariaDB.
-    let generated = rusnix_nix::compile(Output {
+    let generated = rusix_nix::compile(Output {
         factory,
         family: lowering::family(),
         mariadb,

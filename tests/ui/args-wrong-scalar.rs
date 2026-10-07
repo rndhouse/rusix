@@ -1,8 +1,8 @@
-use rusnix_ir::{self as rusnix, Expr};
+use rusix_ir::{self as rusix, Expr};
 
-#[rusnix::args]
+#[rusix::args]
 mod args {
-    #[rusnix(root)]
+    #[rusix(root)]
     struct Root {
         port: i64,
     }
@@ -11,5 +11,5 @@ mod args {
 fn needs_boolean(_: Expr<bool>) {}
 
 fn main() {
-    needs_boolean(args::from_value(rusnix_ir::interop::raw::NixValue::null()).port());
+    needs_boolean(args::from_value(rusix_ir::interop::raw::NixValue::null()).port());
 }

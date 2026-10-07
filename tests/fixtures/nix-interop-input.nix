@@ -3,23 +3,23 @@
   functions.lazy = _: { good = 42; bad = throw "delayed external call failed"; };
   values.lazy = { good = 42; bad = throw "unselected opaque value failed"; };
   packages.example = builtins.derivation {
-    name = "rusnix-external-1.0";
-    pname = "rusnix-external";
+    name = "rusix-external-1.0";
+    pname = "rusix-external";
     version = "1.0";
     system = "x86_64-linux";
-    builder = "/never-built-by-rusnix";
+    builder = "/never-built-by-rusix";
   };
   nixosModules.example = { lib, ... }: {
-    options.services.rusnixExternal.enable = lib.mkEnableOption "local example";
+    options.services.rusixExternal.enable = lib.mkEnableOption "local example";
   };
   nixosModules.broken = { lib, ... }: {
-    options.services.rusnixExternal.value = lib.mkOption {
+    options.services.rusixExternal.value = lib.mkOption {
       type = lib.types.int;
       default = throw "local external module failed";
     };
   };
   nixosModules.invalid = 42;
   overlays.example = final: prev: {
-    rusnixOverlayHello = prev.hello;
+    rusixOverlayHello = prev.hello;
   };
 }

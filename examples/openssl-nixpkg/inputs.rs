@@ -1,18 +1,16 @@
 //! Describes the dependencies and feature switches accepted by the pinned OpenSSL Nix function.
 //! Rust accessors generate references; Nix resolves their values only when the recipe needs them.
-use rusnix_ir as rusnix;
+use rusix_ir as rusix;
 
 /// Declares the dependencies and feature arguments accepted by the OpenSSL Nix function.
 /// Its views retain the caller's values for Nix to resolve when the recipe needs them.
-#[rusnix::args]
+#[rusix::args]
 #[allow(dead_code)] // Upstream retains unused coreutils/writeShellScript parameters.
 pub mod args {
-    use rusnix_ir::interop::{
-        NixCallable, NixLibrary, NixNullable, Package, Stdenv, raw::NixValue,
-    };
+    use rusix_ir::interop::{NixCallable, NixLibrary, NixNullable, Package, Stdenv, raw::NixValue};
 
     /// Caller-owned dependencies and lazy policy arguments.
-    #[rusnix(root)]
+    #[rusix(root)]
     struct Inputs {
         /// Utility functions and package metadata supplied by the Nix caller.
         lib: NixLibrary,
@@ -41,19 +39,19 @@ pub mod args {
         /// Compression library used only when withZlib is enabled.
         zlib: Package,
         /// Requests the legacy SSL 2 protocol through the upstream configure flags.
-        #[rusnix(rename = "enableSSL2")]
+        #[rusix(rename = "enableSSL2")]
         enable_ssl2: bool,
         /// Requests the legacy SSL 3 protocol through the upstream configure flags.
-        #[rusnix(rename = "enableSSL3")]
+        #[rusix(rename = "enableSSL3")]
         enable_ssl3: bool,
         /// Requests the legacy MD2 digest through the upstream configure flags.
-        #[rusnix(rename = "enableMD2")]
+        #[rusix(rename = "enableMD2")]
         enable_md2: bool,
         /// Enables kernel TLS support; the Nix default follows the host platform's Linux flag.
-        #[rusnix(rename = "enableKTLS")]
+        #[rusix(rename = "enableKTLS")]
         enable_ktls: bool,
         /// Selects static libraries; the Nix default follows the host platform's static-build flag.
-        #[rusnix(rename = "static")]
+        #[rusix(rename = "static")]
         static_build: bool,
         /// Optional openssl.cnf file copied into the configuration output; null keeps the default file.
         conf: NixNullable<NixValue>,

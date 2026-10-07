@@ -1,4 +1,4 @@
-# Evaluation-only experiments. Context labels are observations, not Rusnix IDs.
+# Evaluation-only experiments. Context labels are observations, not Rusix IDs.
 { pkgs, scenario, placement, payload }:
 let
   context = builtins.addErrorContext;

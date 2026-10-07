@@ -23,10 +23,10 @@ backend validation failure **after that expression has returned successfully**.
 
 ## Setup and reproduction
 
-- Primary checkout: `/home/user/dev/rusnix`, clean at
+- Primary checkout: `/home/user/dev/rusix`, clean at
   `fcbdf6b742e400327ed3dc7f02b280fb79929439` before work began.
 - Branch: `backend-provenance`, created from that exact committed HEAD.
-- Retained worktree: `/home/user/dev/worktrees/rusnix-backend-provenance`.
+- Retained worktree: `/home/user/dev/worktrees/rusix-backend-provenance`.
 - nixpkgs: `8b27c1239e5c421a2bbc2c65d52e4a6fbf2ff296`, cloned with shared
   objects from the existing local checkout, without fetching.
 - Nix 2.34.8, queried through `NixSession::version()`.
@@ -35,7 +35,7 @@ backend validation failure **after that expression has returned successfully**.
   privileged operations occur. All evaluation is offline.
 
 ```bash
-cargo test --locked -p rusnix-nix --test backend_provenance
+cargo test --locked -p rusix-nix --test backend_provenance
 ```
 
 Seven tests cover 240 minimal backend cases, 20 real-package input failures,
@@ -261,7 +261,7 @@ from these results. The existing private `DiagnosticBoundary` enum is unchanged.
 
 The next promising bounded experiment is **structured backend-boundary metadata
 and per-field dependency provenance tables**, correlated with Nix's reported
-field/index. nixpkgs remains authoritative; Rusnix records suppliers and edges,
+field/index. nixpkgs remains authoritative; Rusix records suppliers and edges,
 not duplicate validation. Concatenation, optional/check inputs, splicing,
 overrides, repeated call instances and transformed indexes need explicit handling
 and honest correlation limits. No such mechanism is implemented here.

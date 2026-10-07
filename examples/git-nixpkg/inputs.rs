@@ -1,22 +1,22 @@
 //! Describes the dependencies and feature switches accepted by the pinned Git Nix function.
 //! Rust accessors generate references; Nix resolves their values only when the recipe needs them.
-use rusnix_ir::interop::raw::NixpkgsExt;
-use rusnix_ir::{
-    self as rusnix, IntoRusnixValue, RusnixValue,
+use rusix_ir::interop::raw::NixpkgsExt;
+use rusix_ir::{
+    self as rusix, IntoRusixValue, RusixValue,
     interop::{NixPath, Nixpkgs, Package, raw::NixValue},
 };
 
 /// Declares named accessors for the dependencies and features passed to Git's Nix function.
 /// The views describe lookups; Nix supplies their values when applying the function.
-#[rusnix::args]
+#[rusix::args]
 pub(super) mod args {
-    use rusnix_ir::{
+    use rusix_ir::{
         Expr,
         interop::{NixCallable, NixList, Package, raw::NixValue},
     };
 
     /// Resolved arguments stay deferred; accessors record each lookup's Rust call site.
-    #[rusnix(root)]
+    #[rusix(root)]
     struct Inputs {
         /// Source fetcher; Nix constructs the fixed-output derivation.
         fetchurl: NixCallable<Package>,
@@ -65,10 +65,10 @@ pub(super) mod args {
         /// DocBook-to-Texinfo converter used when withManual is enabled.
         docbook2x: Package,
         /// DocBook stylesheets used to generate the manual.
-        #[rusnix(rename = "docbook_xsl")]
+        #[rusix(rename = "docbook_xsl")]
         docbook_xsl: Package,
         /// DocBook document definitions used to generate the manual.
-        #[rusnix(rename = "docbook_xml_dtd_45")]
+        #[rusix(rename = "docbook_xml_dtd_45")]
         docbook_xml_dtd_45: Package,
         /// XML transformation library and tools used by the recipe.
         libxslt: Package,
@@ -115,15 +115,15 @@ pub(super) mod args {
         /// SMTP and TLS Perl libraries placed on git-send-email's search path.
         smtp_perl_libs: NixList<Package>,
         /// Apple Security framework linked by the macOS keychain helper.
-        #[rusnix(rename = "Security")]
+        #[rusix(rename = "Security")]
         security: Package,
         /// Apple CoreServices framework included on macOS.
-        #[rusnix(rename = "CoreServices")]
+        #[rusix(rename = "CoreServices")]
         core_services: Package,
         /// Existing NixOS integration tests exposed on the package for separate use.
         nixos_tests: NixosTests,
         /// Build tool that locates dependency headers and libraries.
-        #[rusnix(rename = "pkg-config")]
+        #[rusix(rename = "pkg-config")]
         pkg_config: Package,
         /// GLib library included when the libsecret credential helper is enabled.
         glib: Package,
@@ -134,7 +134,7 @@ pub(super) mod args {
         /// System-information tool used by installed tests on macOS and FreeBSD.
         sysctl: Package,
         /// Build tool that makes platform detection use the host when cross-compiling.
-        #[rusnix(rename = "deterministic-host-uname")]
+        #[rusix(rename = "deterministic-host-uname")]
         deterministic_host_uname: Package,
         /// Existing fetchgit package tests merged with Git's own package checks.
         tests: Tests,
@@ -142,13 +142,13 @@ pub(super) mod args {
 
     /// The caller's standard builder and its finite platform/tool dependencies.
     /// Whole-subtree access retains the entire supplied stdenv for build/host equality.
-    #[rusnix(value)]
+    #[rusix(value)]
     struct Stdenv {
-        /// Existing mkDerivation function; Rusnix does not reimplement the builder.
+        /// Existing mkDerivation function; Rusix does not reimplement the builder.
         mk_derivation: NixCallable<Package>,
         /// Platform where Git will run.
-        #[rusnix(expression)]
-        host_platform: rusnix_ir::interop::Platform,
+        #[rusix(expression)]
+        host_platform: rusix_ir::interop::Platform,
         /// Compiler metadata needed for the glibc linker workaround.
         cc: Compiler,
         /// Shell executable selected by stdenv.
@@ -160,7 +160,7 @@ pub(super) mod args {
     /// The compiler property used by the pinned Git recipe.
     struct Compiler {
         /// Indicates whether the selected compiler is GNU GCC.
-        #[rusnix(rename = "isGNU")]
+        #[rusix(rename = "isGNU")]
         is_gnu: bool,
     }
 
@@ -177,34 +177,34 @@ pub(super) mod args {
         /// Existing helper that formats Perl package library paths.
         make_perl_path: NixCallable<Expr<String>>,
         /// CGI dependencies used when wrapping gitweb.
-        #[rusnix(rename = "CGI")]
+        #[rusix(rename = "CGI")]
         cgi: Package,
         /// HTML parser used by gitweb.
-        #[rusnix(rename = "HTMLParser")]
+        #[rusix(rename = "HTMLParser")]
         html_parser: Package,
         /// FastCGI library used by gitweb.
-        #[rusnix(rename = "CGIFast")]
+        #[rusix(rename = "CGIFast")]
         cgi_fast: Package,
         /// FastCGI bindings used by gitweb.
-        #[rusnix(rename = "FCGI")]
+        #[rusix(rename = "FCGI")]
         fcgi: Package,
         /// FastCGI process manager used by gitweb.
-        #[rusnix(rename = "FCGIProcManager")]
+        #[rusix(rename = "FCGIProcManager")]
         fcgi_proc_manager: Package,
         /// Tag-cloud library used by gitweb.
-        #[rusnix(rename = "HTMLTagCloud")]
+        #[rusix(rename = "HTMLTagCloud")]
         html_tag_cloud: Package,
     }
 
     /// The Perl derivation remains opaque when used as a dependency or store path.
-    #[rusnix(value)]
+    #[rusix(value)]
     struct Perl {
         /// Relative library directory used by installed Perl wrappers.
         lib_prefix: String,
     }
 
     /// Nix library dispatch stays dynamic; metadata dependencies are declared explicitly.
-    #[rusnix(value)]
+    #[rusix(value)]
     struct Lib {
         /// License metadata included in the package.
         licenses: Licenses,
@@ -287,9 +287,9 @@ impl Arguments {
     }
 }
 
-impl IntoRusnixValue for Arguments {
+impl IntoRusixValue for Arguments {
     #[track_caller]
-    fn into_value(self) -> RusnixValue {
+    fn into_value(self) -> RusixValue {
         let mut fields = self.model.arguments();
 
         // These explicit arguments reproduce Git's callPackage wiring in all-packages.nix.
@@ -330,6 +330,6 @@ impl IntoRusnixValue for Arguments {
         if let Some(openssl) = self.openssl {
             fields.push(("openssl", openssl.into()));
         }
-        RusnixValue::leaf(NixValue::record(fields))
+        RusixValue::leaf(NixValue::record(fields))
     }
 }

@@ -151,7 +151,7 @@ let
   checks = builtins.filter (drv: drv.name == "postgresql-configfile-check") cfg.system.checks;
 in
 if checkAssertions && failedAssertions != [] then
-  builtins.addErrorContext "rusnix-stage:nixos-assertions"
+  builtins.addErrorContext "rusix-stage:nixos-assertions"
     (throw (lib.concatStringsSep "\n" (map (a: a.message) failedAssertions)))
 else if !pg.enable then {
   enabled = false;

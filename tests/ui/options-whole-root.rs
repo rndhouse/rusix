@@ -1,8 +1,8 @@
-use rusnix_ir as rusnix;
+use rusix_ir as rusix;
 
-#[rusnix::options]
+#[rusix::options]
 mod options {
-    #[rusnix(root)]
+    #[rusix(root)]
     struct Root {
         port: i64,
     }

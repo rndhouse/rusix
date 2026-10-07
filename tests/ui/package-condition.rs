@@ -1,4 +1,4 @@
-use rusnix_ir::{Expr, interop::{Nixpkgs, Package}};
+use rusix_ir::{Expr, interop::{Nixpkgs, Package}};
 
 fn dependency(_: Package) {}
 

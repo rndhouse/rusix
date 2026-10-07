@@ -1,4 +1,4 @@
-use rusnix_ir::{Expr, interop::{NixCallable, raw::NixValue}};
+use rusix_ir::{Expr, interop::{NixCallable, raw::NixValue}};
 
 fn main() {
     let function = NixCallable::from_function(|text: Expr<String>| text);

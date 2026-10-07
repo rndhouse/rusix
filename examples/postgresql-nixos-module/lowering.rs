@@ -4,9 +4,9 @@ use super::{
     model::{Clause, Database, Postgresql, Role, RoleClauses},
     options,
 };
-use rusnix_ir::interop::raw::{NixFunctionExt, NixpkgsExt};
-use rusnix_ir::{
-    self as rusnix, Config, Expr, IntoConfig, IntoRusnixValue,
+use rusix_ir::interop::raw::{NixFunctionExt, NixpkgsExt};
+use rusix_ir::{
+    self as rusix, Config, Expr, IntoConfig, IntoRusixValue,
     interop::{Nixpkgs, PackageRef, raw::NixValue},
     nix_record as record, nix_text,
     nixos::{self, DefinitionPriority, NixosModule},
@@ -370,8 +370,8 @@ fn post_start() -> NixValue {
 }
 
 // Maps the service's lifecycle and hardening policy to systemd property names.
-#[derive(IntoRusnixValue)]
-#[rusnix(rename_all = "PascalCase")]
+#[derive(IntoRusixValue)]
+#[rusix(rename_all = "PascalCase")]
 struct ServiceConfig {
     // Runs the database process as the dedicated Unix account.
     user: &'static str,
@@ -400,7 +400,7 @@ struct ServiceConfig {
     // Makes system paths read-only except for explicitly permitted locations.
     protect_system: &'static str,
     // Chooses file permissions according to package support for group access.
-    #[rusnix(rename = "UMask")]
+    #[rusix(rename = "UMask")]
     umask: NixValue,
 
     // Drops all Linux capabilities; systemd spells the empty set as an empty string.
@@ -434,7 +434,7 @@ struct ServiceConfig {
     // Hides other users’ processes from the service.
     protect_proc: &'static str,
     // Removes IPC objects owned by the service account when it stops.
-    #[rusnix(rename = "RemoveIPC")]
+    #[rusix(rename = "RemoveIPC")]
     remove_ipc: bool,
 
     // Allows only the socket families used by PostgreSQL and service management.
@@ -444,7 +444,7 @@ struct ServiceConfig {
     // Prevents requesting real-time scheduling.
     restrict_realtime: bool,
     // Prevents creating files with set-user-ID or set-group-ID bits.
-    #[rusnix(rename = "RestrictSUIDSGID")]
+    #[rusix(rename = "RestrictSUIDSGID")]
     restrict_suid_sgid: bool,
     // Accepts only the host’s native syscall ABI.
     system_call_architectures: &'static str,
@@ -453,7 +453,7 @@ struct ServiceConfig {
 }
 
 // The NixOS service record contains deferred scripts and merged systemd properties.
-#[derive(IntoRusnixValue)]
+#[derive(IntoRusixValue)]
 struct ServiceDefinition {
     // Names the service in systemd status output.
     description: &'static str,
@@ -476,7 +476,7 @@ struct ServiceDefinition {
 }
 
 // Supplies upstream defaults, while settings themselves remain an open record.
-#[derive(IntoRusnixValue)]
+#[derive(IntoRusixValue)]
 struct PostgresqlDefaults {
     // Adds generated file locations and defaults to the open PostgreSQL settings map.
     settings: NixValue,
@@ -489,7 +489,7 @@ struct PostgresqlDefaults {
 }
 
 // The operating-system account is separate from PostgreSQL's database roles.
-#[derive(IntoRusnixValue)]
+#[derive(IntoRusixValue)]
 struct UnixUser {
     // Declares the operating-system account independently of database roles.
     name: &'static str,
@@ -506,7 +506,7 @@ struct UnixUser {
 }
 
 // Account names remain keys in open maps; the containing NixOS namespaces are fixed.
-#[derive(IntoRusnixValue)]
+#[derive(IntoRusixValue)]
 struct UserDefinitions {
     // Maps account names to Unix user definitions without closing the NixOS namespace.
     users: NixValue,
@@ -515,7 +515,7 @@ struct UserDefinitions {
 }
 
 // Exposes PostgreSQL's package and shared files through the normal NixOS environment.
-#[derive(IntoRusnixValue)]
+#[derive(IntoRusixValue)]
 struct Environment {
     // Adds the effective PostgreSQL package, including selected extensions.
     system_packages: Vec<NixValue>,
@@ -526,7 +526,7 @@ struct Environment {
 // These fixed records have no fallible flattening. Keep them atomic when applying
 // NixOS wrappers instead of turning their fields into separate option bindings.
 #[track_caller]
-fn opaque(value: impl IntoRusnixValue) -> NixValue {
+fn opaque(value: impl IntoRusixValue) -> NixValue {
     value
         .try_into_nix_value()
         .expect("fixed compatibility record has no structural flattening errors")
@@ -719,12 +719,12 @@ fn checks() -> NixValue {
 
 /// Defines the NixOS contributions for author-supplied inputs and computed PostgreSQL settings.
 /// Their nested fields place defaults, generated files and service definitions at NixOS option paths.
-#[rusnix::config]
+#[rusix::config]
 mod config {
     use super::*;
 
     // Places the author's optional input record at the existing PostgreSQL option path.
-    #[rusnix(root)]
+    #[rusix(root)]
     pub(super) struct Inputs {
         /// Places the optional Rust inputs under the existing NixOS services namespace.
         services: InputServices,
@@ -737,16 +737,16 @@ mod config {
     }
 
     // Struct-level omission affects only this record's direct optional fields.
-    #[rusnix(omit_none)]
+    #[rusix(omit_none)]
     pub(super) struct PostgresqlInput {
         // Always contribute enable; the remaining scalars leave upstream defaults intact when unset.
         pub(super) enable: bool,
         // Selects an existing package only when the author supplies one.
         pub(super) package: Option<PackageRef>,
-        #[rusnix(rename = "enableJIT")]
+        #[rusix(rename = "enableJIT")]
         // Leaves the package-specific JIT default intact when unset.
         pub(super) enable_jit: Option<bool>,
-        #[rusnix(rename = "enableTCPIP")]
+        #[rusix(rename = "enableTCPIP")]
         // Contributes a TCP-listening choice only when requested.
         pub(super) enable_tcpip: Option<bool>,
         // Optionally overrides inclusion of the configuration check.
@@ -776,7 +776,7 @@ mod config {
     }
 
     // The pinned role schema is finite; null inside Some remains a deliberate SQL preserve value.
-    #[rusnix(omit_none)]
+    #[rusix(omit_none)]
     pub(super) struct RoleClauseInputs {
         // Contributes the requested SUPERUSER state, including explicit null to preserve it.
         pub(super) superuser: Option<NixValue>,
@@ -801,7 +801,7 @@ mod config {
     }
 
     // A separate contribution deriving service behavior from final merged options.
-    #[rusnix(root)]
+    #[rusix(root)]
     pub(super) struct Implementation {
         /// Deferred configuration rules NixOS checks when the PostgreSQL service is enabled.
         assertions: NixValue,

@@ -1,4 +1,4 @@
-# An ordinary NixOS contributor, independent of Rusnix and Rust lowering.
+# An ordinary NixOS contributor, independent of Rusix and Rust lowering.
 { lib, pkgs, ... }: {
   services.postgresql = {
     package = lib.mkForce pkgs.postgresql_15;

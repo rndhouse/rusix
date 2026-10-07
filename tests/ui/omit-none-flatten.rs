@@ -1,8 +1,8 @@
-use rusnix_ir::IntoConfig;
+use rusix_ir::IntoConfig;
 
 #[derive(IntoConfig)]
 struct Root {
-    #[rusnix(omit_none, flatten)]
+    #[rusix(omit_none, flatten)]
     value: Option<String>,
 }
 

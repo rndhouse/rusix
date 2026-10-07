@@ -1,15 +1,15 @@
 //! Describes the dependencies and feature switches accepted by the pinned MariaDB Nix function.
 //! Rust accessors generate references; Nix resolves their values only when the recipe needs them.
-use rusnix_ir as rusnix;
+use rusix_ir as rusix;
 
 /// Declares the release, dependencies and features supplied to MariaDB's Nix function.
 /// Accessors describe argument lookups without reading those values in Rust.
-#[rusnix::args]
+#[rusix::args]
 pub mod args {
-    use rusnix_ir::interop::{NixCallable, NixLibrary, Package, Stdenv, raw::NixValue};
+    use rusix_ir::interop::{NixCallable, NixLibrary, Package, Stdenv, raw::NixValue};
 
     /// Deferred common and server dependencies plus the four upstream feature defaults.
-    #[rusnix(root)]
+    #[rusix(root)]
     struct Inputs {
         /// Release version used in the source archive URL and version-dependent recipe choices.
         version: String,
@@ -38,7 +38,7 @@ pub mod args {
         /// Build hook that sets the program search path for the mytop monitoring script.
         make_wrapper: Package,
         /// Build tool that locates dependency headers and libraries.
-        #[rusnix(rename = "pkg-config")]
+        #[rusix(rename = "pkg-config")]
         pkg_config: Package,
         /// HTTP client library linked into the client and server recipes.
         curl: Package,
@@ -59,7 +59,7 @@ pub mod args {
         /// Linux service-manager dependency included by the shared recipe.
         systemd: Package,
         /// Apple CoreServices framework included on macOS.
-        #[rusnix(rename = "CoreServices")]
+        #[rusix(rename = "CoreServices")]
         core_services: Package,
         /// Apple toolchain utilities included by the macOS recipe.
         cctools: Package,
@@ -94,12 +94,12 @@ pub mod args {
         /// XML library included in the server recipe.
         libxml2: Package,
         /// Authentication-module library included in the Linux server recipe.
-        #[rusnix(rename = "linux-pam")]
+        #[rusix(rename = "linux-pam")]
         linux_pam: Package,
         /// NUMA library added and propagated when withNuma is enabled.
         numactl: Package,
         /// C++ formatting library included in both recipes from release 10.7 onward.
-        #[rusnix(rename = "fmt_8")]
+        #[rusix(rename = "fmt_8")]
         fmt_8: Package,
         /// Enables the Mroonga full-text storage engine and its dependencies; defaults to true.
         with_storage_mroonga: bool,

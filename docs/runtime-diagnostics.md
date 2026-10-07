@@ -42,7 +42,7 @@ No generated-source rewriting, fetching or building is involved.
 
 ## Diagnostic evidence
 
-[Expression comparisons](../crates/rusnix-nix/src/context_audit.rs) render both
+[Expression comparisons](../crates/rusix-nix/src/context_audit.rs) render both
 the previous wrapper policy and the current policy from the same AST. They
 check equal primary Rust origins and reasons, retained `package.buildInputs`
 ancestry and raw Nix errors. They also replay real messages through the textual
@@ -52,7 +52,7 @@ wrong library arguments, `writeText`, deferred `mkDerivation` recipe errors,
 explicit validation, nested callbacks, delayed external values, imported Nix,
 and an actual `mkDerivation` `finalAttrs` callback failure.
 
-[NixOS comparisons](../crates/rusnix-nix/src/nixos_context_audit.rs) additionally
+[NixOS comparisons](../crates/rusix-nix/src/nixos_context_audit.rs) additionally
 check explicit assertions and the complete PostgreSQL schema/implementation:
 the same generated artifact accepts an ordinary downstream port override, then
 maps a zero-port division to its consuming Rust operation. A negative port is
@@ -84,7 +84,7 @@ retained. No eager forcing is added to keep constructor contexts alive.
 
 ## Origin identifiers
 
-Rusnix identifies source origins with IDs such as `rn-e160b9de21c72674`.
+Rusix identifies source origins with IDs such as `rn-e160b9de21c72674`.
 Generated Nix includes the ID at selected failure boundaries in `addErrorContext`.
 Inspection rendering also includes comments (`# rn-e160b9de21c72674`). Source-map
 and diagnostic metadata use that ID unchanged. NixOS definition files and assertion messages
@@ -123,8 +123,8 @@ Normal compilation, CLI artifacts and examples use comment-free expression outpu
 There is still one compiler-owned header comment. Inspection is explicit:
 
 ```rust
-use rusnix_ir::IntoConfig;
-use rusnix_nix::{RenderOptions, compile_with_options};
+use rusix_ir::IntoConfig;
+use rusix_nix::{RenderOptions, compile_with_options};
 
 #[derive(IntoConfig)]
 struct Output {
@@ -141,7 +141,7 @@ The same option is available through `nixos::compile_module_with_options` and,
 for backend AST authors, `render_with_options`. One renderer handles both modes.
 There is no global mode, duplicate default artifact, or CLI inspection flag.
 
-[Rendering comparisons](../crates/rusnix-nix/src/render_audit.rs) check persisted
+[Rendering comparisons](../crates/rusix-nix/src/render_audit.rs) check persisted
 maps, nested structures, source-map-only failures, cloned expression occurrences,
 lazy siblings/guards, discarded priorities and eight NixOS failure cases. The
 expression matrix additionally compares both renderings for twenty demanded

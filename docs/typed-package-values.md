@@ -1,6 +1,6 @@
 # Typed deferred package authoring
 
-Rusnix preserves useful Rust interfaces until operations lower them into the
+Rusix preserves useful Rust interfaces until operations lower them into the
 existing semantic IR. These handles describe computations for Nix; constructing
 or binding them does not evaluate Nix, fetch sources, or build packages.
 
@@ -22,9 +22,9 @@ or binding them does not evaluate Nix, fetch sources, or build packages.
 - `IntoNixExpression` and `ToNixText` preserve interfaces at literal and text boundaries.
 - `Expr<bool>`, `Expr<String>`, and `Expr<i64>` retain scalar expectations.
 
-Core handles implement `ConfigValue` for direct placement and `IntoRusnixValue`
+Core handles implement `ConfigValue` for direct placement and `IntoRusixValue`
 for nesting in user-defined records. `ConfigValue` remains sealed. User-defined
-records use `IntoRusnixValue`; `try_call`, `try_call_package`, and
+records use `IntoRusixValue`; `try_call`, `try_call_package`, and
 `try_mk_derivation` return structural conversion errors at the receiving boundary.
 Explicit conversion to `NixValue` is not required before those calls.
 
@@ -35,7 +35,7 @@ function application, sharing the dependency expression once. `choose`,
 `asserted`, and `require` retain that interface through conditionals and guards.
 There are no new evaluator operations or eager checks.
 
-Argument views accept core handles as leaves. A subtree marked `#[rusnix(value)]`
+Argument views accept core handles as leaves. A subtree marked `#[rusix(value)]`
 in an argument view also implements `NixExpression`, so finite caller-defined
 record views can survive binding. `try_bind_record` converts a structural Rust
 record at that boundary and reports conversion errors before constructing its
@@ -149,7 +149,7 @@ accepts different text-coercible file representations. No new filesystem operati
 or eager type validation is introduced.
 
 External finite record views and aliases can be declared with
-`#[rusnix(expression)]` fields in both argument and option views. The declared
+`#[rusix(expression)]` fields in both argument and option views. The declared
 type must implement `NixExpression`; the macro does not inspect its schema.
 This allows shared views to live in separate modules without duplicating their
 fields or falling back to NixValue.
@@ -180,14 +180,14 @@ local stores, with no package builds or network fetches.
 
 ## Authoring and raw interop
 
-`rusnix_ir::prelude` exports typed authoring, configuration macros and conversion
+`rusix_ir::prelude` exports typed authoring, configuration macros and conversion
 traits. It excludes `NixValue` and representation access. Import
 `interop::raw::{NixValue, NixRepresentation}` only when an adapter needs dynamic
 Nix operations or an unchecked external interface expectation.
 
 `NixExpression` supplies lazy `bind`, `choose`, `require`, `asserted` and finite
 record binding. Implement `raw::NixRepresentation` for custom symbolic interfaces;
-those implementing `Clone` and `IntoRusnixValue` receive `NixExpression` automatically.
+those implementing `Clone` and `IntoRusixValue` receive `NixExpression` automatically.
 The generated argument views follow the same rule. Their raw `as_value` hooks
 remain available for interoperability but are hidden from normal rustdoc listings.
 
@@ -215,7 +215,7 @@ The public surface has three entry points:
 These operations stay supported when the typed surface cannot describe an external
 interface. Raw type names and extension traits are absent from the authoring
 prelude. Import them explicitly when writing dynamic adapters. Raw IR construction is public under `backend`
-because `rusnix-nix` is a separate crate; crate-only constructors stay restricted.
+because `rusix-nix` is a separate crate; crate-only constructors stay restricted.
 Macro implementation hooks remain public where generated external code requires
 them and use hidden documentation rather than claiming to be private.
 
@@ -226,7 +226,7 @@ The following import and implementation changes are intentional:
 | `interop::{NixValue, AttrPath}` | `interop::raw::{NixValue, AttrPath}` |
 | Root `Origin`, `Node`, `ValueKind`, `Assignment` | `backend::{Origin, Node, ValueKind, Assignment}` |
 | `interop::{Source, Reference}` | `backend::{Source, Reference}` |
-| Implementing `NixExpression` | Implement `raw::NixRepresentation`, `Clone`, and `IntoRusnixValue` |
+| Implementing `NixExpression` | Implement `raw::NixRepresentation`, `Clone`, and `IntoRusixValue` |
 | Node lowering through `ConfigValue` | Explicit `backend::IntoNode` import |
 | Handle/option erasure | Explicit `raw::AsNixValue` import |
 | Dynamic Nix function calls and signature expectations | Explicit `raw::NixFunctionExt` import |

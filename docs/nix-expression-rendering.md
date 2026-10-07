@@ -11,7 +11,7 @@ the resulting text in both normal and inspection modes.
 The earlier renderer grouped every application, its function and its argument,
 every selection base, and every binary/conditional/function expression. This
 was safe but obscured ordinary Nix calls and paths. The new
-[policy](../crates/rusnix-nix/src/render/precedence.rs) uses increasing binding
+[policy](../crates/rusix-nix/src/render/precedence.rs) uses increasing binding
 strength, based on the [Nix operator table](https://nix.dev/manual/nix/2.24/language/operators.html)
 and the [Nix parser grammar](https://github.com/NixOS/nix/blob/master/src/libexpr/parser.y).
 

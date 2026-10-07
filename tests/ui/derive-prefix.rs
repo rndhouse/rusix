@@ -1,7 +1,7 @@
-use rusnix_ir::IntoConfig;
+use rusix_ir::IntoConfig;
 
 #[derive(IntoConfig)]
-#[rusnix(prefix = "services.example")]
+#[rusix(prefix = "services.example")]
 struct Example {
     enable: bool,
 }

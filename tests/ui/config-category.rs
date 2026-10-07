@@ -1,10 +1,10 @@
-use rusnix_ir::{self as rusnix, interop::Nixpkgs};
+use rusix_ir::{self as rusix, interop::Nixpkgs};
 
-#[rusnix::config]
+#[rusix::config]
 mod config {
-    use rusnix_ir::interop::PackageRef;
+    use rusix_ir::interop::PackageRef;
 
-    #[rusnix(root)]
+    #[rusix(root)]
     pub struct Machine {
         pub packages: Vec<PackageRef>,
     }

@@ -5,7 +5,7 @@ and Git, and curl supplies MariaDB. A dependency is another package a recipe nee
 the Rust code supplies selected dependencies explicitly and lets nixpkgs supply
 the rest. Start with [composition.rs](composition.rs) to change those connections.
 
-Rusnix does not require a whole dependency closure to be rewritten. A package can
+Rusix does not require a whole dependency closure to be rewritten. A package can
 first be rewritten while all dependencies remain normal pinned nixpkgs. Rewritten
 dependency values can then be supplied one by one through explicit callPackage
 override records. Nix still evaluates the resulting expressions; nixpkgs supplies
@@ -41,7 +41,7 @@ and curl once, retaining `Package` on the lexical parameters. Typed argument rec
 lower at calls; neither packages nor factories need `as_value` conversions.
 See [typed package authoring](../../docs/typed-package-values.md).
 
-From the repository root, run `cargo run --locked -p rusnix-nix --example composed-packages`.
+From the repository root, run `cargo run --locked -p rusix-nix --example composed-packages`.
 It prints generated Nix with a `packages` field containing the four connected
 package expressions; Rust does not evaluate Nix or build the packages.
 
@@ -50,7 +50,7 @@ package expressions; Rust does not evaluate Nix or build the packages.
 See the [verified report](REPORT.md) for the source matrix, exact derivation
 identities, source attribution results and full verification.
 
-`cargo test --locked -p rusnix-nix --test composed` compares exact ATerm recipe
+`cargo test --locked -p rusix-nix --test composed` compares exact ATerm recipe
 bytes, derivation identities and all output paths. Tags attached through the
 OpenSSL factory result's normal `overrideAttrs` interface must be observable in
 curl's OpenSSL passthru and Git's actual buildInputs;

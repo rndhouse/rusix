@@ -4,7 +4,7 @@
 release 24.11 commit `8b27c1239e5c421a2bbc2c65d52e4a6fbf2ff296` (the dereferenced
 release tag). The upstream license is in `nixpkgs/COPYING`.
 
-From the Rusnix repository root, initialize it with:
+From the Rusix repository root, initialize it with:
 
 ```bash
 git submodule update --init --depth=1
@@ -12,14 +12,14 @@ git submodule update --init --depth=1
 
 `.gitmodules` requests a shallow checkout. Initialization needs network access
 unless the pinned commit is already available locally; evaluation never downloads
-sources. A normal Rusnix clone does not include nixpkgs data. Initializing the
+sources. A normal Rusix clone does not include nixpkgs data. Initializing the
 submodule downloads its full source tree, without its full Git history.
 
 The original Git package definition is directly browsable at
 [`nixpkgs/pkgs/applications/version-management/git/default.nix`](nixpkgs/pkgs/applications/version-management/git/default.nix),
 with patches and `update.sh` alongside it.
 
-Before staging sources, Rusnix checks that the checkout exists, HEAD matches the
+Before staging sources, Rusix checks that the checkout exists, HEAD matches the
 compiled-in revision, and there are no modified, untracked, or ignored files.
 Missing or mismatched submodules are tooling failures with initialization advice.
 Git must be available on PATH. Verification is cached while sessions share a

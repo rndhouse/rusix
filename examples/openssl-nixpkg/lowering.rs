@@ -5,9 +5,9 @@ use super::{
     model::Release,
     scripts,
 };
-use rusnix_ir::interop::raw::NixRepresentation;
-use rusnix_ir::{
-    Expr, IntoRusnixValue,
+use rusix_ir::interop::raw::NixRepresentation;
+use rusix_ir::{
+    Expr, IntoRusixValue,
     interop::{
         FinalAttrs, NixAttrs, NixCallable, NixExpression, NixLibrary, NixList, NixPath, Nixpkgs,
         Package, PackageFunction, raw::NixValue,
@@ -395,7 +395,7 @@ fn configure_script(i: &Inputs, lib: &NixLibrary, version: &Expr<String>) -> Exp
 
 // A Nix derivation describes how to build a package. These fields become the attributes
 // passed to nixpkgs' standard builder; Rust constructs the recipe without running its phases.
-#[derive(IntoRusnixValue)]
+#[derive(IntoRusixValue)]
 struct Recipe {
     // Package name without its version.
     pname: &'static str,

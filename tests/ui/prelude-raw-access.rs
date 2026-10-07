@@ -1,4 +1,4 @@
-use rusnix_ir::prelude::*;
+use rusix_ir::prelude::*;
 
 fn main() {
     let package: Package = Nixpkgs::new().get("openssl").into();

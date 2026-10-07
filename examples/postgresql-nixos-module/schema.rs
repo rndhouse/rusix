@@ -2,9 +2,9 @@
 //! The optional Rust authoring model lives in model.rs; this file defines accepted options and defaults.
 
 // Public documentation mirrors pinned nixpkgs (MIT).
-use rusnix_ir::interop::raw::{NixFunctionExt, NixpkgsExt};
-use rusnix_ir::{
-    self as rusnix,
+use rusix_ir::interop::raw::{NixFunctionExt, NixpkgsExt};
+use rusix_ir::{
+    self as rusix,
     interop::{Nixpkgs, raw::NixValue},
     nix_record,
     nixos::{NixosModule, OptionDecl, OptionType},
@@ -12,12 +12,12 @@ use rusnix_ir::{
 
 /// Defines PostgreSQL's accepted NixOS options as a nested declaration tree.
 /// These fields describe types and defaults; configuration contributions supply their values.
-#[rusnix::config]
+#[rusix::config]
 mod declarations {
     use super::OptionDecl;
 
     // Passed to NixosModule::declare, this tree becomes options rather than config.
-    #[rusnix(root)]
+    #[rusix(root)]
     pub(super) struct Root {
         // Places the declarations under the standard NixOS services namespace.
         pub(super) services: Services,
@@ -35,7 +35,7 @@ mod declarations {
         // Declares the switch that gates the generated service implementation.
         pub(super) enable: OptionDecl,
         // Selects JIT support while retaining the upstream acronym spelling.
-        #[rusnix(rename = "enableJIT")]
+        #[rusix(rename = "enableJIT")]
         pub(super) enable_jit: OptionDecl,
         // Uses the real package validator and mkPackageOption's package-set default.
         pub(super) package: OptionDecl,
@@ -56,7 +56,7 @@ mod declarations {
         // A list of role submodules; ownership relationships are checked by the implementation.
         pub(super) ensure_users: OptionDecl,
         // Controls the default TCP listening setting, preserving the legacy option name.
-        #[rusnix(rename = "enableTCPIP")]
+        #[rusix(rename = "enableTCPIP")]
         pub(super) enable_tcpip: OptionDecl,
         // Accepts a package-set callback; NixOS also coerces lists of extension paths to callbacks.
         pub(super) extra_plugins: OptionDecl,
@@ -73,7 +73,7 @@ mod declarations {
         // A required role name; omitting it remains a NixOS evaluation error.
         pub(super) name: OptionDecl,
         // Requests ownership of a same-named ensured database; lowering checks that it exists.
-        #[rusnix(rename = "ensureDBOwnership")]
+        #[rusix(rename = "ensureDBOwnership")]
         pub(super) ensure_db_ownership: OptionDecl,
         // A nested submodule whose omitted clauses each default to null.
         pub(super) ensure_clauses: OptionDecl,
@@ -98,13 +98,13 @@ mod declarations {
     }
 
     // Only these settings have explicit declarations; freeformType validates all other setting values.
-    // PostgreSQL's literal snake_case names override Rusnix's default lowerCamelCase mapping.
+    // PostgreSQL's literal snake_case names override Rusix's default lowerCamelCase mapping.
     pub(super) struct Settings {
         // Accepts null, text or a string list coerced to comma-separated library names.
-        #[rusnix(rename = "shared_preload_libraries")]
+        #[rusix(rename = "shared_preload_libraries")]
         pub(super) shared_preload_libraries: OptionDecl,
         // Supplies the format prefix used for PostgreSQL log messages.
-        #[rusnix(rename = "log_line_prefix")]
+        #[rusix(rename = "log_line_prefix")]
         pub(super) log_line_prefix: OptionDecl,
         // Uses NixOS's actual port validator, with a schema default of 5432.
         pub(super) port: OptionDecl,
