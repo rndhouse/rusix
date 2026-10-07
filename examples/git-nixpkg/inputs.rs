@@ -1,4 +1,5 @@
 //! External dependencies stay opaque; the caller supplies the normal nixpkgs scope.
+use rusnix_ir::interop::raw::NixpkgsExt;
 use rusnix_ir::{
     self as rusnix, IntoRusnixValue, RusnixValue,
     interop::{NixPath, Nixpkgs, Package, raw::NixValue},

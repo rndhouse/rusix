@@ -484,17 +484,19 @@ fn expand_from(mut module: ItemMod, source: Source) -> syn::Result<TokenStream> 
                     },));
                 }
                 leaf => {
-                    let (result, conversion) = match leaf {
-                        Leaf::Scalar => (quote!(::rusnix_ir::Expr<#ty>), quote!(into_expr)),
-                        Leaf::Expression => (quote!(#ty), quote!(into_value)),
-                        _ => (
-                            quote!(::rusnix_ir::interop::raw::NixValue),
-                            quote!(into_value),
-                        ),
+                    let result = match leaf {
+                        Leaf::Scalar => quote!(::rusnix_ir::Expr<#ty>),
+                        Leaf::Expression => quote!(#ty),
+                        _ => quote!(::rusnix_ir::interop::raw::NixValue),
                     };
                     let selection = match source {
+                        Source::Options if matches!(leaf, Leaf::Scalar) => quote!(
+                            ::rusnix_ir::nixos::OptionRef::<#ty>::from_segments(path).into_expr()
+                        ),
                         Source::Options => quote!(
-                            ::rusnix_ir::nixos::OptionRef::<#ty>::from_segments(path).#conversion()
+                            ::rusnix_ir::interop::raw::AsNixValue::as_value(
+                                &::rusnix_ir::nixos::OptionRef::<#ty>::from_segments(path)
+                            )
                         ),
                         Source::Arguments => {
                             let convert =
@@ -525,12 +527,17 @@ fn expand_from(mut module: ItemMod, source: Source) -> syn::Result<TokenStream> 
 
         let as_value = view.value.then(|| {
             let selection = match source {
-                Source::Options => quote!(
-                    ::rusnix_ir::nixos::OptionRef::<::rusnix_ir::interop::raw::NixValue>::from_segments(
-                        self.__rusnix_path.clone(),
-                    )
-                    .into_value()
-                ),
+                Source::Options => {
+                    quote!(
+                                ::rusnix_ir::interop::raw::AsNixValue::as_value(
+                                    &::rusnix_ir::nixos::OptionRef::<
+                                        ::rusnix_ir::interop::raw::NixValue,
+                                    >::from_segments(
+                                        self.__rusnix_path.clone(),
+                                    )
+                                )
+                            )
+                }
                 Source::Arguments => quote!({
                     if self.__rusnix_path.is_empty() {
                         self.__rusnix_source.clone()

@@ -1,4 +1,5 @@
 //! Interpolation is authoring sugar: native Nix coercion, contexts and laziness.
+use rusnix_ir::interop::raw::{AsNixValue, NixFunctionExt};
 use rusnix_ir::{
     Config, Expr, IntoConfig,
     interop::{InputRef, Nixpkgs, raw::NixValue},

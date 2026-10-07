@@ -1,6 +1,9 @@
 //! Derive semantics exercised through real lowering and NixOS merges.
+use rusnix_ir::backend::ReferencedExpression;
+use rusnix_ir::interop::raw::NixFunctionExt;
 use rusnix_ir::{
-    Config, Expr, IntoConfig, IntoRusnixValue, RusnixValue, ValueKind,
+    Config, Expr, IntoConfig, IntoRusnixValue, RusnixValue,
+    backend::ValueKind,
     interop::{InputRef, ModuleRef, NixFunction, Nixpkgs, OverlayRef, PackageRef, raw::NixValue},
     nixos::{DefinitionPriority, NixosModule, OptionRef},
 };

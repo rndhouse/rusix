@@ -16,6 +16,7 @@ function, list, record and scalar interfaces through lazy bindings and compositi
 The OpenSSL, curl, Git and MariaDB examples use these interfaces; dynamic interop
 uses `interop::raw::NixValue`. Normal authors can import
 `rusnix_ir::prelude::*`; raw representation access requires a separate import.
+Compiler IR types and inspection hooks live in `rusnix_ir::backend`.
 
 ```text
 User-defined Rust domain model
@@ -808,7 +809,7 @@ overlay, including the ordinary downstream `curlpp` dependency, and verify
 replace package definitions; this example replaces overlay/customization code.
 
 `rusnix_ir::interop` owns distinct PackageRef/ModuleRef/OverlayRef/NixFunction
-handles, InputRef, and an explicit NixValue escape hatch. A reference carries its
+handles and InputRef. The explicit NixValue escape hatch lives in `interop::raw`. A reference carries its
 source identity, structured attribute segments, and Rust lookup origin. It
 lowers to AST imports, escaped getAttr operations, and function applications.
 Nix owns existence, object schemas, overlay semantics, and actual package type
@@ -851,10 +852,12 @@ Primitive values, Expr leaves and opaque handles support explicit `.into()`;
 boundary conversion, not a general serialization framework or Option derive.
 
 ```rust
+use rusnix_ir::interop::{Nixpkgs, raw::{NixFunctionExt, NixValue}};
+
 let pkgs = Nixpkgs::new();
 let args = NixValue::record([
     ("name", "example.conf".into()),
-    ("text", rusnix_ir::nix_text!("workers = {workers}\n", workers = 4)),
+    ("text", rusnix_ir::nix_text!("workers = {workers}\n", workers = 4).into()),
     ("executable", false.into()),
     ("passthru", rusnix_ir::nix_record! {
         "package": pkgs.get("hello"),
@@ -927,8 +930,8 @@ changing the reference-only `NixFunction` representation. Only a
 `PackageFunction` can be passed to `call_package`; generic functions and
 unmarked `NixValue` expressions fail at Rust compile time.
 
-`PackageFunction::as_value()` and `From<PackageFunction<R>> for NixValue` remain
-escape hatches for dynamic inspection such as `functionArgs`. Ordinary calls,
+`raw::NixRepresentation::as_expression` and explicit
+`From<PackageFunction<R>> for raw::NixValue` conversions provide escape hatches for dynamic inspection such as `functionArgs`. Ordinary calls,
 records and bindings accept the typed factory directly. The existing
 `ConfigValue` and `IntoRusnixValue` conversions also accept package functions in
 `Config::set` and derived configuration fields. The wrapper and `call_package`
@@ -1292,7 +1295,7 @@ The opaque boundary also supports scoped `NixValue::function` callbacks, lazy
 `if_else` choices, equality and context-preserving text conversion. Existing Nix
 functions still own collection traversal and schemas. Callback parameters cannot
 escape their scope; generated binder names are deterministic and capture-safe.
-`OptionRef<T>::into_value()` explicitly passes a finite known option dependency,
+`OptionRef<T>` with an explicit `raw::AsNixValue` import passes a finite known option dependency,
 including collection values, to this boundary without reading it in Rust.
 `Nixpkgs::from_module()` selects the NixOS-supplied package set, preserving its
 configuration and overlays; these references require NixosModule lowering.

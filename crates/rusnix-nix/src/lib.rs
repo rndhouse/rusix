@@ -34,7 +34,7 @@ use ast::{BinaryOp, Builtin, NixExpr, NixKind};
 pub use diagnostic::{Diagnostic, DiagnosticKind, DiagnosticOrigin, OriginRole, Provenance};
 pub use isolated::{Evaluation, NixSession};
 pub use render::{Generated, RenderOptions, SourceSpan, render, render_with_options};
-use rusnix_ir::{Config, Node, ValueKind};
+use rusnix_ir::{Config, backend::Node, backend::ValueKind};
 use std::{cell::Cell, rc::Rc};
 
 /// Generate Nix source for a group of settings described by [`Config`].
@@ -125,7 +125,7 @@ fn scoped_reference(node: &Node, packages_only: bool) -> Option<&Node> {
         ValueKind::Reference(reference)
             if matches!(
                 reference.source,
-                rusnix_ir::interop::Source::NixosPackages { .. }
+                rusnix_ir::backend::Source::NixosPackages { .. }
             ) =>
         {
             Some(node)

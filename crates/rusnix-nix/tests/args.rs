@@ -1,7 +1,9 @@
 //! Argument views share existing selections, typed expressions and lazy native functions.
+use rusnix_ir::interop::raw::NixFunctionExt;
 use rusnix_ir::interop::raw::NixRepresentation;
 use rusnix_ir::{
-    self as rusnix, Config, Expr, ValueKind,
+    self as rusnix, Config, Expr,
+    backend::ValueKind,
     interop::{InputRef, Nixpkgs, raw::NixValue},
 };
 use rusnix_nix::{Generated, NixSession, Provenance, compile};

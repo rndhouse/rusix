@@ -1,7 +1,8 @@
 //! Exact build/host equality uses supplied Nix values without platform-schema knowledge.
 use rusnix_ir::interop::raw::NixRepresentation;
 use rusnix_ir::{
-    self as rusnix, Config, Expr, ValueKind,
+    self as rusnix, Config, Expr,
+    backend::ValueKind,
     interop::{Nixpkgs, raw::NixValue},
     package::build_host_equal,
 };

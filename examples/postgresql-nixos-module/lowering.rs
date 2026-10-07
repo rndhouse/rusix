@@ -4,6 +4,7 @@ use super::{
     model::{Clause, Database, Postgresql, Role, RoleClauses},
     options,
 };
+use rusnix_ir::interop::raw::{NixFunctionExt, NixpkgsExt};
 use rusnix_ir::{
     self as rusnix, Config, Expr, IntoConfig, IntoRusnixValue,
     interop::{Nixpkgs, PackageRef, raw::NixValue},

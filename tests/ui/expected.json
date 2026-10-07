@@ -735,5 +735,75 @@
     "reason_tokens": [
       "NixValue"
     ]
+  },
+  {
+    "file": "prelude-node-lowering.rs",
+    "code": "E0599",
+    "count": 1,
+    "source": "into_node",
+    "reason_tokens": [
+      "into_node",
+      "Expr"
+    ]
+  },
+  {
+    "file": "prelude-reference-inspection.rs",
+    "code": "E0599",
+    "count": 1,
+    "source": "reference()",
+    "reason_tokens": [
+      "reference",
+      "PackageRef"
+    ]
+  },
+  {
+    "file": "prelude-dynamic-lookup.rs",
+    "code": "E0599",
+    "count": 1,
+    "source": ".value(\"openssl\")",
+    "reason_tokens": [
+      "value",
+      "Nixpkgs"
+    ]
+  },
+  {
+    "file": "prelude-untyped-call.rs",
+    "code": "E0599",
+    "count": 1,
+    "source": ".call(true)",
+    "reason_tokens": [
+      "call",
+      "NixFunction"
+    ]
+  },
+  {
+    "file": "prelude-handle-erasure.rs",
+    "code": "E0599",
+    "count": 1,
+    "source": "as_value()",
+    "reason_tokens": [
+      "as_value",
+      "PackageRef"
+    ]
+  },
+  {
+    "file": "backend-root-private.rs",
+    "code": "E0603",
+    "count": 1,
+    "source": "use rusnix_ir::Origin",
+    "reason_tokens": [
+      "Origin",
+      "private"
+    ]
+  },
+  {
+    "file": "prelude-option-erasure.rs",
+    "code": "E0599",
+    "count": 1,
+    "source": "as_value()",
+    "reason_tokens": [
+      "as_value",
+      "OptionRef"
+    ]
   }
 ]

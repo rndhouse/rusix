@@ -1,6 +1,9 @@
 //! Inline module sugar uses the same traits, IR, and evaluator as explicit derives.
+use rusnix_ir::backend::ReferencedExpression;
+use rusnix_ir::interop::raw::NixFunctionExt;
 use rusnix_ir::{
-    self as rusnix, Expr, IntoConfig, IntoRusnixValue, ValueKind,
+    self as rusnix, Expr, IntoConfig, IntoRusnixValue,
+    backend::ValueKind,
     interop::{InputRef, Nixpkgs},
     nixos::{DefinitionPriority, NixosModule},
 };

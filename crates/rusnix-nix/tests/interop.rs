@@ -1,3 +1,5 @@
+use rusnix_ir::backend::ReferencedExpression;
+use rusnix_ir::interop::raw::{InputRefExt, NixFunctionExt};
 use rusnix_ir::{
     Config, IntoConfig,
     interop::{InputRef, Nixpkgs},
@@ -15,6 +17,7 @@ mod support;
 
 mod config {
     use super::support::OpenSsh;
+    use rusnix_ir::interop::raw::NixFunctionExt;
     use rusnix_ir::{Config, IntoConfig, interop::Nixpkgs, nixos::NixosModule};
 
     pub fn input() -> super::InputRef {
@@ -129,7 +132,8 @@ fn package_error(module: NixosModule, purpose: &str) -> Box<Diagnostic> {
         .unwrap_err();
     assert_eq!(error.provenance, Provenance::ErrorContext, "{error:?}");
     let origin = error.primary.as_ref().unwrap();
-    let rusnix_ir::ValueKind::List(packages) = &module.modules[0].config.assignments[0].value.kind
+    let rusnix_ir::backend::ValueKind::List(packages) =
+        &module.modules[0].config.assignments[0].value.kind
     else {
         panic!("package IR list");
     };

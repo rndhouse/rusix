@@ -1,4 +1,5 @@
 //! Convert user-defined Rust data into configuration fields and Nix values.
+use crate::interop::raw::AsNixValue;
 use crate::{Assignment, Config, ConfigValue, Node, Origin, ValidationError, ValueKind};
 
 /// Convert a Rust value into data Rusnix can use inside a configuration tree.

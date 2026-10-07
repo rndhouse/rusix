@@ -1,6 +1,9 @@
 //! Structured opaque arguments use real pinned functions; no outputs are built.
+use rusnix_ir::backend::ReferencedExpression;
+use rusnix_ir::interop::raw::{AsNixValue, InputRefExt, NixFunctionExt};
 use rusnix_ir::{
-    Config, Expr, IntoConfig, IntoRusnixValue, ValueKind,
+    Config, Expr, IntoConfig, IntoRusnixValue,
+    backend::ValueKind,
     interop::{InputRef, Nixpkgs, raw::NixValue},
     nixos::{NixosModule, OptionRef},
 };

@@ -1,5 +1,6 @@
 //! Typed authoring uses the same IR, lazy evaluator and diagnostic boundaries.
 use rusnix_ir::interop::raw::NixRepresentation;
+use rusnix_ir::interop::raw::{AsNixValue, NixFunctionExt, NixpkgsExt};
 use rusnix_ir::{
     self as rusnix, Config, Expr, IntoRusnixValue,
     interop::{

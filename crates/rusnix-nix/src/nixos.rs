@@ -15,7 +15,11 @@ use crate::{
     render::quote,
     render_with_options,
 };
-use rusnix_ir::{ConfigValue, Origin, nixos::NixosModule};
+use rusnix_ir::backend::ReferencedExpression;
+use rusnix_ir::{
+    backend::{IntoNode, Origin},
+    nixos::NixosModule,
+};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{fs, path::Path, sync::OnceLock};
@@ -336,7 +340,7 @@ fn lower_module(module: &NixosModule) -> Result<(NixExpr, NixosArtifact), Box<Di
     };
 
     for (module_ref, origin) in &module.opaque_imports {
-        use rusnix_ir::interop::Source;
+        use rusnix_ir::backend::Source;
 
         let (path, file) = match &module_ref.reference().source {
             Source::ModuleFile { path } => (
@@ -533,7 +537,7 @@ impl NixSession {
 
             let source = if interop {
                 let pkgs = crate::render(&crate::interop::source(
-                    &rusnix_ir::interop::Source::Packages { overlays: vec![] },
+                    &rusnix_ir::backend::Source::Packages { overlays: vec![] },
                 ))
                 .source;
                 format!(

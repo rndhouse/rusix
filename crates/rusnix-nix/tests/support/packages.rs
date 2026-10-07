@@ -1,4 +1,5 @@
 //! Shared evaluation harness; comparisons keep exact recipes and original diagnostics.
+use rusnix_ir::interop::raw::{NixFunctionExt, NixpkgsExt};
 use rusnix_ir::{
     Config,
     interop::{InputRef, Nixpkgs, raw::NixValue},

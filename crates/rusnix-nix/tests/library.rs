@@ -1,5 +1,6 @@
 //! Generic library helpers preserve the caller's functions and deferred value semantics.
 use rusnix_ir::interop::raw::NixRepresentation;
+use rusnix_ir::interop::raw::{NixFunctionExt, NixpkgsExt};
 use rusnix_ir::{
     self as rusnix, Config, Expr,
     interop::{InputRef, NixLibrary, NixList, Nixpkgs, Package, raw::NixValue},

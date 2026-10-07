@@ -1,4 +1,6 @@
 //! Compare the pinned curl factory's exact recipes, public interface and recursive tests.
+use rusnix_ir::interop::raw::{NixFunctionExt, NixpkgsExt};
+
 #[path = "../../../examples/curl-nixpkg/inputs.rs"]
 mod inputs;
 

@@ -1,5 +1,6 @@
 //! Demonstrates typed Rust models alongside existing Nix packages, modules and functions.
 //! Opaque handles preserve Nix objects without package-specific Rust bindings.
+use rusnix_ir::interop::raw::NixFunctionExt;
 use rusnix_ir::{
     self as rusnix, Config, IntoConfig, IntoRusnixValue, RusnixValue,
     interop::{InputRef, ModuleRef, NixFunction, Nixpkgs, OverlayRef, PackageRef, raw::NixValue},

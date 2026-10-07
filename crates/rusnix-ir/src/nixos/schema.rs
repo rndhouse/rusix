@@ -3,6 +3,7 @@
 //! A declaration supplies a field’s type, default and documentation; it does not
 //! assign its current configuration value. NixOS’s `lib.mkOption` and `lib.types`
 //! perform the actual checking and merging. Rust only describes those declarations.
+use crate::interop::raw::{NixFunctionExt, NixpkgsExt};
 use crate::{
     IntoRusnixValue, RusnixValue, ValidationError,
     interop::{Nixpkgs, raw::NixValue},

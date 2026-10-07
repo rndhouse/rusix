@@ -1,4 +1,4 @@
-use rusnix_ir::{Config, Origin, ValueKind};
+use rusnix_ir::{Config, backend::Origin, backend::ValueKind};
 use rusnix_nix::{
     Diagnostic, DiagnosticKind, Generated, NixSession, Provenance, SourceSpan, compile,
 };

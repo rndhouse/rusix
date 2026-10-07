@@ -1,4 +1,6 @@
 //! Compares complete recipes and deferred package behavior without fetching or building.
+use rusnix_ir::interop::raw::{NixFunctionExt, NixpkgsExt};
+
 #[path = "../../../examples/git-nixpkg/inputs.rs"]
 pub mod inputs;
 

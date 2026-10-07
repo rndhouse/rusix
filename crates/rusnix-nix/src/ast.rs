@@ -5,7 +5,7 @@
 //! Normal configuration authors use `rusnix-ir`; they do not construct Nix syntax.
 //! These constructors do not validate arbitrary trees. Invalid generated syntax
 //! is a compiler failure when evaluated, not an error in user configuration.
-use rusnix_ir::Origin;
+use rusnix_ir::backend::Origin;
 
 /// One Nix source expression, optionally linked to a Rust operation.
 /// Backend authors combine these expressions and render them into Nix text.

@@ -9,12 +9,16 @@
 //! map. [`PackageRef`] and other handles distinguish common uses of those values
 //! without inspecting their contents in Rust. Nix checks lookups and function
 //! arguments; Rusnix records Rust locations to help explain failures.
-use crate::{ConfigValue, Node, Origin, ValidationError, ValueKind, sealed};
-use std::path::{Component, PathBuf};
+use crate::{
+    ConfigValue, ValidationError,
+    backend::{IntoNode, Node, Origin, Reference, Source},
+    sealed,
+};
+use std::path::PathBuf;
 
 pub mod raw;
 
-use raw::{AttrPath, NixRepresentation, NixValue};
+use raw::{AttrPath, NixFunctionExt, NixRepresentation, NixValue};
 
 mod library;
 
@@ -35,134 +39,23 @@ pub use typed::{
     NixPath, Overridable, Package, Stdenv,
 };
 
-/// Where Nix should obtain a referenced package, function or other value.
-/// This is inspection data for backend authors. Normal configuration code
-/// chooses a source through [`Nixpkgs`] or [`InputRef`] instead.
-#[derive(Clone, Debug)]
-pub enum Source {
-    /// The Nix language's own builtin namespace, independent of nixpkgs or caller libraries.
-    Builtins,
-    /// The pinned standalone package set, with Nix applying overlays in order.
-    Packages {
-        /// Deferred overlay functions, ordered as supplied by the author.
-        overlays: Vec<Reference>,
-    },
-    /// The pinned nixpkgs library, independent of package-set overlays.
-    Library,
-    /// A file or directory in the pinned source tree, without importing or fetching it.
-    PinnedPath {
-        /// Relative path under nixpkgs; parent traversal is rejected.
-        path: String,
-    },
-    /// The NixOS module's supplied `pkgs`, preserving its configuration and overlays.
-    NixosPackages {
-        /// Additional overlays applied to the supplied package set in order.
-        overlays: Vec<Reference>,
-    },
-    /// An existing NixOS module file in the pinned nixpkgs tree.
-    ModuleFile {
-        /// Relative path under `nixos/modules`, without parent traversal.
-        path: String,
-    },
-    /// A local Nix expression supplying external objects; no fetching is implied.
-    Input {
-        /// Human-readable identity used in provenance and diagnostics.
-        name: String,
-        /// File imported by Nix; relative paths use Rust's working directory during lowering.
-        file: PathBuf,
-    },
-}
-
-/// A description of where Nix should look up an existing value.
-/// It contains the source to load, the field names to select and the Rust
-/// location to report on failure. It does not contain the evaluated Nix value.
-/// Normal authoring uses category handles such as [`PackageRef`]; this metadata
-/// is public for backend implementation and inspection.
-#[derive(Clone, Debug)]
-pub struct Reference {
-    /// Package set, utility library or local file from which Nix obtains the value.
-    pub source: Source,
-    /// Field names to select from that source, or `None` to reference the source itself.
-    pub path: Option<AttrPath>,
-    /// Rust lookup operation to report if Nix cannot resolve the object.
-    pub origin: Origin,
-}
-
-impl Reference {
-    /// Check path/input invariants without opening files or validating Nix object types.
-    pub fn validate(&self) -> Result<(), ValidationError> {
-        if let Some(path) = &self.path {
-            path.validate(&self.origin)?;
-        }
-
-        match &self.source {
-            Source::Packages { overlays } | Source::NixosPackages { overlays } => {
-                for overlay in overlays {
-                    overlay.validate()?;
-                }
-            }
-            Source::ModuleFile { path } | Source::PinnedPath { path } => {
-                if path.is_empty()
-                    || path.contains('\0')
-                    || PathBuf::from(path)
-                        .components()
-                        .any(|c| !matches!(c, Component::Normal(_)))
-                {
-                    return Err(ValidationError {
-                        origin: self.origin.clone(),
-                        message: if matches!(self.source, Source::PinnedPath { .. }) {
-                            "source paths must be relative, nonempty paths without parent traversal"
-                        } else {
-                            "module paths must be relative, nonempty paths without parent traversal"
-                        }
-                        .into(),
-                    });
-                }
-            }
-            Source::Input { name, file } => {
-                if name.is_empty()
-                    || name.contains('\0')
-                    || file
-                        .to_str()
-                        .is_none_or(|s| s.is_empty() || s.contains('\0'))
-                {
-                    return Err(ValidationError {
-                        origin: self.origin.clone(),
-                        message: "input identities and paths must be nonempty, UTF-8 and NUL-free"
-                            .into(),
-                    });
-                }
-            }
-            Source::Library | Source::Builtins => {}
-        }
-
-        Ok(())
-    }
-
-    fn node(&self) -> Node {
-        Node {
-            origin: self.origin.clone(),
-            kind: ValueKind::Reference(self.clone()),
-        }
-    }
-}
-
 macro_rules! handle {
     ($name:ident, $docs:literal) => {
         #[doc = $docs]
         #[derive(Clone, Debug)]
         pub struct $name(pub(crate) Reference);
 
-        impl $name {
-            /// Inspect where Nix will look up this object and which Rust location created the reference.
-            pub fn reference(&self) -> &Reference {
+        impl crate::backend::ReferencedExpression for $name {
+            fn reference(&self) -> &Reference {
                 &self.0
             }
+        }
 
+        impl raw::AsNixValue for $name {
             /// Represent this object as a [`NixValue`] for use in records or function calls.
             /// The lookup and Rust source location are preserved. Rust neither evaluates
             /// the object nor converts it to a string.
-            pub fn as_value(&self) -> NixValue {
+            fn as_value(&self) -> NixValue {
                 NixValue(self.0.node())
             }
         }
@@ -195,7 +88,8 @@ handle!(
     "A reference to a Nix function that Rust can describe calls to.
 
 Use it to reuse existing nixpkgs helpers or functions from a local Nix file.
-[`Self::call`] passes one argument; [`Self::apply`] passes arguments one at a
+[`raw::NixFunctionExt::call`] passes one argument;
+[`raw::NixFunctionExt::apply`] passes arguments one at a
 time, as Nix functions commonly require. Neither executes the function in Rust.
 Nix checks the arguments, and the result is a [`NixValue`]; Rusnix does not
 infer that a function returns a package or module."
@@ -286,7 +180,9 @@ impl<R: NixExpression> crate::IntoRusnixValue for PackageFunction<R> {
 
 impl<R: NixExpression> sealed::Sealed for PackageFunction<R> {}
 
-impl<R: NixExpression> ConfigValue for PackageFunction<R> {
+impl<R: NixExpression> ConfigValue for PackageFunction<R> {}
+
+impl<R: NixExpression> IntoNode for PackageFunction<R> {
     fn into_node(self, _: Origin) -> Node {
         self.function.0
     }
@@ -310,48 +206,11 @@ package internals or verify the overlay’s function arguments."
 
 impl sealed::Sealed for PackageRef {}
 
-impl ConfigValue for PackageRef {
+impl ConfigValue for PackageRef {}
+
+impl IntoNode for PackageRef {
     fn into_node(self, _: Origin) -> Node {
         self.0.node()
-    }
-}
-
-impl NixFunction {
-    /// Declare the expected result interface of an external callable reference.
-    /// This does not inspect its Nix implementation or evaluate its result.
-    pub fn returning<R: NixExpression>(&self) -> NixCallable<R> {
-        NixCallable::from_expression(self.as_value())
-    }
-
-    /// State both parameter and result expectations for an external callable.
-    /// This does not inspect or eagerly validate the external Nix function.
-    #[track_caller]
-    pub fn signature<A: NixExpression, R: NixExpression>(&self) -> NixCallable<R, A> {
-        NixCallable::from_expression(self.as_value())
-    }
-
-    /// Describe a call to this Nix function with one argument.
-    /// Nix executes the call later and checks the argument. If the result is another
-    /// function, continue with [`NixValue::call`] or use [`Self::apply`].
-    #[track_caller]
-    pub fn call(&self, argument: impl ConfigValue) -> NixValue {
-        self.as_value().call(argument)
-    }
-
-    /// Describe successive calls to this Nix function, one for each argument.
-    /// For example, `write_text.apply([name, text])` represents `writeText name text`.
-    /// Arguments can mix Rust literals, records, package references and expressions.
-    /// Nix executes the calls later; Rusnix does not infer the result’s category.
-    ///
-    /// ```
-    /// use rusnix_ir::interop::Nixpkgs;
-    /// let file = Nixpkgs::new().pkgs_function("writeText")
-    ///     .apply(["example.conf".into(), "workers=4\n".into()]);
-    /// // Nix will describe a generated file; constructing this call does not build it.
-    /// ```
-    #[track_caller]
-    pub fn apply(&self, arguments: impl IntoIterator<Item = NixValue>) -> NixValue {
-        self.as_value().apply(arguments)
     }
 }
 
@@ -590,50 +449,6 @@ impl Nixpkgs {
         ))
     }
 
-    /// Refer to any named value in the package set, without claiming it is a package.
-    /// Use this for metadata, records or other objects. Dots select nested fields;
-    /// Rust constructs the lookup and Nix evaluates it later.
-    #[track_caller]
-    pub fn value(&self, path: &str) -> NixValue {
-        NixValue(
-            Reference {
-                source: self.package_source(),
-                path: Some(AttrPath::dotted(path)),
-                origin: Origin::caller(format!("nixpkgs value lookup {path}")),
-            }
-            .node(),
-        )
-    }
-
-    /// Pass the entire package set as a Nix value, for helpers that expect `pkgs`.
-    /// Rust does not inspect the packages or the final NixOS configuration.
-    #[track_caller]
-    pub fn as_value(&self) -> NixValue {
-        NixValue(
-            Reference {
-                source: self.package_source(),
-                path: None,
-                origin: Origin::caller("nixpkgs package set"),
-            }
-            .node(),
-        )
-    }
-
-    /// Refer to a named value in nixpkgs’ `lib` utility library.
-    /// This includes NixOS type objects such as `types.port`; they describe how
-    /// NixOS validates and merges option values. Rust does not evaluate the lookup.
-    #[track_caller]
-    pub fn lib_value(&self, path: &str) -> NixValue {
-        NixValue(
-            Reference {
-                source: Source::Library,
-                path: Some(AttrPath::dotted(path)),
-                origin: Origin::caller(format!("nixpkgs lib value lookup {path}")),
-            }
-            .node(),
-        )
-    }
-
     /// Instantiate a package function using nixpkgs' dependency scope.
     /// This represents `pkgs.callPackage packageFunction overrides`: the real
     /// pinned nixpkgs helper supplies matching dependencies, and the caller's
@@ -749,12 +564,5 @@ impl InputRef {
     #[track_caller]
     pub fn overlay(&self, path: &str) -> OverlayRef {
         OverlayRef(self.lookup(path, "overlay"))
-    }
-
-    /// Refer to any value returned by this file, without assuming its category.
-    /// Dots select nested fields. The resulting expression is evaluated by Nix later.
-    #[track_caller]
-    pub fn value(&self, path: &str) -> NixValue {
-        NixValue(self.lookup(path, "value").node())
     }
 }

@@ -1,7 +1,17 @@
 //! Common interfaces for typed package and configuration authoring.
 //!
 //! Dynamic operations live in [`crate::interop::raw`]; IR construction lives in
-//! the compiler backend. Neither is included in this prelude.
+//! [`crate::backend`]. Neither is included in this prelude.
+//!
+//! ```
+//! use rusnix_ir::prelude::*;
+//!
+//! let format = NixCallable::from_function(|name: Expr<String>| {
+//!     nix_text!("name={name}", name = name)
+//! });
+//! let config = Config::new().set("message", format.call("openssl"));
+//! // Typed calls construct deferred Nix expressions; they do not evaluate them.
+//! ```
 pub use crate::interop::{
     FinalAttrs, IntoNixExpression, NixAttrs, NixCallable, NixExpression, NixLibrary, NixList,
     NixNullable, NixOverridable, NixPath, Nixpkgs, Overridable, Package, PackageFunction,

@@ -9,9 +9,11 @@
 //! the public options others can configure. [`OptionRef`] refers to an option’s
 //! value after all modules have been combined. Rust describes each of these;
 //! NixOS performs evaluation, type checking and merging later.
+use crate::backend::{IntoNode, ReferencedExpression};
 use crate::interop::raw::AttrPath;
+use crate::interop::raw::NixFunctionExt;
 use crate::interop::{ModuleRef, Nixpkgs, PackageRef, raw::NixValue};
-use crate::{Config, ConfigValue, Expr, IntoConfig, Node, Origin, ValueKind};
+use crate::{Config, Expr, IntoConfig, Node, Origin, ValueKind};
 use std::marker::PhantomData;
 
 mod schema;
@@ -115,7 +117,7 @@ impl NixValue {
 /// ```
 ///
 /// Supported typed expressions are `i64`, `bool` and `String`; use
-/// [`Self::into_value`] for other expected shapes. References require compilation
+/// [`crate::interop::raw::AsNixValue::as_value`] for other expected shapes. References require compilation
 /// as a NixOS module. Their Rust location is recorded when constructed.
 /// [`crate::options`] generates these references from a finite structural declaration.
 #[derive(Clone, Debug)]
@@ -150,22 +152,21 @@ impl<T> OptionRef<T> {
         }
     }
 
-    /// Represent the option lookup as a [`NixValue`] without a scalar type promise.
-    /// Use this for lists, maps, packages or other objects that will exist in Nix.
-    /// It does not return a concrete Rust collection or read the option value.
-    pub fn into_value(self) -> NixValue {
-        NixValue::from_node(Node {
-            origin: self.origin,
-            kind: ValueKind::OptionReference(self.path),
-        })
-    }
-
     /// Represent the option lookup as an [`Expr<T>`] with its original Rust location.
     /// The value still belongs to Nix evaluation. Only `Expr<bool>`, `Expr<i64>` and
     /// `Expr<String>` currently support configuration generation; use
-    /// [`Self::into_value`] for other expected shapes.
+    /// [`crate::interop::raw::AsNixValue::as_value`] for other expected shapes.
     pub fn into_expr(self) -> Expr<T> {
         Expr::new(ValueKind::OptionReference(self.path), self.origin)
+    }
+}
+
+impl<T> crate::interop::raw::AsNixValue for OptionRef<T> {
+    fn as_value(&self) -> NixValue {
+        NixValue::from_node(Node {
+            origin: self.origin.clone(),
+            kind: ValueKind::OptionReference(self.path.clone()),
+        })
     }
 }
 

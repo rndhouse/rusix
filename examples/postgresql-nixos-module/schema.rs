@@ -2,6 +2,7 @@
 //! These are declarations, not configured values: NixOS checks and merges definitions.
 //! The optional Rust-native authoring model lives in model.rs.
 //! Public documentation mirrors pinned nixpkgs (MIT).
+use rusnix_ir::interop::raw::{NixFunctionExt, NixpkgsExt};
 use rusnix_ir::{
     self as rusnix,
     interop::{Nixpkgs, raw::NixValue},

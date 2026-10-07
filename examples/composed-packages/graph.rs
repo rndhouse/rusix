@@ -1,5 +1,6 @@
 //! Explicit Rust-authored edges; all other dependencies stay in pinned nixpkgs.
 use rusnix_ir::interop::raw::NixRepresentation;
+use rusnix_ir::interop::raw::NixpkgsExt;
 
 #[path = "../openssl-nixpkg/mod.rs"]
 pub mod openssl;

@@ -3,7 +3,7 @@
 //! original Nix output. Consumers can inspect these fields without parsing Nix
 //! error text themselves.
 use crate::{Generated, SourceSpan};
-use rusnix_ir::Origin;
+use rusnix_ir::backend::Origin;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 

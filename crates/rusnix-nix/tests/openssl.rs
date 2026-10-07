@@ -1,3 +1,5 @@
+use rusnix_ir::interop::raw::NixpkgsExt;
+
 #[path = "../../../examples/openssl-nixpkg/inputs.rs"]
 mod inputs;
 

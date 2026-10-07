@@ -379,7 +379,7 @@ fn active_deferred_definition_keeps_the_failing_operation_origin() {
 #[test]
 fn standard_assertions_follow_final_options_with_verbatim_deferred_messages() {
     use rusnix_ir::{
-        ValueKind,
+        backend::ValueKind,
         interop::{InputRef, raw::NixValue},
         nix_text,
         nixos::{self, OptionRef},

@@ -1,5 +1,6 @@
 //! Native package function interfaces reuse scoped callbacks and the isolated evaluator.
 use rusnix_ir::interop::raw::NixRepresentation;
+use rusnix_ir::interop::raw::{NixFunctionExt, NixpkgsExt};
 use rusnix_ir::{
     Config, Expr,
     interop::{Nixpkgs, PackageFunction, raw::NixValue},

@@ -1,4 +1,4 @@
-use rusnix_ir::{IntoConfig, ValueKind, nixos::NixosModule};
+use rusnix_ir::{IntoConfig, backend::ValueKind, nixos::NixosModule};
 use rusnix_nix::{
     Diagnostic, DiagnosticKind, Generated, NixSession, Provenance,
     nixos::{compile_module, evaluation_source},
@@ -324,7 +324,8 @@ fn checked_nixpkgs_is_staged_only_inside_disposable_session() {
 #[test]
 fn assertion_conditions_reject_invalid_ir_before_lowering() {
     use rusnix_ir::{
-        ConfigValue, Origin,
+        backend::IntoNode,
+        backend::Origin,
         interop::raw::NixValue,
         nixos::{NixosModule, OptionRef},
     };

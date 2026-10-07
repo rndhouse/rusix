@@ -43,7 +43,7 @@ callback. `as_attrs()` retains the subtree for shallow union without erasing it
 to `NixValue`. Root views still restrict whole-root access.
 
 External expressions enter typed code through the explicit
-`NixExpression::from_expression` expectation boundary. This does not prove their
+`raw::expect` or `raw::NixRepresentation::from_expression` expectation boundary. This does not prove their
 actual Nix types, package output names, ABI, or override capabilities. Nix checks
 those properties when demanded. Dynamic fields and unusual package behavior
 remain accessible through `as_expression`; original child provenance remains in
@@ -104,8 +104,8 @@ the four `inputs.rs` views as follows:
 These counts include root arguments and nested view fields. Remaining dynamic
 leaves primarily describe mixed metadata, test/package scopes and path-like values.
 
-Verification with these stronger interfaces passed 505 workspace tests and
-23 doctests. The UI harness checks 74 compile-fail fixtures, including seven new
+Verification with these stronger interfaces passed 507 workspace tests and
+23 doctests. The UI harness checks 83 compile-fail fixtures, including nine authoring-surface cases and seven new
 rejections for callable parameters, bypass attempts, library conditions, text
 coercion, nullable fallbacks, paths and external-view contracts. Nineteen typed
 evaluator tests cover bindings, record conversion, overrides, caller library
@@ -170,11 +170,11 @@ interface; explicit annotations include it as `NixCallable<R, A>`. Flexible Nix
 argument records retain the dynamic default. Code using a template or path at an
 explicit raw boundary converts there with `.into()` rather than erasing earlier.
 
-Final checks also passed `cargo fmt --all --check`, structural spacing over 177
+Final checks also passed `cargo fmt --all --check`, structural spacing over 190
 Rust files, all-target Clippy with warnings denied, strict rustdoc, the complete
 fixture workflow and all 15 examples. The PostgreSQL full suite and all 99 Git,
 curl, OpenSSL, MariaDB and composed-graph tests pass. Verification artifacts are
-retained under `target/typed-operations-*.log`. The nixpkgs pin remains
+retained under `target/surfaces-*.log` (and earlier `target/typed-operations-*.log`). The nixpkgs pin remains
 `8b27c1239e5c421a2bbc2c65d52e4a6fbf2ff296`; all Nix evaluations use fresh isolated
 local stores, with no package builds or network fetches.
 
@@ -200,3 +200,58 @@ at the boundary. `try_into_nix_value` remains an explicit escape hatch.
 
 This changes import paths and custom trait implementations, while retaining the
 same lazy expressions, Nix evaluation and diagnostic origins.
+
+## Compiler and adapter access
+
+The public surface has three entry points:
+
+| Audience | Module | Examples |
+| --- | --- | --- |
+| Package/configuration authors | `prelude`, `interop`, `nixos` | typed packages, factories, calls, lists, views, macros |
+| Adapters needing dynamic Nix values | `interop::raw` | `NixValue`, `NixRepresentation`, raw lookup/call traits |
+| Compiler/backend implementers | `backend` | nodes, origins, source/reference metadata, lowering/inspection traits |
+
+`raw` names a representation boundary; attaching an interface remains lazy.
+These operations stay supported when the typed surface cannot describe an external
+interface. Raw type names and extension traits are absent from the authoring
+prelude. Import them explicitly when writing dynamic adapters. Raw IR construction is public under `backend`
+because `rusnix-nix` is a separate crate; crate-only constructors stay restricted.
+Macro implementation hooks remain public where generated external code requires
+them and use hidden documentation rather than claiming to be private.
+
+The following import and implementation changes are intentional:
+
+| Previous interface | Current interface |
+| --- | --- |
+| `interop::{NixValue, AttrPath}` | `interop::raw::{NixValue, AttrPath}` |
+| Root `Origin`, `Node`, `ValueKind`, `Assignment` | `backend::{Origin, Node, ValueKind, Assignment}` |
+| `interop::{Source, Reference}` | `backend::{Source, Reference}` |
+| Implementing `NixExpression` | Implement `raw::NixRepresentation`, `Clone`, and `IntoRusnixValue` |
+| Node lowering through `ConfigValue` | Explicit `backend::IntoNode` import |
+| Handle/option erasure | Explicit `raw::AsNixValue` import |
+| Dynamic Nix function calls and signature expectations | Explicit `raw::NixFunctionExt` import |
+| Dynamic package-set/library lookup | Explicit `raw::NixpkgsExt` import |
+| Dynamic local-input lookup | Explicit `raw::InputRefExt` import |
+| Inspecting external lookup metadata | Explicit `backend::ReferencedExpression` import |
+
+`PackageRef`, `ModuleRef` and related handles still support ordinary typed
+placement/imports; `.as_value()` now requires the raw erasure trait. `OptionRef`
+keeps `.into_expr()`; its raw inherent `.into_value()` was replaced by the same
+`raw::AsNixValue` capability. Generated option/argument views call the explicit
+raw hooks internally while their declared typed accessors retain normal use.
+No old public root/interop aliases are retained: the typed replacements and
+explicit raw/backend imports are available, and all repository callers migrated.
+The compiler retains the same Nix operations and original child provenance.
+
+The authoring-surface checks cover a complete typed prelude workflow, an external
+custom symbolic interface, and compile-time rejection of accidental raw/backend
+operations. Package equivalence and diagnostic suites continue to test the actual
+Nix semantics behind both surfaces. These namespace changes introduce no new
+runtime wrappers, forcing, builders, fetchers, or schema reconstruction.
+
+Some dynamic interfaces still return an inferred `NixValue`. Its inherent
+operations remain callable without importing the type's name. The namespace
+separation makes this boundary visible and removes representation/extension
+methods from normal concrete handles unless their traits are imported. Future
+typed interfaces can continue reducing those dynamic results as their contracts
+become known; custom adapters remain supported.

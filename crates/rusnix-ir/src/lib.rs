@@ -13,8 +13,11 @@
 
 extern crate self as rusnix_ir;
 
-use serde::{Deserialize, Serialize};
-use std::{marker::PhantomData, panic::Location};
+use backend::{Assignment, IntoNode, Node, Origin, ValueKind};
+use std::marker::PhantomData;
+
+/// Semantic IR construction and inspection for compiler/backend implementations.
+pub mod backend;
 
 pub mod interop;
 
@@ -172,159 +175,6 @@ pub use rusnix_derive::symbolic_text as __symbolic_text;
 pub use rusnix_derive::{IntoConfig, IntoRusnixValue};
 pub use value::{IntoRusnixValue, RusnixValue};
 
-/// Where a Rust operation was written, and what it was doing.
-/// Rusnix includes this information in generated output so Nix evaluation errors
-/// can be linked back to Rust source. This source attribution is also called
-/// *provenance*.
-///
-/// IDs are deterministic for the same file, line, column and purpose, but can
-/// change after edits. Reusing an expression can produce several uses of one ID.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Origin {
-    /// Deterministic `rn-` followed by 16 lowercase hexadecimal digits, embedded
-    /// unchanged in generated comments, error contexts and source-map metadata.
-    pub id: String,
-    /// Rust source path as recorded by the caller; it may be relative to the build.
-    pub file: String,
-    /// One-based source line at which the operation was captured.
-    pub line: u32,
-    /// One-based source column recorded by Rust's caller tracking.
-    pub column: u32,
-    /// Operation or configuration path that gives this location semantic meaning.
-    pub purpose: String,
-}
-
-impl Origin {
-    /// Capture the calling Rust operation; tracked helpers forward their caller.
-    #[track_caller]
-    pub fn caller(purpose: impl Into<String>) -> Self {
-        let location = Location::caller();
-        Self::new(location.file(), location.line(), location.column(), purpose)
-    }
-
-    /// Create source attribution from an explicit Rust location and operation name.
-    /// The ID is derived from these inputs; it is not an identifier assigned by Nix.
-    pub fn new(file: &str, line: u32, column: u32, purpose: impl Into<String>) -> Self {
-        let purpose = purpose.into();
-        // Specified FNV-1a, rather than Rust's implementation-dependent DefaultHasher.
-        let key = format!("{file}\0{line}\0{column}\0{purpose}");
-        let hash = key.bytes().fold(0xcbf29ce484222325_u64, |h, b| {
-            (h ^ u64::from(b)).wrapping_mul(0x100000001b3)
-        });
-        Self {
-            id: format!("rn-{hash:016x}"),
-            file: file.into(),
-            line,
-            column,
-            purpose,
-        }
-    }
-}
-
-/// A description of one value or operation, with its Rust source location.
-/// Backend authors use these nodes to generate Nix; the collection of nodes is
-/// Rusnix’s *intermediate representation* (IR). It describes computation without
-/// performing it. Normal authoring uses [`Expr`], [`IntoRusnixValue`] or
-/// [`interop::raw::NixValue`] instead of constructing nodes.
-#[derive(Clone, Debug)]
-pub struct Node {
-    /// Rust operation that introduced this expression.
-    pub origin: Origin,
-    /// Deferred operation or literal; evaluating it is the backend's responsibility.
-    pub kind: ValueKind,
-}
-
-impl Node {
-    /// Check expression invariants without evaluating Nix or checking its actual types.
-    /// Rejects invalid strings, paths, literals and escaped callback parameters.
-    pub fn validate(&self) -> Result<(), ValidationError> {
-        validate_scoped(self, &[])
-    }
-}
-
-/// The value or operation described by a [`Node`].
-/// Variants distinguish literals, containers and computations Nix will perform
-/// later. This is an interface for backend implementation and inspection, not
-/// a way for Rust authors to obtain evaluated Nix values.
-#[derive(Clone, Debug)]
-pub enum ValueKind {
-    /// A concrete Rust boolean embedded as a literal.
-    Bool(bool),
-    /// A signed integer literal using Nix's 64-bit integer range.
-    Int(i64),
-    /// A floating literal; validation accepts finite normal values and zero.
-    Float(f64),
-    /// Nix's explicit null value.
-    Null,
-    /// Literal text, escaped by the backend rather than interpreted as Nix source.
-    String(String),
-    /// Ordered deferred elements; constructing the list does not demand its children.
-    List(Vec<Node>),
-    /// A structural record whose fields can become configuration paths.
-    AttrSet(Vec<(String, Node)>),
-    /// An interop record stays one value; structural authoring must not flatten
-    /// its literal keys into NixOS option paths.
-    OpaqueRecord(Vec<(String, Node)>),
-    /// An opaque ecosystem lookup; existence and internal type are checked by Nix.
-    Reference(interop::Reference),
-    /// One deferred application of a function to its argument.
-    Apply(Box<Node>, Box<Node>),
-    /// Native shallow attribute-set union; right-hand fields replace left-hand fields.
-    AttrMerge(Box<Node>, Box<Node>),
-    /// Native expression assertion; only a true condition permits demanding the result.
-    Assert(Box<Node>, Box<Node>),
-    /// A deferred lookup through literal attribute segments.
-    Select(Box<Node>, interop::raw::AttrPath),
-    /// Scoped callbacks at the opaque Nix boundary, not Rust-side evaluation.
-    Function {
-        /// Lexical identity shared with parameter references in this callback.
-        binding: u64,
-        /// Deferred callback result, possibly referring to the symbolic parameter.
-        body: Box<Node>,
-    },
-    /// A finite Nix argument-set callback, retaining native defaults and callPackage introspection.
-    FunctionAttrs {
-        /// Lexical identity of the named argument scope, including resolved defaults.
-        binding: u64,
-        /// Accepted Nix argument names; names without defaults are required.
-        arguments: Vec<String>,
-        /// Deferred defaults, which can refer to other resolved arguments.
-        defaults: Vec<(String, Node)>,
-        /// Deferred result, potentially a derivation from an existing builder.
-        body: Box<Node>,
-    },
-    /// A symbolic callback parameter; validation rejects uses outside its scope.
-    Parameter(u64),
-    /// A deferred condition, then branch and else branch; only one branch is demanded.
-    If(Box<Node>, Box<Node>, Box<Node>),
-    /// Equality checked by the backend using its native value semantics.
-    Equal(Box<Node>, Box<Node>),
-    /// A NixOS-scoped dependency, never a concrete Rust value.
-    OptionReference(interop::raw::AttrPath),
-    /// Deferred text coercion that retains Nix string dependency context.
-    ToText(Box<Node>),
-    /// Concrete text followed by a deferred string value.
-    StringPrefix {
-        /// Literal prefix, escaped as data during code generation.
-        prefix: String,
-        /// String expression whose dependency context survives concatenation.
-        value: Box<Node>,
-    },
-    /// Signed integer division, including evaluator-side division-by-zero failures.
-    Divide(Box<Node>, Box<Node>),
-    /// An inclusive range constraint checked when the expression is evaluated.
-    InRange {
-        /// Deferred integer to check.
-        value: Box<Node>,
-        /// Inclusive lower bound.
-        min: i64,
-        /// Inclusive upper bound.
-        max: i64,
-        /// Failure reason presented if the value falls outside the bounds.
-        message: String,
-    },
-}
-
 /// An expression that Nix will evaluate later, with an expected Rust result type.
 ///
 /// For example, [`Expr<i64>`] describes an integer expression and provides
@@ -471,17 +321,15 @@ mod sealed {
 /// Built-in Rust literals, supported [`Expr`] types and Nix references implement
 /// this trait. It is sealed, so users cannot add implementations. For your own
 /// configuration types, derive or implement [`IntoRusnixValue`] instead.
-pub trait ConfigValue: sealed::Sealed {
-    /// Lower into semantic IR, using `origin` for concrete leaves and retaining
-    /// any provenance already captured by symbolic expressions or references.
-    fn into_node(self, origin: Origin) -> Node;
-}
+pub trait ConfigValue: sealed::Sealed + backend::IntoNode {}
 
 macro_rules! primitive {
     ($ty:ty, $variant:ident) => {
         impl sealed::Sealed for $ty {}
 
-        impl ConfigValue for $ty {
+        impl ConfigValue for $ty {}
+
+        impl IntoNode for $ty {
             fn into_node(self, origin: Origin) -> Node {
                 Node {
                     origin,
@@ -508,7 +356,9 @@ primitive!(&str, String);
 
 impl<T: ConfigValue> sealed::Sealed for Vec<T> {}
 
-impl<T: ConfigValue> ConfigValue for Vec<T> {
+impl<T: ConfigValue> ConfigValue for Vec<T> {}
+
+impl<T: ConfigValue> IntoNode for Vec<T> {
     fn into_node(self, origin: Origin) -> Node {
         let children = self
             .into_iter()
@@ -534,7 +384,9 @@ macro_rules! expression_value {
     ($ty:ty) => {
         impl sealed::Sealed for Expr<$ty> {}
 
-        impl ConfigValue for Expr<$ty> {
+        impl ConfigValue for Expr<$ty> {}
+
+        impl IntoNode for Expr<$ty> {
             fn into_node(self, _: Origin) -> Node {
                 self.node
             }
@@ -547,27 +399,6 @@ expression_value!(i64);
 expression_value!(bool);
 
 expression_value!(String);
-
-/// A setting with its destination path, value expression and Rust location.
-/// This is inspection data within [`Config`]. The backend turns it into a Nix
-/// field assignment; its value is evaluated later by Nix.
-#[derive(Clone, Debug)]
-pub struct Assignment {
-    /// Rust operation that introduced this definition, distinct from child expression origins.
-    pub origin: Origin,
-    /// Human-readable path; use [`Self::path_segments`] for unambiguous code generation.
-    pub path: String,
-    /// Deferred right-hand side of the definition.
-    pub value: Node,
-    segments: Vec<String>,
-}
-
-impl Assignment {
-    /// Attribute segments are data; a renamed field may contain a literal dot.
-    pub fn path_segments(&self) -> &[String] {
-        &self.segments
-    }
-}
 
 /// A group of settings that one component contributes to configuration.
 /// For example, it can define `services.example.enable` and

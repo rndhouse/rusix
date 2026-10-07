@@ -3,8 +3,13 @@
 //! Prefer the typed handles in [`super`] for normal authoring. This module
 //! contains dynamic selection/application and unchecked interface expectations.
 //! These operations remain lazy; Nix checks actual values when demanded.
-use super::{ModuleRef, NixFunction, Nixpkgs, OverlayRef, PackageRef, Reference, Source};
-use crate::{ConfigValue, Node, Origin, ValidationError, ValueKind, sealed};
+use super::{ModuleRef, NixCallable, NixExpression, NixFunction, Nixpkgs, OverlayRef, PackageRef};
+use crate::backend::{Reference, Source};
+use crate::{
+    ConfigValue, ValidationError,
+    backend::{IntoNode, Node, Origin, ValueKind},
+    sealed,
+};
 
 /// Representation access for custom symbolic interfaces and dynamic adapters.
 ///
@@ -105,7 +110,9 @@ pub struct NixValue(
 
 impl sealed::Sealed for NixValue {}
 
-impl ConfigValue for NixValue {
+impl ConfigValue for NixValue {}
+
+impl IntoNode for NixValue {
     fn into_node(self, _: Origin) -> Node {
         self.0
     }
@@ -604,5 +611,140 @@ impl From<std::collections::BTreeMap<String, NixValue>> for NixValue {
     #[track_caller]
     fn from(value: std::collections::BTreeMap<String, NixValue>) -> Self {
         Self::record(value)
+    }
+}
+
+/// Explicit erasure of a reference handle for dynamic Nix interop.
+/// Use typed packages, imports and external callable contracts where possible.
+pub trait AsNixValue {
+    /// Retain the deferred lookup and its Rust location while erasing its category.
+    fn as_value(&self) -> NixValue;
+}
+
+/// Calls and unchecked signature expectations for an external Nix function.
+/// Prefer a named typed helper or an already typed [`super::NixCallable`].
+/// Import this trait explicitly when adapting an otherwise unknown function.
+pub trait NixFunctionExt: AsNixValue {
+    /// Declare the expected result interface of an external callable reference.
+    /// This does not inspect its Nix implementation or evaluate its result.
+    fn returning<R: NixExpression>(&self) -> NixCallable<R> {
+        NixCallable::from_expression(self.as_value())
+    }
+
+    /// State both parameter and result expectations for an external callable.
+    /// This does not inspect or eagerly validate the external Nix function.
+    #[track_caller]
+    fn signature<A: NixExpression, R: NixExpression>(&self) -> NixCallable<R, A> {
+        NixCallable::from_expression(self.as_value())
+    }
+
+    /// Describe a call to this Nix function with one argument.
+    /// Nix executes the call later and checks the argument. If the result is another
+    /// function, continue with [`NixValue::call`] or use [`Self::apply`].
+    #[track_caller]
+    fn call(&self, argument: impl ConfigValue) -> NixValue {
+        self.as_value().call(argument)
+    }
+
+    /// Describe successive calls to this Nix function, one for each argument.
+    /// For example, `write_text.apply([name, text])` represents `writeText name text`.
+    /// Arguments can mix Rust literals, records, package references and expressions.
+    /// Nix executes the calls later; Rusnix does not infer the result’s category.
+    ///
+    /// ```
+    /// use rusnix_ir::interop::{Nixpkgs, raw::NixFunctionExt};
+    /// let file = Nixpkgs::new().pkgs_function("writeText")
+    ///     .apply(["example.conf".into(), "workers=4\n".into()]);
+    /// // Nix will describe a generated file; constructing this call does not build it.
+    /// ```
+    #[track_caller]
+    fn apply(&self, arguments: impl IntoIterator<Item = NixValue>) -> NixValue {
+        self.as_value().apply(arguments)
+    }
+}
+
+impl NixFunctionExt for NixFunction {}
+
+/// Dynamic package-set/library lookup for adapters without typed helpers.
+/// This trait is intentionally excluded from [`crate::prelude`].
+pub trait NixpkgsExt {
+    /// Refer to any named value in the package set, without claiming it is a package.
+    /// Use this for metadata, records or other objects. Dots select nested fields;
+    /// Rust constructs the lookup and Nix evaluates it later.
+    #[track_caller]
+    fn value(&self, path: &str) -> NixValue;
+
+    /// Pass the entire package set as a Nix value, for helpers that expect `pkgs`.
+    /// Rust does not inspect the packages or the final NixOS configuration.
+    #[track_caller]
+    fn as_value(&self) -> NixValue;
+
+    /// Refer to a named value in nixpkgs’ `lib` utility library.
+    /// This includes NixOS type objects such as `types.port`; they describe how
+    /// NixOS validates and merges option values. Rust does not evaluate the lookup.
+    #[track_caller]
+    fn lib_value(&self, path: &str) -> NixValue;
+}
+
+impl NixpkgsExt for Nixpkgs {
+    /// Refer to any named value in the package set, without claiming it is a package.
+    /// Use this for metadata, records or other objects. Dots select nested fields;
+    /// Rust constructs the lookup and Nix evaluates it later.
+    #[track_caller]
+    fn value(&self, path: &str) -> NixValue {
+        NixValue(
+            Reference {
+                source: self.package_source(),
+                path: Some(AttrPath::dotted(path)),
+                origin: Origin::caller(format!("nixpkgs value lookup {path}")),
+            }
+            .node(),
+        )
+    }
+
+    /// Pass the entire package set as a Nix value, for helpers that expect `pkgs`.
+    /// Rust does not inspect the packages or the final NixOS configuration.
+    #[track_caller]
+    fn as_value(&self) -> NixValue {
+        NixValue(
+            Reference {
+                source: self.package_source(),
+                path: None,
+                origin: Origin::caller("nixpkgs package set"),
+            }
+            .node(),
+        )
+    }
+
+    /// Refer to a named value in nixpkgs’ `lib` utility library.
+    /// This includes NixOS type objects such as `types.port`; they describe how
+    /// NixOS validates and merges option values. Rust does not evaluate the lookup.
+    #[track_caller]
+    fn lib_value(&self, path: &str) -> NixValue {
+        NixValue(
+            Reference {
+                source: Source::Library,
+                path: Some(AttrPath::dotted(path)),
+                origin: Origin::caller(format!("nixpkgs lib value lookup {path}")),
+            }
+            .node(),
+        )
+    }
+}
+
+/// Dynamic lookup in an external Nix input; package/module lookup stays typed.
+pub trait InputRefExt {
+    /// Refer to any value returned by this file, without assuming its category.
+    /// Dots select nested fields. The resulting expression is evaluated by Nix later.
+    #[track_caller]
+    fn value(&self, path: &str) -> NixValue;
+}
+
+impl InputRefExt for super::InputRef {
+    /// Refer to any value returned by this file, without assuming its category.
+    /// Dots select nested fields. The resulting expression is evaluated by Nix later.
+    #[track_caller]
+    fn value(&self, path: &str) -> NixValue {
+        NixValue(self.lookup(path, "value").node())
     }
 }

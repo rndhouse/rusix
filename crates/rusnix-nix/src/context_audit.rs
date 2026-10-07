@@ -1,7 +1,9 @@
 //! Compare real failures across runtime-boundary policies and inspection rendering.
 use super::*;
+use rusnix_ir::interop::raw::{InputRefExt, NixFunctionExt};
 use rusnix_ir::{
-    Expr, Origin,
+    Expr,
+    backend::Origin,
     interop::{InputRef, Nixpkgs, raw::NixValue},
     nix_text,
 };

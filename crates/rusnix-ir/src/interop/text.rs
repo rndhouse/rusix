@@ -55,7 +55,7 @@ where
 {
     #[track_caller]
     fn to_nix_text(self) -> Expr<String> {
-        self.into_value().to_text().into_expr()
+        self.into_expr().to_nix_text()
     }
 }
 

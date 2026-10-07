@@ -1,6 +1,6 @@
 //! Lay out attributed documents without changing their expression tokens.
 use super::{Generated, SourceSpan};
-use rusnix_ir::Origin;
+use rusnix_ir::backend::Origin;
 
 /// An immutable layout document with a cached width for its single-line form.
 pub(super) struct Doc<'a> {

@@ -1,10 +1,12 @@
 //! Typed handles retain authoring contracts while sharing the existing deferred IR.
 use super::{
     NixLibrary, PackageRef,
-    raw::{NixRepresentation, NixValue},
+    raw::{AsNixValue, NixRepresentation, NixValue},
 };
 use crate::{
-    ConfigValue, Expr, IntoRusnixValue, Node, Origin, RusnixValue, ValidationError, sealed,
+    ConfigValue, Expr, IntoRusnixValue, RusnixValue, ValidationError,
+    backend::{IntoNode, Node, Origin},
+    sealed,
 };
 use std::marker::PhantomData;
 
@@ -120,7 +122,9 @@ macro_rules! expression_handle {
     ($name:ident $(<$($parameter:ident),+>)?) => {
         impl$(<$($parameter: NixExpression),+>)? sealed::Sealed for $name$(<$($parameter),+>)? {}
 
-        impl$(<$($parameter: NixExpression),+>)? ConfigValue for $name$(<$($parameter),+>)? {
+        impl$(<$($parameter: NixExpression),+>)? ConfigValue for $name$(<$($parameter),+>)? {}
+
+        impl$(<$($parameter: NixExpression),+>)? IntoNode for $name$(<$($parameter),+>)? {
             fn into_node(self, origin: Origin) -> Node {
                 self.value.into_node(origin)
             }
@@ -639,7 +643,9 @@ impl IntoRusnixValue for NixLibrary {
 
 impl sealed::Sealed for NixLibrary {}
 
-impl ConfigValue for NixLibrary {
+impl ConfigValue for NixLibrary {}
+
+impl IntoNode for NixLibrary {
     fn into_node(self, origin: Origin) -> Node {
         self.as_expression().into_node(origin)
     }
