@@ -7,7 +7,10 @@ mod support;
 
 use rusnix_ir::{
     Config,
-    interop::{InputRef, NixAttrs, NixExpression, NixValue, Nixpkgs, Package},
+    interop::{
+        InputRef, NixAttrs, NixExpression, Nixpkgs, Package,
+        raw::{NixFunctionExt, NixRepresentation, NixValue, NixpkgsExt},
+    },
 };
 use rusnix_nix::{Generated, NixSession};
 use std::{fs, path::Path};

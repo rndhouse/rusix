@@ -61,7 +61,10 @@ pub mod graph;
 
 use rusnix_ir::{
     Config,
-    interop::{NixAttrs, NixExpression, NixValue, Nixpkgs, Package},
+    interop::{
+        NixAttrs, Nixpkgs, Package,
+        raw::{NixFunctionExt, NixRepresentation, NixValue, NixpkgsExt},
+    },
 };
 
 fn real_case(case: &str, supplied: NixValue) -> (rusnix_nix::Generated, String) {
@@ -228,7 +231,7 @@ fn demand(recipe: NixValue) -> Generated {
     rusnix_nix::compile(&Config::new().set("result", package.select("drvPath"))).unwrap()
 }
 
-fn value_origin(value: NixValue) -> rusnix_ir::Origin {
+fn value_origin(value: NixValue) -> rusnix_ir::backend::Origin {
     Config::new().set("probe", value).assignments[0]
         .value
         .origin
@@ -631,7 +634,7 @@ fn call_package_auto_arguments_are_not_mistaken_for_authored_defaults() {
     let automatic =
         rusnix_nix::compile(&Config::new().set("result", automatic.select("drvPath"))).unwrap();
     let metadata = automatic.backend_metadata.as_ref().unwrap();
-    let recorded: rusnix_ir::Origin = serde_json::from_value(
+    let recorded: rusnix_ir::backend::Origin = serde_json::from_value(
         metadata["boundaries"][0]["fields"][0]["children"][0]["origin"].clone(),
     )
     .unwrap();

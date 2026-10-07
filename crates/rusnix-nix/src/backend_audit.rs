@@ -4,7 +4,10 @@
 pub mod graph;
 
 use super::*;
-use rusnix_ir::interop::{NixExpression, Nixpkgs};
+use rusnix_ir::interop::{
+    Nixpkgs,
+    raw::{NixRepresentation, NixpkgsExt},
+};
 use std::{fs, path::Path};
 
 #[test]
@@ -100,7 +103,7 @@ fn backend_metadata_has_zero_generated_cost() {
 
 #[test]
 fn compact_lexical_lists_cannot_expand_metadata_without_bound() {
-    use rusnix_ir::interop::NixValue;
+    use rusnix_ir::interop::raw::NixValue;
 
     // Nix's lexical graph is small while the represented list is large.
     let mut inputs = NixValue::list([1_i64.into()]);

@@ -2,7 +2,10 @@
 //!
 //! This reads authored IR structure only. Unknown functions, conditions and list
 //! lengths stop indexing; no Nix values or package identities are evaluated here.
-use rusnix_ir::{Config, Node, Origin, ValueKind, interop::Source};
+use rusnix_ir::{
+    Config,
+    backend::{Node, Origin, Source, ValueKind},
+};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeSet, rc::Rc};
 
@@ -844,39 +847,18 @@ impl Collector {
 }
 
 // A failure in an assertion's condition must not be attributed to its still
-// unforced body. Store only operation IDs and require active trace evidence.
-fn guard_operations(
-    node: &Node,
-    guard: bool,
-    out: &mut BTreeSet<String>,
-    remaining: &mut usize,
-) -> bool {
+// unforced body. Record condition roots: a shared accessor may occur in both
+// the guard and body, but only the condition's ancestry proves guard evaluation.
+fn guard_operations(node: &Node, out: &mut BTreeSet<String>, remaining: &mut usize) -> bool {
     if *remaining == 0 {
         return false;
     }
     *remaining -= 1;
-    if guard
-        && matches!(
-            node.kind,
-            ValueKind::Apply(..)
-                | ValueKind::Select(..)
-                | ValueKind::AttrMerge(..)
-                | ValueKind::Equal(..)
-                | ValueKind::Divide(..)
-                | ValueKind::ToText(..)
-                | ValueKind::StringPrefix { .. }
-                | ValueKind::InRange { .. }
-                | ValueKind::Assert(..)
-                | ValueKind::If(..)
-        )
-    {
-        out.insert(node.origin.id.clone());
-    }
-    let mut visit = |node| guard_operations(node, guard, out, remaining);
+    let mut visit = |node| guard_operations(node, out, remaining);
     match &node.kind {
         ValueKind::Assert(condition, value) => {
-            guard_operations(condition, true, out, remaining)
-                && guard_operations(value, guard, out, remaining)
+            out.insert(condition.origin.id.clone());
+            guard_operations(condition, out, remaining) && guard_operations(value, out, remaining)
         }
         ValueKind::List(items) => items.iter().all(visit),
         ValueKind::AttrSet(fields) | ValueKind::OpaqueRecord(fields) => {
@@ -903,7 +885,7 @@ pub(crate) fn collect(config: &Config) -> Option<serde_json::Value> {
     let mut guards = BTreeSet::new();
     let mut remaining = 20_000;
     for assignment in &config.assignments {
-        if !guard_operations(&assignment.value, false, &mut guards, &mut remaining) {
+        if !guard_operations(&assignment.value, &mut guards, &mut remaining) {
             return None;
         }
     }

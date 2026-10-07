@@ -136,8 +136,11 @@ locations, excluding source excerpts, and normalizes the opposite trace order.
 Both recover the same six real delayed suppliers. The Nix reason and raw stderr
 remain byte-for-byte unchanged. Stronger direct generated failure evidence
 wins; validated correlation precedes the outer opaque call or demand fallback.
-Assertion-condition operation IDs are also retained: if a generated trace shows
-an active guard, correlation cannot blame its unforced body. A same-name
+Assertion-condition root IDs are also retained: if a generated trace shows
+an active guard, correlation cannot blame its unforced body. Guard evidence
+requires the condition itself or its ancestry, rather than an accessor reused
+in both the condition and body; rebasing onto the explicit raw interfaces
+exposed this distinction in the curl → OpenSSL path. A same-name
 package failure inside an assertion guard demonstrated a false match during
 review; the retained regression test verifies the conservative veto. This adds
 no Nix contexts and leaves body failures after successful guards eligible.
