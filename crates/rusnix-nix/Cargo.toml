@@ -71,3 +71,7 @@ path = "../../examples/composed-packages/main.rs"
 [[example]]
 name = "mariadb-nixpkg"
 path = "../../examples/mariadb-nixpkg/main.rs"
+
+[[example]]
+name = "overlay"
+path = "../../examples/overlay/main.rs"

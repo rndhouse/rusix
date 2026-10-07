@@ -797,6 +797,15 @@ cargo run --locked -p rusnix-nix --example nix-interop
 cargo test --locked -p rusnix-nix --test interop
 ```
 
+The [overlay example](examples/overlay/README.md) authors ordinary
+`final: prev: { ... }` customization code in Rust. It appends `--disable-dict`
+through `prev.curl.overrideAttrs`, keeping the existing pinned nixpkgs package
+definition. Existing deferred callbacks and nixpkgs' `extend` suffice; Nix
+evaluates the fixed point. Tests compare complete recipes with the handwritten
+overlay, including the ordinary downstream `curlpp` dependency, and verify
+`final`/`prev`, laziness and Rust operation provenance. The package examples
+replace package definitions; this example replaces overlay/customization code.
+
 `rusnix_ir::interop` owns distinct PackageRef/ModuleRef/OverlayRef/NixFunction
 handles, InputRef, and an explicit NixValue escape hatch. A reference carries its
 source identity, structured attribute segments, and Rust lookup origin. It

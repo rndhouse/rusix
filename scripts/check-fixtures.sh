@@ -24,9 +24,10 @@ cargo test --locked -p rusnix-nix --test symbolic_text
 cargo test --locked -p rusnix-nix --test structured_interop --test library --test typed_interop
 cargo test --locked -p rusnix-nix --test package --test package_functions --test git --test curl --test nix_operations
 cargo test --locked -p rusnix-nix --test openssl --test mariadb --test composed
+cargo test --locked -p rusnix-nix --test overlay
 cargo test --locked -p rusnix-nix --test typed_examples --test ui --test interop
 
-for example in enum-option typed-submodule invalid-states function-contracts exhaustive-match typed-values layered-validation nix-interop symbolic-option postgresql-nixos-module git-nixpkg curl-nixpkg openssl-nixpkg mariadb-nixpkg composed-packages; do
+for example in enum-option typed-submodule invalid-states function-contracts exhaustive-match typed-values layered-validation nix-interop symbolic-option postgresql-nixos-module git-nixpkg curl-nixpkg openssl-nixpkg mariadb-nixpkg composed-packages overlay; do
     cargo run --locked --quiet -p rusnix-nix --example "$example"
 done
 

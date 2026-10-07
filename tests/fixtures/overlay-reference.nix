@@ -14,6 +14,8 @@
       inherit (package) configureFlags;
       derivationPath = package.drvPath;
       outputPath = package.outPath;
+      outputPaths = pkgs.lib.genAttrs package.outputs (output: package.${output}.outPath);
+      configureFlagsEnv = builtins.toString package.configureFlags;
       recipe = recipe package;
       source = package.src.drvPath;
       sourceRecipe = recipe package.src;

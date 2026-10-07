@@ -627,6 +627,7 @@ isolated-store helper.
 | postgresql-nixos-module | Domain provisioning, symbolic derivation and real nixpkgs builders | postgresql.rs; full NixOS equivalence, overrides and failures |
 | git-nixpkg | Native package function, overrides and reusable derivation model | git.rs; ordinary Nix equivalence and override behavior |
 | curl-nixpkg | Native package function, typed flags and symbolic package dependencies | curl.rs; ordinary Nix equivalence and override behavior |
+| [overlay](overlay/README.md) | Normal `final: prev:` customization of existing nixpkgs curl | overlay.rs; exact handwritten-overlay recipes, downstream visibility, laziness and provenance |
 | openssl-nixpkg | Shared release policy and complete native factories | openssl.rs; exact recipes, platforms, overrides and bootstrap constraints |
 | mariadb-nixpkg | Shared client/server recipe and version policy | mariadb.rs; exact recipes, features, platforms and backend rejection cases |
 | composed-packages | Explicit Rust-authored package graph and movable dependency boundary | composed.rs; exact graph recipes, tags, reverse consumers, laziness and provenance |
