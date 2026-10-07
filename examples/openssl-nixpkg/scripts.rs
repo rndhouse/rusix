@@ -1,15 +1,20 @@
 //! Exact pinned phase text; these are shell scripts, not embedded Nix recipes.
-use rusnix_ir::{interop::NixValue, nix_text};
+use rusnix_ir::{
+    Expr,
+    interop::{NixValue, Package},
+    nix_text,
+};
 
-pub fn patch_configure() -> NixValue {
+pub fn patch_configure() -> Expr<String> {
     nix_text!(
         r#"
             patchShebangs Configure
         "#,
     )
+    .into_expr()
 }
 
-pub fn patch_old_tests() -> NixValue {
+pub fn patch_old_tests() -> Expr<String> {
     nix_text!(
         r#"
             patchShebangs test/*
@@ -19,18 +24,20 @@ pub fn patch_old_tests() -> NixValue {
             done
         "#,
     )
+    .into_expr()
 }
 
-pub fn patch_env(coreutils: NixValue) -> NixValue {
+pub fn patch_env(coreutils: Package) -> Expr<String> {
     nix_text!(
         r#"
             substituteInPlace config --replace '/usr/bin/env' '{coreutils}/bin/env'
         "#,
         coreutils = coreutils,
     )
+    .into_expr()
 }
 
-pub fn patch_musl() -> NixValue {
+pub fn patch_musl() -> Expr<String> {
     nix_text!(
         r#"
             substituteInPlace crypto/async/arch/async_posix.h \
@@ -38,9 +45,10 @@ pub fn patch_musl() -> NixValue {
                         '!defined(__ANDROID__) && !defined(__OpenBSD__) && 0'
         "#,
     )
+    .into_expr()
 }
 
-pub fn patch_static_engines() -> NixValue {
+pub fn patch_static_engines() -> Expr<String> {
     nix_text!(
         r#"
             substituteInPlace Configurations/unix-Makefile.tmpl \
@@ -48,18 +56,20 @@ pub fn patch_static_engines() -> NixValue {
                         'ENGINESDIR=$(OPENSSLDIR)/engines-{{- $sover_dirname -}}'
         "#,
     )
+    .into_expr()
 }
 
-pub fn install_static() -> NixValue {
+pub fn install_static() -> Expr<String> {
     nix_text!(
         r#"
             # OPENSSLDIR has a reference to self
             remove-references-to -t $out $out/lib/*.a
         "#,
     )
+    .into_expr()
 }
 
-pub fn install_shared() -> NixValue {
+pub fn install_shared() -> Expr<String> {
     nix_text!(
         r#"
             # If we're building dynamic libraries, then don't install static
@@ -72,9 +82,10 @@ pub fn install_shared() -> NixValue {
             etc=$out
         "#,
     )
+    .into_expr()
 }
 
-pub fn install_bin() -> NixValue {
+pub fn install_bin() -> Expr<String> {
     nix_text!(
         r#"
             mkdir -p $bin
@@ -82,9 +93,10 @@ pub fn install_bin() -> NixValue {
 
         "#,
     )
+    .into_expr()
 }
 
-pub fn install_rehash() -> NixValue {
+pub fn install_rehash() -> Expr<String> {
     nix_text!(
         r#"
             # c_rehash is a legacy perl script with the same functionality
@@ -95,9 +107,10 @@ pub fn install_rehash() -> NixValue {
               --add-flags "rehash"
         "#,
     )
+    .into_expr()
 }
 
-pub fn install_dev() -> NixValue {
+pub fn install_dev() -> Expr<String> {
     nix_text!(
         r#"
 
@@ -110,18 +123,20 @@ pub fn install_dev() -> NixValue {
             rmdir $etc/etc/ssl/{{certs,private}}
         "#,
     )
+    .into_expr()
 }
 
-pub fn install_conf(conf: NixValue) -> NixValue {
+pub fn install_conf(conf: NixValue) -> Expr<String> {
     nix_text!(
         r#"
             cat {conf} > $etc/etc/ssl/openssl.cnf
         "#,
         conf = conf,
     )
+    .into_expr()
 }
 
-pub fn fixup_perl(perl: NixValue) -> NixValue {
+pub fn fixup_perl(perl: Package) -> Expr<String> {
     nix_text!(
         r#"
             # Check to make sure the main output and the static runtime dependencies
@@ -133,9 +148,10 @@ pub fn fixup_perl(perl: NixValue) -> NixValue {
         "#,
         perl = perl,
     )
+    .into_expr()
 }
 
-pub fn fixup_cmake() -> NixValue {
+pub fn fixup_cmake() -> Expr<String> {
     nix_text!(
         r#"
             # cleanup cmake helpers for now (for OpenSSL >= 3.3), only rely on pkg-config.
@@ -143,4 +159,5 @@ pub fn fixup_cmake() -> NixValue {
             rm -rf $dev/lib/cmake
         "#,
     )
+    .into_expr()
 }

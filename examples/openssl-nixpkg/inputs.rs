@@ -4,37 +4,37 @@ use rusnix_ir as rusnix;
 #[rusnix::args]
 #[allow(dead_code)] // Upstream retains unused coreutils/writeShellScript parameters.
 pub mod args {
-    use rusnix_ir::interop::NixValue;
+    use rusnix_ir::interop::{NixCallable, NixLibrary, NixValue, Package, Stdenv};
 
     /// Caller-owned dependencies and lazy policy arguments.
     #[rusnix(root)]
     struct Inputs {
         /// Pinned `lib` argument; resolved by Nix when demanded.
-        lib: NixValue,
+        lib: NixLibrary,
         /// Pinned `stdenv` argument; resolved by Nix when demanded.
-        stdenv: NixValue,
+        stdenv: Stdenv,
         /// Pinned `fetchurl` argument; resolved by Nix when demanded.
-        fetchurl: NixValue,
+        fetchurl: NixCallable<Package>,
         /// Pinned `buildPackages` argument; resolved by Nix when demanded.
         build_packages: NixValue,
         /// Pinned `perl` argument; resolved by Nix when demanded.
-        perl: NixValue,
+        perl: Package,
         /// Pinned `coreutils` argument; resolved by Nix when demanded.
         #[allow(dead_code)]
-        coreutils: NixValue,
+        coreutils: Package,
         /// Pinned `writeShellScript` argument; resolved by Nix when demanded.
         #[allow(dead_code)]
         write_shell_script: NixValue,
         /// Pinned `makeBinaryWrapper` argument; resolved by Nix when demanded.
-        make_binary_wrapper: NixValue,
+        make_binary_wrapper: Package,
         /// Pinned `withCryptodev` argument; resolved by Nix when demanded.
         with_cryptodev: bool,
         /// Pinned `cryptodev` argument; resolved by Nix when demanded.
-        cryptodev: NixValue,
+        cryptodev: Package,
         /// Pinned `withZlib` argument; resolved by Nix when demanded.
         with_zlib: bool,
         /// Pinned `zlib` argument; resolved by Nix when demanded.
-        zlib: NixValue,
+        zlib: Package,
         /// Pinned `enableSSL2` argument; resolved by Nix when demanded.
         #[rusnix(rename = "enableSSL2")]
         enable_ssl2: bool,
@@ -53,7 +53,7 @@ pub mod args {
         /// Pinned `conf` argument; resolved by Nix when demanded.
         conf: NixValue,
         /// Pinned `removeReferencesTo` argument; resolved by Nix when demanded.
-        remove_references_to: NixValue,
+        remove_references_to: Package,
         /// Pinned `testers` argument; resolved by Nix when demanded.
         testers: NixValue,
     }

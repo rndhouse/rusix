@@ -7,12 +7,14 @@ pub mod model;
 
 use rusnix_ir::{
     Config,
-    interop::{Nixpkgs, PackageFunction},
+    interop::{Nixpkgs, Package, PackageFunction},
 };
 
 fn main() {
-    let factory: PackageFunction = lowering::factory();
-    let curl = Nixpkgs::new().call_package(&factory, model::model().arguments());
+    let factory: PackageFunction<Package> = lowering::factory();
+    let curl = Nixpkgs::new()
+        .try_call_package(&factory, model::model().arguments())
+        .expect("fixed authoring arguments");
     let artifact = rusnix_nix::compile(&Config::new().set("factory", factory).set("curl", curl))
         .expect("the example has valid structural values");
     println!("{}", artifact.source);

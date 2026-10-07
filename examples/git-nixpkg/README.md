@@ -36,8 +36,9 @@ independent of library overrides. Passthru merging uses `merge_attrs`, so replac
 `lib.mergeAttrs` does not change those native operations. Pinned Git asset paths
 remain an Inputs helper.
 Output selection uses `NixLibrary::get_dev`, retaining the supplied library's
-fallback behavior. `override_args` and `override_attrs` call the existing package
-functions, including the eventual final package's recursive test override.
+fallback behavior. Typed `override_arguments` and `override_attrs` delegate to
+the shared raw override operations and call the existing package functions,
+including the eventual final package's recursive test override.
 
 The complete `Inputs` declaration also supplies `args::argument_names()` to the
 factory; there is no separate list of its 57 parameters. Defaults remain explicit
@@ -129,15 +130,17 @@ audits and vary as the authored recipe changes.
 application/selection parentheses while preserving explicit AST groups.
 Quoted shell fragments remain unchanged and can exceed the target width.
 
-The Rust factory now returns `PackageFunction`, identifying its native named
-argument interface. Instantiation uses the explicit nixpkgs operation:
+The Rust factory returns `PackageFunction<Package>`, retaining the instantiated
+package interface through nixpkgs dependency injection:
 
 ```rust
-let factory: PackageFunction = lowering::factory();
-let git = Nixpkgs::new().call_package(&factory, inputs::arguments(model::model()));
+let factory: PackageFunction<Package> = lowering::factory();
+let git: Package = Nixpkgs::new().try_call_package(&factory, inputs::arguments(model::model()))?;
 ```
 
-The result remains `NixValue`; Nix validates the arguments and package body.
-`Config::set("factory", factory)` accepts the function directly. Explicit
-`factory.as_value()` or conversion to `NixValue` permits ordinary Nix function
-calls and inspection, preserving lazy defaults and provenance.
+Argument records implement `IntoRusnixValue` and lower only at the call boundary.
+Dependency accessors return `Package`, sources return through `NixCallable<Package>`,
+phase text uses `Expr<String>`, and package/flag lists retain their element types.
+`Config::set` accepts the factory and package directly. Dynamic fields remain
+available through `as_expression`; Nix validates external expectations lazily.
+See [typed package authoring](../../docs/typed-package-values.md).

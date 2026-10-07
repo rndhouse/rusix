@@ -636,5 +636,15 @@
       "closure arguments",
       "expected due to this"
     ]
+  },
+  {
+    "file": "callable-without-override-capability.rs",
+    "code": "E0277",
+    "count": 1,
+    "source": "expects_overrides(callable)",
+    "reason_tokens": [
+      "NixOverridable",
+      "NixCallable"
+    ]
   }
 ]

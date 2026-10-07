@@ -5,10 +5,10 @@ mod lowering;
 
 pub mod model;
 
-use rusnix_ir::interop::NixValue;
+pub use inputs::Arguments;
 
 pub use lowering::factory;
 
-pub fn arguments() -> NixValue {
+pub fn arguments() -> Arguments {
     inputs::arguments(model::Git::defaults())
 }

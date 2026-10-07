@@ -11,6 +11,11 @@ and `NixValue` describe expressions that Nix evaluates later. Its rustdoc
 introduces packages, utility functions and NixOS modules before their Rusnix
 wrappers. `rusnix_nix` documents compilation and isolated evaluation.
 
+[Typed deferred package authoring](docs/typed-package-values.md) preserves package,
+function, list, record and scalar interfaces through lazy bindings and composition.
+The OpenSSL, curl, Git and MariaDB examples use these interfaces; dynamic interop
+continues to use `NixValue`.
+
 ```text
 User-defined Rust domain model
         ↓
@@ -859,29 +864,49 @@ without automatic PackageRef inference. Existing package functions/overrides can
 selected through `as_value().select(...)` and called. Function schemas and errors
 belong to Nix. No builder or package-specific Rust code is involved.
 
-`PackageFunction` describes a nixpkgs package definition: typically a function
-such as `{ stdenv, lib, openssl, ... }: stdenv.mkDerivation { ... }`, whose named
+`PackageFunction<R>` describes a nixpkgs package definition with a result interface:
+typically a function such as `{ stdenv, lib, openssl, ... }: stdenv.mkDerivation { ... }`, whose named
 arguments are dependencies and feature options. Construct it with
 `PackageFunction::from_function_attrs(arguments, build)`, using the same lazy
 named defaults and body construction as `NixValue::function_attrs`.
 
 ```rust
-use rusnix_ir::{Config, interop::{NixValue, Nixpkgs, PackageFunction}};
+use rusnix_ir::{Config, Expr, interop::{NixValue, Nixpkgs, PackageFunction}};
 
-let factory = PackageFunction::from_function_attrs(["curl", "label"], |args| {
-    (vec![("label", args.clone().select("curl.pname"))], args.select("label"))
-});
+let factory: PackageFunction<Expr<String>> =
+    PackageFunction::from_function_attrs(["curl", "label"], |args| {
+        (
+            vec![("label", args.clone().select("curl.pname"))],
+            args.select("label").into_expr(),
+        )
+    });
 let result = Nixpkgs::new().call_package(&factory, NixValue::record([] as [(&str, NixValue); 0]));
 let config = Config::new().set("factory", factory).set("result", result);
 ```
 
-`call_package(&PackageFunction, impl Into<NixValue>) -> NixValue` represents the
+`call_package<R>(&PackageFunction<R>, impl Into<NixValue>) -> R` represents the
 real pinned `pkgs.callPackage factory overrides`. nixpkgs inspects the argument
 names and supplies matching dependencies; explicit caller arguments take
-precedence. Rust does not reimplement dependency injection. The result remains
-`NixValue`: Nix validates arguments and behavior, and Rust does not prove that
-the function returns a derivation. Supported results retain ordinary nixpkgs
-`.override` and `.overrideAttrs` behavior.
+precedence. Rust does not reimplement dependency injection. Package recipes return
+`PackageFunction<Package>`; families may return `PackageFunction<NixAttrs<Package>>`.
+The default result type is still `NixValue` for dynamic callers. These are declared
+symbolic interfaces; Nix validates the actual arguments and result when demanded.
+Packages retain real nixpkgs `.override` and `.overrideAttrs` behavior through
+`override_arguments` and `override_attrs`.
+
+`try_call_package` accepts any `IntoRusnixValue` argument record and returns
+structural conversion errors. Authors can pass derived structs containing `Package`
+dependencies directly, without lowering them before the call. `NixExpression::bind`
+keeps a factory or package's Rust interface on its lazy lexical parameter:
+
+```rust
+let family = factory.bind(|factory| {
+    NixAttrs::new([("member", pkgs.call_package(&factory, arguments))])
+});
+```
+
+Here the callback parameter is still a `PackageFunction<R>`, and the family keeps
+its member interface. No `as_value` conversion or raw callback parameter is needed.
 
 The old `package_function` selector was renamed to `pkgs_function`, because it
 selected arbitrary helpers from `pkgs`, including curried functions and
@@ -892,8 +917,9 @@ changing the reference-only `NixFunction` representation. Only a
 `PackageFunction` can be passed to `call_package`; generic functions and
 unmarked `NixValue` expressions fail at Rust compile time.
 
-`PackageFunction::as_value()` and `From<PackageFunction> for NixValue` allow
-ordinary calls, records, and `functionArgs` inspection. The existing
+`PackageFunction::as_value()` and `From<PackageFunction<R>> for NixValue` remain
+escape hatches for dynamic inspection such as `functionArgs`. Ordinary calls,
+records and bindings accept the typed factory directly. The existing
 `ConfigValue` and `IntoRusnixValue` conversions also accept package functions in
 `Config::set` and derived configuration fields. The wrapper and `call_package`
 forward source locations into the existing function and application machinery:
@@ -1079,7 +1105,10 @@ let complete_settings = pg.settings.as_value();
 The macro generates public navigation fields and tracked accessor methods inside
 the annotated module. Its declarations are reference descriptions, not concrete
 Rust data structs. The enclosing module controls visibility. Scalar leaves
-`bool`, `String`, and `i64` return their existing Expr types. NixValue, Option<T>,
+`bool`, `String`, and `i64` return their existing Expr types. Core expression
+handles such as `Package`, `Stdenv`, `NixLibrary`, `NixCallable<R>`,
+`Overridable<T>`, `NixAttrs<T>`, `NixList<T>` and `PackageFunction<R>` retain
+their declared Rust interfaces. NixValue, Option<T>,
 Vec<T>, BTreeMap<K, V> and HashMap<K, V> return opaque NixValue references; Rust
 never receives their deferred contents. A nested local struct creates a view;
 only one marked `#[rusnix(value)]` exposes the whole subtree. Roots cannot have
@@ -1139,7 +1168,9 @@ navigation over a supplied deferred argument record. Bind it with
 opaque leaf mappings, naming rules and explicit subtree access match
 `#[rusnix::options]`. Rust declares expected shapes; it never reads argument values
 or validates the external function's schema. Roots have no dynamic traversal or
-whole-root accessor; retain the raw NixValue for advanced access. External aliases
+whole-root accessor; retain the raw NixValue for advanced access. An argument
+subtree marked `#[rusnix(value)]` also implements `NixExpression`, allowing typed
+bindings and `as_attrs()` for deferred shallow record union. External aliases
 and reusable views use explicit lower-level selection rather than source inspection.
 
 Generated `args::argument_names()` returns the mapped names of the root's direct

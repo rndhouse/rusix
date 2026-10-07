@@ -3,111 +3,111 @@ use rusnix_ir as rusnix;
 
 #[rusnix::args]
 pub mod args {
-    use rusnix_ir::interop::NixValue;
+    use rusnix_ir::interop::{NixCallable, NixLibrary, NixValue, Package, Stdenv};
 
     /// Deferred common and server dependencies plus the four upstream feature defaults.
     #[rusnix(root)]
     struct Inputs {
         /// Pinned `version` argument, evaluated only as demanded by Nix.
-        version: NixValue,
+        version: String,
         /// Pinned `hash` argument, evaluated only as demanded by Nix.
-        hash: NixValue,
+        hash: String,
         /// Pinned `lib` argument, evaluated only as demanded by Nix.
-        lib: NixValue,
+        lib: NixLibrary,
         /// Pinned `stdenv` argument, evaluated only as demanded by Nix.
-        stdenv: NixValue,
+        stdenv: Stdenv,
         /// Pinned `fetchurl` argument, evaluated only as demanded by Nix.
-        fetchurl: NixValue,
+        fetchurl: NixCallable<Package>,
         /// Pinned `nixosTests` argument, evaluated only as demanded by Nix.
         nixos_tests: NixValue,
         /// Pinned `buildPackages` argument, evaluated only as demanded by Nix.
         build_packages: NixValue,
         /// Pinned `bison` argument, evaluated only as demanded by Nix.
-        bison: NixValue,
+        bison: Package,
         /// Pinned `boost` argument, evaluated only as demanded by Nix.
-        boost: NixValue,
+        boost: Package,
         /// Pinned `cmake` argument, evaluated only as demanded by Nix.
-        cmake: NixValue,
+        cmake: Package,
         /// Pinned `fixDarwinDylibNames` argument, evaluated only as demanded by Nix.
-        fix_darwin_dylib_names: NixValue,
+        fix_darwin_dylib_names: Package,
         /// Pinned `flex` argument, evaluated only as demanded by Nix.
-        flex: NixValue,
+        flex: Package,
         /// Pinned `makeWrapper` argument, evaluated only as demanded by Nix.
-        make_wrapper: NixValue,
+        make_wrapper: Package,
         /// Pinned `pkg-config` argument, evaluated only as demanded by Nix.
         #[rusnix(rename = "pkg-config")]
-        pkg_config: NixValue,
+        pkg_config: Package,
         /// Pinned `curl` argument, evaluated only as demanded by Nix.
-        curl: NixValue,
+        curl: Package,
         /// Pinned `libiconv` argument, evaluated only as demanded by Nix.
-        libiconv: NixValue,
+        libiconv: Package,
         /// Pinned `ncurses` argument, evaluated only as demanded by Nix.
-        ncurses: NixValue,
+        ncurses: Package,
         /// Pinned `openssl` argument, evaluated only as demanded by Nix.
-        openssl: NixValue,
+        openssl: Package,
         /// Pinned `pcre2` argument, evaluated only as demanded by Nix.
-        pcre2: NixValue,
+        pcre2: Package,
         /// Pinned `libkrb5` argument, evaluated only as demanded by Nix.
-        libkrb5: NixValue,
+        libkrb5: Package,
         /// Pinned `libaio` argument, evaluated only as demanded by Nix.
-        libaio: NixValue,
+        libaio: Package,
         /// Pinned `liburing` argument, evaluated only as demanded by Nix.
-        liburing: NixValue,
+        liburing: Package,
         /// Pinned `systemd` argument, evaluated only as demanded by Nix.
-        systemd: NixValue,
+        systemd: Package,
         /// Pinned `CoreServices` argument, evaluated only as demanded by Nix.
         #[rusnix(rename = "CoreServices")]
-        core_services: NixValue,
+        core_services: Package,
         /// Pinned `cctools` argument, evaluated only as demanded by Nix.
-        cctools: NixValue,
+        cctools: Package,
         /// Pinned `perl` argument, evaluated only as demanded by Nix.
-        perl: NixValue,
+        perl: Package,
         /// Pinned `jemalloc` argument, evaluated only as demanded by Nix.
-        jemalloc: NixValue,
+        jemalloc: Package,
         /// Pinned `less` argument, evaluated only as demanded by Nix.
-        less: NixValue,
+        less: Package,
         /// Pinned `libedit` argument, evaluated only as demanded by Nix.
-        libedit: NixValue,
+        libedit: Package,
         /// Pinned `bzip2` argument, evaluated only as demanded by Nix.
-        bzip2: NixValue,
+        bzip2: Package,
         /// Pinned `lz4` argument, evaluated only as demanded by Nix.
-        lz4: NixValue,
+        lz4: Package,
         /// Pinned `lzo` argument, evaluated only as demanded by Nix.
-        lzo: NixValue,
+        lzo: Package,
         /// Pinned `snappy` argument, evaluated only as demanded by Nix.
-        snappy: NixValue,
+        snappy: Package,
         /// Pinned `xz` argument, evaluated only as demanded by Nix.
-        xz: NixValue,
+        xz: Package,
         /// Pinned `zlib` argument, evaluated only as demanded by Nix.
-        zlib: NixValue,
+        zlib: Package,
         /// Pinned `zstd` argument, evaluated only as demanded by Nix.
-        zstd: NixValue,
+        zstd: Package,
         /// Pinned `cracklib` argument, evaluated only as demanded by Nix.
-        cracklib: NixValue,
+        cracklib: Package,
         /// Pinned `judy` argument, evaluated only as demanded by Nix.
-        judy: NixValue,
+        judy: Package,
         /// Pinned `libevent` argument, evaluated only as demanded by Nix.
-        libevent: NixValue,
+        libevent: Package,
         /// Pinned `libxml2` argument, evaluated only as demanded by Nix.
-        libxml2: NixValue,
+        libxml2: Package,
         /// Pinned `linux-pam` argument, evaluated only as demanded by Nix.
         #[rusnix(rename = "linux-pam")]
-        linux_pam: NixValue,
+        linux_pam: Package,
         /// Pinned `numactl` argument, evaluated only as demanded by Nix.
-        numactl: NixValue,
+        numactl: Package,
         /// Pinned `fmt_8` argument, evaluated only as demanded by Nix.
         #[rusnix(rename = "fmt_8")]
-        fmt_8: NixValue,
+        fmt_8: Package,
         /// Pinned `withStorageMroonga` argument, evaluated only as demanded by Nix.
         with_storage_mroonga: bool,
         /// Pinned `kytea` argument, evaluated only as demanded by Nix.
-        kytea: NixValue,
+        kytea: Package,
         /// Pinned `libsodium` argument, evaluated only as demanded by Nix.
-        libsodium: NixValue,
+        libsodium: Package,
         /// Pinned `msgpack` argument, evaluated only as demanded by Nix.
-        msgpack: NixValue,
+        msgpack: Package,
         /// Pinned `zeromq` argument, evaluated only as demanded by Nix.
-        zeromq: NixValue,
+        zeromq: Package,
         /// Pinned `withStorageRocks` argument, evaluated only as demanded by Nix.
         with_storage_rocks: bool,
         /// Pinned `withEmbedded` argument, evaluated only as demanded by Nix.

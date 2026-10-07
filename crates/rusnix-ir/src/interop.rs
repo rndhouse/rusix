@@ -18,7 +18,9 @@ mod typed;
 
 pub use library::NixLibrary;
 
-pub use typed::{NixAttrs, NixCallable, NixExpression, NixList, Package, Stdenv};
+pub use typed::{
+    NixAttrs, NixCallable, NixExpression, NixList, NixOverridable, Overridable, Package, Stdenv,
+};
 
 /// A sequence of field names to look up in Nix attribute sets.
 /// For example, `["services", "example", "port"]` describes
@@ -230,8 +232,9 @@ infer that a function returns a package or module."
 /// ```
 /// [`Nixpkgs::call_package`] examines its argument names and supplies matching
 /// dependencies from nixpkgs, with explicit caller arguments taking precedence.
-/// Construct one with [`Self::from_function_attrs`]; it stays deferred and can
-/// also be emitted or called as an ordinary Nix value through [`Self::as_value`].
+/// Construct one with [`Self::from_function_attrs`]; it stays deferred and supports
+/// direct placement through [`ConfigValue`]. Typed calls and bindings retain its
+/// interface; [`Self::as_value`] remains available for dynamic inspection.
 /// Native defaults and `builtins.functionArgs` are preserved. The instantiated
 /// result supports nixpkgs' `.override` machinery where Nix permits it.
 ///
@@ -1204,8 +1207,8 @@ impl Nixpkgs {
     ///
     /// Nix checks missing arguments and the package body. The factory's declared
     /// result interface is preserved; external expectations are not evaluated. Where
-    /// supported by nixpkgs, use `result.select("override").call(arguments)`
-    /// to change function arguments after instantiation.
+    /// supported by nixpkgs, [`Package::override_arguments`] changes package
+    /// arguments after instantiation. Dynamic results retain ordinary Nix interop.
     #[track_caller]
     pub fn call_package<R: NixExpression>(
         &self,

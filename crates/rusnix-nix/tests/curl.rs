@@ -9,7 +9,7 @@ mod lowering;
 mod model;
 
 use rusnix_ir::{
-    Config, Expr,
+    Config, Expr, IntoRusnixValue,
     interop::{InputRef, NixValue, Nixpkgs},
 };
 use rusnix_nix::{Diagnostic, Generated, NixSession, compile};
@@ -167,12 +167,20 @@ fn every_valid_tls_selection_and_rust_model_match() {
                     http3: false,
                     websocket: false,
                 }
-                .arguments(),
+                .arguments()
+                .try_into_nix_value()
+                .unwrap(),
             )],
         );
         assert_eq!(value["passthru"]["opensslSupport"], index == 1);
     }
-    compare("rust-model", [("model", model::model().arguments())]);
+    compare(
+        "rust-model",
+        [(
+            "model",
+            model::model().arguments().try_into_nix_value().unwrap(),
+        )],
+    );
     compare(
         "rust-model-default-tls",
         [(
@@ -182,7 +190,9 @@ fn every_valid_tls_selection_and_rust_model_match() {
                 http3: false,
                 websocket: false,
             }
-            .arguments(),
+            .arguments()
+            .try_into_nix_value()
+            .unwrap(),
         )],
     );
 }
@@ -748,17 +758,28 @@ fn rust_call_package_matches_exact_default_and_model_derivations() {
     let default = compare("rust-call-package-default", []);
     let model = compare(
         "rust-call-package-model",
-        [("model", model::model().arguments())],
+        [(
+            "model",
+            model::model().arguments().try_into_nix_value().unwrap(),
+        )],
     );
     let factory = lowering::factory();
     let pkgs = Nixpkgs::new();
     let default_package =
         pkgs.call_package(&factory, NixValue::record([] as [(&str, NixValue); 0]));
-    let model_package = pkgs.call_package(&factory, model::model().arguments());
+    let model_package = pkgs
+        .try_call_package(&factory, model::model().arguments())
+        .expect("fixed authoring arguments");
     let generated = compile(
         &Config::new()
-            .set("default", default_package.select("drvPath"))
-            .set("model", model_package.select("drvPath")),
+            .set(
+                "default",
+                default_package.field::<rusnix_ir::Expr<String>>("drvPath"),
+            )
+            .set(
+                "model",
+                model_package.field::<rusnix_ir::Expr<String>>("drvPath"),
+            ),
     )
     .unwrap();
     let value = session()

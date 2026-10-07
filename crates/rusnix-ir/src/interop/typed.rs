@@ -27,6 +27,15 @@ pub trait NixExpression: Clone + IntoRusnixValue {
         )
     }
 
+    /// Bind a structured record through this symbolic view, lowering at the boundary.
+    #[track_caller]
+    fn try_bind_record<R: NixExpression>(
+        record: impl IntoRusnixValue,
+        build: impl FnOnce(Self) -> R,
+    ) -> Result<R, ValidationError> {
+        Ok(Self::from_expression(record.try_into_nix_value()?).bind(build))
+    }
+
     /// Choose between expressions with the same Rust interface, lazily in Nix.
     #[track_caller]
     fn choose(condition: impl Into<Expr<bool>>, yes: Self, no: Self) -> Self {
@@ -146,6 +155,20 @@ macro_rules! expression_handle {
     };
 }
 
+/// An expression expected to expose nixpkgs' argument override interface.
+/// This capability applies to instantiated packages and overridable callables.
+/// External values are checked by Nix only when the override is demanded.
+pub trait NixOverridable: NixExpression {
+    /// Call the value's real override method, retaining its original interface.
+    #[track_caller]
+    fn override_arguments(&self, arguments: impl ConfigValue) -> Self {
+        Self::from_expression(
+            self.as_expression()
+                .override_args(NixValue::literal(arguments)),
+        )
+    }
+}
+
 /// An instantiated package expression, independent of its authoring language.
 /// External values are expectations; this handle does not prove buildability or ABI.
 #[derive(Clone, Debug)]
@@ -160,6 +183,8 @@ impl From<PackageRef> for Package {
         Self::from_expression(reference.as_value())
     }
 }
+
+impl NixOverridable for Package {}
 
 impl Package {
     /// Select a named output as a package value; Nix checks whether it exists.
@@ -177,7 +202,7 @@ impl Package {
     /// Use real nixpkgs argument overrides, preserving this package interface.
     #[track_caller]
     pub fn override_arguments(&self, arguments: impl ConfigValue) -> Self {
-        Self::from_expression(self.value.clone().select("override").call(arguments))
+        NixOverridable::override_arguments(self, arguments)
     }
 
     /// Lower a structured partial override only at its call boundary.
@@ -195,16 +220,60 @@ impl Package {
         Self::from_expression(
             self.value
                 .clone()
-                .select("overrideAttrs")
-                .call(NixCallable::from_function(update)),
+                .override_attrs(NixCallable::from_function(update)),
         )
     }
 
-    /// Extend passthru/package fields using ordinary shallow Nix attribute union.
-    /// This retains the package's existing override machinery rather than rebuilding it.
+    /// Extend top-level package fields using ordinary shallow Nix attribute union.
+    /// This retains existing override methods; the fields are not derivation overrides
+    /// and do not automatically propagate to other outputs or later overrides.
     #[track_caller]
     pub fn extend(&self, attributes: NixAttrs) -> Self {
         Self::from_expression(self.value.clone().merge_attrs(attributes))
+    }
+}
+
+/// A symbolic interface expected to expose nixpkgs' argument override method.
+///
+/// Packages already have this contract. Wrap other external expressions explicitly
+/// when they are known to be overridable, such as nixpkgs fetcher callables. Plain
+/// constructed functions do not implement the override capability automatically.
+/// This expectation does not inspect the Nix expression or force its attributes.
+#[derive(Clone, Debug)]
+pub struct Overridable<T: NixExpression> {
+    value: NixValue,
+    _type: PhantomData<T>,
+}
+
+expression_handle!(Overridable<T>);
+
+impl<T: NixExpression> NixOverridable for Overridable<T> {}
+
+impl<T: NixExpression> Overridable<T> {
+    /// Access the wrapped symbolic interface without discarding its result type.
+    pub fn inner(&self) -> T {
+        T::from_expression(self.value.clone())
+    }
+
+    /// Extend an overridable attribute set using ordinary shallow Nix union.
+    /// Callable attribute sets retain their __functor and override methods.
+    #[track_caller]
+    pub fn extend(&self, attributes: NixAttrs) -> Self {
+        Self::from_expression(self.value.clone().merge_attrs(attributes))
+    }
+}
+
+impl<R: NixExpression> Overridable<NixCallable<R>> {
+    /// Apply the wrapped callable, retaining its declared result interface.
+    #[track_caller]
+    pub fn call(&self, argument: impl ConfigValue) -> R {
+        self.inner().call(argument)
+    }
+
+    /// Lower a structured argument only at this call boundary.
+    #[track_caller]
+    pub fn try_call(&self, argument: impl IntoRusnixValue) -> Result<R, ValidationError> {
+        self.inner().try_call(argument)
     }
 }
 
@@ -334,9 +403,15 @@ impl<T: NixExpression> NixList<T> {
     /// Builtin concatenation, preserving element order and lazy values.
     #[track_caller]
     pub fn concat(lists: impl IntoIterator<Item = Self>) -> Self {
-        Self::from_expression(NixValue::builtin("concatLists").call(NixValue::list(
+        Self::from_expression(NixValue::concat_lists(
             lists.into_iter().map(|list| list.as_expression()),
-        )))
+        ))
+    }
+
+    /// Concatenate through the exact supplied library while retaining element types.
+    #[track_caller]
+    pub fn concat_with(lib: &NixLibrary, lists: impl IntoIterator<Item = Self>) -> Self {
+        Self::from_expression(lib.concat_lists(lists.into_iter().map(|list| list.as_expression())))
     }
 
     /// Call the supplied library's optional helper without erasing the element type.
@@ -419,7 +494,7 @@ impl Expr<String> {
     /// Call optionalString on the exact supplied library, retaining text context.
     #[track_caller]
     pub fn when(self, lib: &NixLibrary, condition: impl Into<Expr<bool>>) -> Self {
-        lib.optional_text(condition.into(), self).into_expr()
+        lib.optional_text(condition.into(), self)
     }
 }
 

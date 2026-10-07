@@ -1,21 +1,24 @@
 //! External dependencies stay opaque; the caller supplies the normal nixpkgs scope.
 use rusnix_ir::{
-    self as rusnix,
-    interop::{NixValue, Nixpkgs},
+    self as rusnix, IntoRusnixValue, RusnixValue,
+    interop::{NixValue, Nixpkgs, Package},
 };
 
 /// Finite navigation over the external Nix arguments this package implementation uses.
 #[rusnix::args]
 pub(super) mod args {
-    use rusnix_ir::interop::NixValue;
+    use rusnix_ir::{
+        Expr,
+        interop::{NixCallable, NixList, NixValue, Package},
+    };
 
     /// Resolved arguments stay deferred; accessors record each lookup's Rust call site.
     #[rusnix(root)]
     struct Inputs {
         /// Source fetcher; Nix constructs the fixed-output derivation.
-        fetchurl: NixValue,
+        fetchurl: NixCallable<Package>,
         /// Patch fetcher with nixpkgs normalization semantics.
-        fetchpatch: NixValue,
+        fetchpatch: NixCallable<Package>,
         /// Caller-supplied library functions and package metadata.
         lib: Lib,
         /// Builder and platform properties supplied by the caller.
@@ -23,59 +26,59 @@ pub(super) mod args {
         /// Tools that run on the build platform, including cross builds.
         build_packages: BuildPackages,
         /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
-        curl: NixValue,
+        curl: Package,
         /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
-        openssl: NixValue,
+        openssl: Package,
         /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
-        zlib: NixValue,
+        zlib: Package,
         /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
-        expat: NixValue,
+        expat: Package,
         /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
-        python3: NixValue,
+        python3: Package,
         /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
-        gettext: NixValue,
+        gettext: Package,
         /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
-        cpio: NixValue,
+        cpio: Package,
         /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
-        gnugrep: NixValue,
+        gnugrep: Package,
         /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
-        gnused: NixValue,
+        gnused: Package,
         /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
-        gawk: NixValue,
+        gawk: Package,
         /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
-        coreutils: NixValue,
+        coreutils: Package,
         /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
-        openssh: NixValue,
+        openssh: Package,
         /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
-        pcre2: NixValue,
+        pcre2: Package,
         /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
-        bash: NixValue,
+        bash: Package,
         /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
-        asciidoc: NixValue,
+        asciidoc: Package,
         /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
-        texinfo: NixValue,
+        texinfo: Package,
         /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
-        xmlto: NixValue,
+        xmlto: Package,
         /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
-        docbook2x: NixValue,
+        docbook2x: Package,
         /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
         #[rusnix(rename = "docbook_xsl")]
-        docbook_xsl: NixValue,
+        docbook_xsl: Package,
         /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
         #[rusnix(rename = "docbook_xml_dtd_45")]
-        docbook_xml_dtd_45: NixValue,
+        docbook_xml_dtd_45: Package,
         /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
-        libxslt: NixValue,
+        libxslt: Package,
         /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
-        tcl: NixValue,
+        tcl: Package,
         /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
-        tk: NixValue,
+        tk: Package,
         /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
-        make_wrapper: NixValue,
+        make_wrapper: Package,
         /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
-        libiconv: NixValue,
+        libiconv: Package,
         /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
-        libiconv_real: NixValue,
+        libiconv_real: Package,
         /// Perl interpreter, library-path helper and gitweb dependencies.
         perl_packages: PerlPackages,
         /// Deferred feature choice, including Nix-resolved argument defaults.
@@ -103,33 +106,33 @@ pub(super) mod args {
         /// Deferred feature choice, including Nix-resolved argument defaults.
         do_install_check: bool,
         /// Caller-supplied dependency or test value; Nix owns its semantics.
-        subversion_client: NixValue,
+        subversion_client: Package,
         /// Caller-supplied dependency or test value; Nix owns its semantics.
-        perl_libs: NixValue,
+        perl_libs: NixList<Package>,
         /// Caller-supplied dependency or test value; Nix owns its semantics.
-        smtp_perl_libs: NixValue,
+        smtp_perl_libs: NixList<Package>,
         /// Caller-supplied dependency or test value; Nix owns its semantics.
         #[rusnix(rename = "Security")]
-        security: NixValue,
+        security: Package,
         /// Caller-supplied dependency or test value; Nix owns its semantics.
         #[rusnix(rename = "CoreServices")]
-        core_services: NixValue,
+        core_services: Package,
         /// Caller-supplied dependency or test value; Nix owns its semantics.
         nixos_tests: NixosTests,
         /// Caller-supplied dependency or test value; Nix owns its semantics.
         #[rusnix(rename = "pkg-config")]
-        pkg_config: NixValue,
+        pkg_config: Package,
         /// Caller-supplied dependency or test value; Nix owns its semantics.
-        glib: NixValue,
+        glib: Package,
         /// Caller-supplied dependency or test value; Nix owns its semantics.
-        libsecret: NixValue,
+        libsecret: Package,
         /// Caller-supplied dependency or test value; Nix owns its semantics.
-        gzip: NixValue,
+        gzip: Package,
         /// Caller-supplied dependency or test value; Nix owns its semantics.
-        sysctl: NixValue,
+        sysctl: Package,
         /// Caller-supplied dependency or test value; Nix owns its semantics.
         #[rusnix(rename = "deterministic-host-uname")]
-        deterministic_host_uname: NixValue,
+        deterministic_host_uname: Package,
         /// Caller-supplied dependency or test value; Nix owns its semantics.
         tests: Tests,
     }
@@ -139,7 +142,7 @@ pub(super) mod args {
     #[rusnix(value)]
     struct Stdenv {
         /// Existing mkDerivation function; Rusnix does not reimplement the builder.
-        mk_derivation: NixValue,
+        mk_derivation: NixCallable<Package>,
         /// Platform where Git will run.
         host_platform: Platform,
         /// Compiler metadata needed for the glibc linker workaround.
@@ -147,7 +150,7 @@ pub(super) mod args {
         /// Shell executable selected by stdenv.
         shell: String,
         /// Shell package excluded from cross-built runtime references.
-        shell_package: NixValue,
+        shell_package: Package,
     }
 
     /// Finite platform properties, plus whole-record equality for the native-build test.
@@ -179,7 +182,7 @@ pub(super) mod args {
     /// Only the build-platform interpreter is needed from this package set.
     struct BuildPackages {
         /// Interpreter used for documentation and installed checks in cross builds.
-        perl: NixValue,
+        perl: Package,
     }
 
     /// Perl package categories remain opaque; only the needed children are declared.
@@ -187,25 +190,25 @@ pub(super) mod args {
         /// Interpreter and the library-directory metadata needed for wrapper scripts.
         perl: Perl,
         /// Existing helper that formats Perl package library paths.
-        make_perl_path: NixValue,
+        make_perl_path: NixCallable<Expr<String>>,
         /// CGI dependencies used when wrapping gitweb.
         #[rusnix(rename = "CGI")]
-        cgi: NixValue,
+        cgi: Package,
         /// HTML parser used by gitweb.
         #[rusnix(rename = "HTMLParser")]
-        html_parser: NixValue,
+        html_parser: Package,
         /// FastCGI library used by gitweb.
         #[rusnix(rename = "CGIFast")]
-        cgi_fast: NixValue,
+        cgi_fast: Package,
         /// FastCGI bindings used by gitweb.
         #[rusnix(rename = "FCGI")]
-        fcgi: NixValue,
+        fcgi: Package,
         /// FastCGI process manager used by gitweb.
         #[rusnix(rename = "FCGIProcManager")]
-        fcgi_proc_manager: NixValue,
+        fcgi_proc_manager: Package,
         /// Tag-cloud library used by gitweb.
         #[rusnix(rename = "HTMLTagCloud")]
-        html_tag_cloud: NixValue,
+        html_tag_cloud: Package,
     }
 
     /// The Perl derivation remains opaque when used as a dependency or store path.
@@ -275,43 +278,69 @@ impl Inputs {
 }
 
 /// Supplies Git's explicit dependencies while callPackage selects the remaining scope.
-pub(super) fn arguments(model: super::model::Git) -> NixValue {
-    let mut fields = model.arguments();
+pub(super) fn arguments(model: super::model::Git) -> Arguments {
+    Arguments {
+        model,
+        openssl: None,
+    }
+}
 
-    // These explicit arguments reproduce Git's callPackage wiring in all-packages.nix.
-    // Other dependencies are selected by callPackage, including cross-build splicing.
-    let pkgs = Nixpkgs::new();
-    fields.extend([
-        (
-            "Security",
-            pkgs.value("darwin.apple_sdk.frameworks.Security"),
-        ),
-        (
-            "CoreServices",
-            pkgs.value("darwin.apple_sdk.frameworks.CoreServices"),
-        ),
-        (
-            "perlLibs",
-            NixValue::list(
-                ["LWP", "URI", "TermReadKey"]
+/// Named authoring inputs retain the model and supplied dependency until lowering.
+pub struct Arguments {
+    model: super::model::Git,
+    openssl: Option<Package>,
+}
+
+impl Arguments {
+    pub fn with_openssl(mut self, openssl: Package) -> Self {
+        self.openssl = Some(openssl);
+        self
+    }
+}
+
+impl IntoRusnixValue for Arguments {
+    #[track_caller]
+    fn into_value(self) -> RusnixValue {
+        let mut fields = self.model.arguments();
+
+        // These explicit arguments reproduce Git's callPackage wiring in all-packages.nix.
+        // Other dependencies are selected by callPackage, including cross-build splicing.
+        let pkgs = Nixpkgs::new();
+        fields.extend([
+            (
+                "Security",
+                pkgs.value("darwin.apple_sdk.frameworks.Security"),
+            ),
+            (
+                "CoreServices",
+                pkgs.value("darwin.apple_sdk.frameworks.CoreServices"),
+            ),
+            (
+                "perlLibs",
+                NixValue::list(
+                    ["LWP", "URI", "TermReadKey"]
+                        .map(|p| pkgs.get(&format!("perlPackages.{p}")).into()),
+                ),
+            ),
+            (
+                "smtpPerlLibs",
+                NixValue::list(
+                    [
+                        "libnet",
+                        "NetSMTPSSL",
+                        "IOSocketSSL",
+                        "NetSSLeay",
+                        "AuthenSASL",
+                        "DigestHMAC",
+                    ]
                     .map(|p| pkgs.get(&format!("perlPackages.{p}")).into()),
+                ),
             ),
-        ),
-        (
-            "smtpPerlLibs",
-            NixValue::list(
-                [
-                    "libnet",
-                    "NetSMTPSSL",
-                    "IOSocketSSL",
-                    "NetSSLeay",
-                    "AuthenSASL",
-                    "DigestHMAC",
-                ]
-                .map(|p| pkgs.get(&format!("perlPackages.{p}")).into()),
-            ),
-        ),
-    ]);
+        ]);
 
-    NixValue::record(fields)
+        if let Some(openssl) = self.openssl {
+            fields.push(("openssl", openssl.into()));
+        }
+        RusnixValue::leaf(NixValue::record(fields))
+    }
 }

@@ -42,7 +42,7 @@ fn classify(ty: &Type, locals: &BTreeSet<String>) -> syn::Result<Leaf> {
             "bool" | "i64" => "std::primitive",
             "String" => "std::string",
             "NixValue" | "Package" | "NixCallable" | "NixAttrs" | "NixList" | "Stdenv"
-            | "NixLibrary" | "PackageFunction" => "rusnix_ir::interop",
+            | "NixLibrary" | "PackageFunction" | "Overridable" => "rusnix_ir::interop",
             "Option" => "std::option",
             "Vec" => "std::vec",
             "BTreeMap" | "HashMap" => "std::collections",
@@ -63,7 +63,7 @@ fn classify(ty: &Type, locals: &BTreeSet<String>) -> syn::Result<Leaf> {
                 {
                     return Ok(Leaf::Expression);
                 }
-                "NixCallable" | "NixAttrs" | "NixList" | "PackageFunction" => {
+                "NixCallable" | "NixAttrs" | "NixList" | "PackageFunction" | "Overridable" => {
                     return Ok(Leaf::Expression);
                 }
                 "Option" | "Vec" | "BTreeMap" | "HashMap" => {
@@ -336,7 +336,9 @@ fn expand_from(mut module: ItemMod, source: Source) -> syn::Result<TokenStream> 
             if matches!(
                 name.to_string().as_str(),
                 "__rusnix_path" | "__rusnix_at" | "__rusnix_source"
-            ) || (view.value && name == "as_value")
+            ) || (view.value
+                && (name == "as_value"
+                    || (matches!(source, Source::Arguments) && name == "as_attrs")))
             {
                 return Err(syn::Error::new_spanned(
                     name,
@@ -516,6 +518,14 @@ fn expand_from(mut module: ItemMod, source: Source) -> syn::Result<TokenStream> 
 
         let expression_impl = (view.value && matches!(source, Source::Arguments)).then(|| {
             quote!(
+                impl #name {
+                    /// Retain this record as a deferred attribute set for shallow union.
+                    #[track_caller]
+                    pub fn as_attrs(&self) -> ::rusnix_ir::interop::NixAttrs {
+                        ::rusnix_ir::interop::NixExpression::from_expression(self.as_value())
+                    }
+                }
+
                 impl ::rusnix_ir::interop::NixExpression for #name {
                     fn from_expression(value: ::rusnix_ir::interop::NixValue) -> Self {
                         Self::__rusnix_at(value, ::std::vec::Vec::new())
@@ -736,6 +746,17 @@ mod tests {
         assert!(rejection(r#"mod options { #[rusnix(root)] struct Root { #[rusnix(rename = "")] port: i64 } }"#).contains("nonempty"));
         assert!(
             rejection("mod options { #[rusnix(root)] struct Root { __rusnix_path: i64 } }")
+                .contains("collides")
+        );
+    }
+
+    #[test]
+    fn attribute_accessors_cannot_be_shadowed() {
+        let arguments: syn::ItemMod = syn::parse_str("mod arguments { #[rusnix(root)] struct Root { value: Value } #[rusnix(value)] struct Value { as_attrs: String } }").unwrap();
+        assert!(
+            super::expand_args(arguments)
+                .unwrap_err()
+                .to_string()
                 .contains("collides")
         );
     }

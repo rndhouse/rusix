@@ -17,14 +17,19 @@ family forwarders. The four lazy defaults are declared once and shared by both
 interfaces. Only exceptional names such as `CoreServices`, `pkg-config`,
 `linux-pam` and `fmt_8` need explicit naming annotations. Fixed common/client/server
 refinements use `nix_record!`; dynamic fields retain ordinary Rust iteration.
-Boolean conjunction and native list concatenation use `NixValue::and` and
-`NixValue::concat_lists`; version comparisons use the supplied
-`NixLibrary::version_at_least` and `version_older`. Test-name text replacement
-uses `NixValue::replace_text`. These shared helpers preserve lazy evaluation
-and Rust call locations without local copies of their implementations.
+Boolean conjunction uses `Expr<bool>::and`; native list concatenation uses
+`NixList::concat` and `NixValue::concat_lists`. Version comparisons use the supplied
+`NixLibrary::version_at_least` and `version_older`; test-name text replacement
+uses `NixValue::replace_text`. These shared helpers retain lazy evaluation and
+Rust call locations without local copies of their implementations.
+Dependencies and source results retain `Package`; phase text uses `Expr<String>`,
+and dependency/flag lists retain their element interfaces.
+See [typed package authoring](../../docs/typed-package-values.md).
 
-The common attributes are shared lazily using an existing NixValue callback
-binding. This is ordinary Rust composition and Nix interop: no new derivation,
+The common attributes are a derived Rust `Common` record, shared lazily through
+a finite typed argument view using `try_bind_record`. The factory returns
+`PackageFunction<Package>` and the family returns `NixAttrs<Package>`. Its lexical
+factory binding retains `PackageFunction<Package>` without `as_value` conversion. This is ordinary Rust composition and Nix interop: no new derivation,
 CMake, platform, dependency, metadata or shell framework was added to core.
 The family export similarly shares one implementation and uses thin named-argument
 forwarders so every member retains the real callPackage override interface.

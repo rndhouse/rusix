@@ -1,7 +1,8 @@
 //! Call common functions from nixpkgs’ utility library without evaluating them in Rust.
 // Promote named helpers from demonstrated real-world usage; keep arbitrary lib
 // access on the existing NixValue escape hatch rather than mirroring nixpkgs.
-use super::{NixValue, replacement_lists};
+use super::{NixExpression, NixValue, replacement_lists};
+use crate::Expr;
 
 /// A Rust handle for nixpkgs’ utility library, `lib`.
 ///
@@ -50,11 +51,11 @@ impl NixLibrary {
     /// call. Rust does not read the library or execute the function.
     ///
     /// ```
-    /// use rusnix_ir::interop::{NixValue, Nixpkgs};
+    /// use rusnix_ir::interop::Nixpkgs;
     /// let lib = Nixpkgs::new().library();
-    /// let path = lib.as_value().clone().select("makeBinPath")
-    ///     .call(NixValue::list([Nixpkgs::new().get("curl").into()]));
-    /// // Represents lib.makeBinPath [pkgs.curl], evaluated later by Nix.
+    /// let headers = lib.as_value().clone().select("getDev")
+    ///     .apply([Nixpkgs::new().get("curl").into()]);
+    /// // Represents lib.getDev pkgs.curl, evaluated later by Nix.
     /// ```
     pub fn as_value(&self) -> &NixValue {
         &self.value
@@ -119,8 +120,9 @@ impl NixLibrary {
         &self,
         condition: impl Into<NixValue>,
         text: impl Into<NixValue>,
-    ) -> NixValue {
+    ) -> Expr<String> {
         self.apply("optionalString", [condition.into(), text.into()])
+            .into_expr()
     }
 
     /// Construct a Nix expression that tests whether every condition is true.
@@ -128,7 +130,7 @@ impl NixLibrary {
     /// The standard function returns true for an empty list and stops at the first
     /// false condition. Rust builds the expression; Nix checks boolean values.
     #[track_caller]
-    pub fn all(&self, conditions: impl IntoIterator<Item = impl Into<NixValue>>) -> NixValue {
+    pub fn all(&self, conditions: impl IntoIterator<Item = impl Into<NixValue>>) -> Expr<bool> {
         self.apply(
             "all",
             [
@@ -136,18 +138,42 @@ impl NixLibrary {
                 NixValue::list(conditions.into_iter().map(Into::into)),
             ],
         )
+        .into_expr()
     }
 
-    /// Test whether `version` is at least `minimum` using `lib.versionAtLeast`.
-    /// Rust constructs the comparison; the wrapped library compares the version
-    /// strings when Nix evaluates it. A caller's replacement remains authoritative.
+    /// Join several Nix lists into one, preserving their element order.
+    /// For example, `[[1], [2, 3]]` becomes `[1, 2, 3]` through `lib.concatLists`.
+    /// The standard function returns an empty list for no inputs and evaluates
+    /// element values only when they are needed.
+    #[track_caller]
+    pub fn concat_lists(&self, lists: impl IntoIterator<Item = NixValue>) -> NixValue {
+        self.apply("concatLists", [NixValue::list(lists)])
+    }
+
+    /// Compare deferred version strings using this exact caller-supplied library.
     #[track_caller]
     pub fn version_at_least(
         &self,
-        version: impl Into<NixValue>,
-        minimum: impl Into<NixValue>,
-    ) -> NixValue {
-        self.apply("versionAtLeast", [version.into(), minimum.into()])
+        version: impl Into<Expr<String>>,
+        minimum: impl Into<Expr<String>>,
+    ) -> Expr<bool> {
+        self.apply(
+            "versionAtLeast",
+            [version.into().into(), minimum.into().into()],
+        )
+        .into_expr()
+    }
+
+    /// Select the development output using the caller's normal getDev fallback.
+    #[track_caller]
+    pub fn get_dev(&self, package: super::Package) -> super::Package {
+        super::Package::from_expression(self.apply("getDev", [package.into()]))
+    }
+
+    /// Select the library output using the caller's normal getLib fallback.
+    #[track_caller]
+    pub fn get_lib(&self, package: super::Package) -> super::Package {
+        super::Package::from_expression(self.apply("getLib", [package.into()]))
     }
 
     /// Test whether `version` precedes `other` through the supplied `lib.versionOlder`.
@@ -157,24 +183,9 @@ impl NixLibrary {
         &self,
         version: impl Into<NixValue>,
         other: impl Into<NixValue>,
-    ) -> NixValue {
+    ) -> Expr<bool> {
         self.apply("versionOlder", [version.into(), other.into()])
-    }
-
-    /// Select a package's development output through the supplied `lib.getDev`.
-    /// The standard library falls back to the package's default output when no
-    /// development output exists. This is not a direct `.dev` attribute lookup.
-    #[track_caller]
-    pub fn get_dev(&self, package: impl Into<NixValue>) -> NixValue {
-        self.apply("getDev", [package.into()])
-    }
-
-    /// Select a package's library output through the supplied `lib.getLib`.
-    /// The standard library falls back to the package's default output when no
-    /// library output exists. A caller's replacement remains authoritative.
-    #[track_caller]
-    pub fn get_lib(&self, package: impl Into<NixValue>) -> NixValue {
-        self.apply("getLib", [package.into()])
+            .into_expr()
     }
 
     /// Replace text using ordered `(from, to)` pairs through the supplied `lib.replaceStrings`.
@@ -188,15 +199,5 @@ impl NixLibrary {
     ) -> NixValue {
         let [from, to] = replacement_lists(replacements);
         self.apply("replaceStrings", [from, to, text.into()])
-    }
-
-    /// Join several Nix lists into one, preserving their element order.
-    /// For example, `[[1], [2, 3]]` becomes `[1, 2, 3]` through `lib.concatLists`.
-    /// The standard function returns an empty list for no inputs and evaluates
-    /// element values only when they are needed.
-    /// Use [`NixValue::concat_lists`] for builtin concatenation independent of `lib`.
-    #[track_caller]
-    pub fn concat_lists(&self, lists: impl IntoIterator<Item = NixValue>) -> NixValue {
-        self.apply("concatLists", [NixValue::list(lists)])
     }
 }

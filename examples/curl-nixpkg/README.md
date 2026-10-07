@@ -114,15 +114,17 @@ This proves evaluation/derivation compatibility, not successful curl builds,
 protocol behavior, package tests or service execution. Upstream test/dependency
 packages remain existing nixpkgs packages, exactly as in the reference recipe.
 
-The Rust factory now returns `PackageFunction`, identifying its native named
-argument interface. Instantiation uses the explicit nixpkgs operation:
+The Rust factory returns `PackageFunction<Package>`, retaining the instantiated
+package interface through nixpkgs dependency injection:
 
 ```rust
-let factory: PackageFunction = lowering::factory();
-let curl = Nixpkgs::new().call_package(&factory, model::model().arguments());
+let factory: PackageFunction<Package> = lowering::factory();
+let curl: Package = Nixpkgs::new().try_call_package(&factory, model::model().arguments())?;
 ```
 
-The result remains `NixValue`; Nix validates the arguments and package body.
-`Config::set("factory", factory)` accepts the function directly. Explicit
-`factory.as_value()` or conversion to `NixValue` permits ordinary Nix function
-calls and inspection, preserving lazy defaults and provenance.
+Argument records implement `IntoRusnixValue` and lower only at the call boundary.
+Dependency accessors return `Package`, sources return through `Overridable<NixCallable<Package>>`,
+phase text uses `Expr<String>`, and package/flag lists retain their element types.
+`Config::set` accepts the factory and package directly. Dynamic fields remain
+available through `as_expression`; Nix validates external expectations lazily.
+See [typed package authoring](../../docs/typed-package-values.md).

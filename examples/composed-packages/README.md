@@ -12,28 +12,32 @@ fetchers, stdenv, builders, hooks and the unreplaced dependency graph.
 `graph.rs` is the authoring example. It constructs OpenSSL from the Rust factory,
 then supplies that deferred value explicitly to both Rust curl and Rust Git.
 The resulting Rust curl value is explicitly supplied to Rust MariaDB. It
-uses the existing `NixValue::function` callback bindings to share dependency values
+uses `NixExpression::bind` to share typed `Package` dependencies
 lazily in the generated expression. No package factory or source recipe is copied
 per dependent edge. Each package's `mod.rs` exposes its ordinary Rust factory.
 
 ```rust
-use rusnix_ir::{interop::Nixpkgs, nix_record};
-
 let pkgs = Nixpkgs::new();
-let openssl = pkgs.call_package(&openssl::factory(openssl::model::Release::Preview), arguments());
-let curl = pkgs.call_package(
-    &curl::factory(),
-    curl_arguments(&pkgs, openssl.clone()),
+let openssl: Package = pkgs.call_package(
+    &openssl::factory(openssl::model::Release::Preview), arguments(),
 );
-let git = pkgs.call_package(
-    &git::factory(),
-    git::arguments().merge_attrs(nix_record! { "openssl": openssl }),
-);
-let mariadb = pkgs.call_package(
+let curl: Package = pkgs.try_call_package(
+    &curl::factory(), curl_arguments(&pkgs, openssl.clone()),
+)?;
+let git: Package = pkgs.try_call_package(
+    &git::factory(), git::arguments().with_openssl(openssl),
+)?;
+let mariadb: Package = pkgs.call_package(
     &mariadb::factory(),
-    mariadb::model::Release::V1011.arguments().merge_attrs(nix_record! { "curl": curl }),
+    NixAttrs::try_from_record(mariadb::model::Release::V1011.arguments())?
+        .merge(NixAttrs::new([("curl", curl)])),
 );
 ```
+
+The full assembly in `graph.rs` returns `NixAttrs<Package>` and binds OpenSSL and
+curl once, retaining `Package` on the lexical parameters. Typed argument records
+lower at calls; neither packages nor factories need `as_value` conversions.
+See [typed package authoring](../../docs/typed-package-values.md).
 
 `cargo test --locked -p rusnix-nix --test composed` compares exact ATerm recipe
 bytes, derivation identities and all output paths. Tags attached through the

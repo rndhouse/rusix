@@ -11,7 +11,9 @@ use rusnix_ir::{Config, interop::Nixpkgs};
 
 fn main() {
     let factory = lowering::factory();
-    let mariadb = Nixpkgs::new().call_package(&factory, model::Release::V1011.arguments());
+    let mariadb = Nixpkgs::new()
+        .try_call_package(&factory, model::Release::V1011.arguments())
+        .expect("fixed authoring arguments");
     let generated = rusnix_nix::compile(
         &Config::new()
             .set("factory", factory)

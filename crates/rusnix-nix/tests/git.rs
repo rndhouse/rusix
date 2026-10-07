@@ -1,6 +1,6 @@
 //! Compares complete recipes and deferred package behavior without fetching or building.
 #[path = "../../../examples/git-nixpkg/inputs.rs"]
-mod inputs;
+pub mod inputs;
 
 #[path = "../../../examples/git-nixpkg/lowering.rs"]
 mod lowering;
@@ -9,7 +9,7 @@ mod lowering;
 mod model;
 
 use rusnix_ir::{
-    Config,
+    Config, Expr,
     interop::{InputRef, NixValue, Nixpkgs},
 };
 use rusnix_nix::{Generated, NixSession, RenderOptions, compile, compile_with_options};
@@ -475,8 +475,9 @@ fn ordinary_override_attrs_and_final_package_passthru() {
 fn rust_native_model_matches_ordinary_nix_consumers() {
     // This invokes the model's normal callPackage path, not the comparison fixture.
     let value = Nixpkgs::new()
-        .call_package(&lowering::factory(), inputs::arguments(model::model()))
-        .select("drvPath");
+        .try_call_package(&lowering::factory(), inputs::arguments(model::model()))
+        .expect("fixed authoring arguments")
+        .field::<Expr<String>>("drvPath");
     let artifact = compile(&Config::new().set("result", value)).unwrap();
     let session = session().lock().unwrap_or_else(|p| p.into_inner());
     let rust = session.evaluate_interop(&artifact).unwrap().value;
@@ -496,8 +497,9 @@ fn rust_native_model_matches_ordinary_nix_consumers() {
         ..model::Git::defaults()
     };
     let full = Nixpkgs::new()
-        .call_package(&lowering::factory(), inputs::arguments(full_model))
-        .select("pname");
+        .try_call_package(&lowering::factory(), inputs::arguments(full_model))
+        .expect("fixed authoring arguments")
+        .field::<Expr<String>>("pname");
     assert_eq!(
         session
             .evaluate_interop(&compile(&Config::new().set("result", full)).unwrap())
@@ -718,8 +720,11 @@ fn compare_without_lock(session: &NixSession, generated: Generated) {
 #[test]
 fn rust_call_package_preserves_the_exact_default_derivation() {
     let factory = lowering::factory();
-    let git = Nixpkgs::new().call_package(&factory, inputs::arguments(model::Git::defaults()));
-    let generated = compile(&Config::new().set("result", git.select("drvPath"))).unwrap();
+    let git = Nixpkgs::new()
+        .try_call_package(&factory, inputs::arguments(model::Git::defaults()))
+        .expect("fixed authoring arguments");
+    let generated =
+        compile(&Config::new().set("result", git.field::<Expr<String>>("drvPath"))).unwrap();
     let reference = artifact([]);
     let session = session().lock().unwrap_or_else(|p| p.into_inner());
     let value = session.evaluate_interop(&generated).unwrap().value;

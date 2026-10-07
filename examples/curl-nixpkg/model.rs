@@ -1,5 +1,5 @@
 //! Optional Rust-native choices; the public Nix factory still accepts upstream booleans.
-use rusnix_ir::interop::NixValue;
+use rusnix_ir::IntoRusnixValue;
 
 /// A concrete Rust choice can select at most one TLS implementation.
 /// Ordinary Nix callers retain independent booleans, checked by the factory in Nix.
@@ -32,33 +32,22 @@ pub struct Curl {
 
 impl Curl {
     /// Produce explicit callPackage arguments while leaving all other defaults in Nix.
-    pub fn arguments(self) -> NixValue {
-        let mut fields = vec![
-            ("http3Support", self.http3.into()),
-            ("websocketSupport", self.websocket.into()),
-        ];
-
-        if let Some(tls) = self.tls {
-            let selected = match tls {
-                TlsBackend::Disabled => [false, false, false, false],
-                TlsBackend::OpenSsl => [true, false, false, false],
-                TlsBackend::GnuTls => [false, true, false, false],
-                TlsBackend::WolfSsl => [false, false, true, false],
-                TlsBackend::Rustls => [false, false, false, true],
-            };
-            fields.extend(
-                [
-                    "opensslSupport",
-                    "gnutlsSupport",
-                    "wolfsslSupport",
-                    "rustlsSupport",
-                ]
-                .into_iter()
-                .zip(selected.map(NixValue::from)),
-            );
+    pub fn arguments(self) -> Arguments {
+        let selected = self.tls.map(|tls| match tls {
+            TlsBackend::Disabled => [false, false, false, false],
+            TlsBackend::OpenSsl => [true, false, false, false],
+            TlsBackend::GnuTls => [false, true, false, false],
+            TlsBackend::WolfSsl => [false, false, true, false],
+            TlsBackend::Rustls => [false, false, false, true],
+        });
+        Arguments {
+            http3_support: self.http3,
+            websocket_support: self.websocket,
+            openssl_support: selected.map(|flags| flags[0]),
+            gnutls_support: selected.map(|flags| flags[1]),
+            wolfssl_support: selected.map(|flags| flags[2]),
+            rustls_support: selected.map(|flags| flags[3]),
         }
-
-        NixValue::record(fields)
     }
 }
 
@@ -69,4 +58,16 @@ pub fn model() -> Curl {
         http3: true,
         websocket: false,
     }
+}
+
+/// Explicit choices; absent TLS flags preserve the native dependent defaults.
+#[derive(IntoRusnixValue)]
+#[rusnix(omit_none)]
+pub struct Arguments {
+    http3_support: bool,
+    websocket_support: bool,
+    openssl_support: Option<bool>,
+    gnutls_support: Option<bool>,
+    wolfssl_support: Option<bool>,
+    rustls_support: Option<bool>,
 }

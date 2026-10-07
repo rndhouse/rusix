@@ -6,16 +6,16 @@ mod support;
 
 use rusnix_ir::{
     Config,
-    interop::{NixValue, Nixpkgs},
+    interop::{NixAttrs, NixExpression, NixValue, Nixpkgs, Package},
 };
 
 fn compare(
     name: &str,
-    graph: NixValue,
+    graph: impl Into<NixValue>,
     fields: impl IntoIterator<Item = (&'static str, NixValue)>,
 ) -> serde_json::Value {
     let mut fields: Vec<_> = fields.into_iter().collect();
-    fields.push(("graph", graph));
+    fields.push(("graph", graph.into()));
     let artifact = support::artifact("composed", fields);
     support::compare("composed", name, artifact)
 }
@@ -45,35 +45,33 @@ fn connected_rust_graph_matches_all_default_exact_recipes() {
     );
 }
 
-fn tagged_graph() -> NixValue {
+fn tagged_graph() -> NixAttrs<Package> {
     let openssl = Nixpkgs::new().call_package(
         &graph::openssl::factory(graph::openssl::model::Release::Preview),
         graph::arguments(),
     );
-    let tagged = openssl
-        .select("overrideAttrs")
-        .call(NixValue::function(|old| {
-            NixValue::record([(
-                "passthru",
-                old.select("passthru")
-                    .merge_attrs(NixValue::record([("rusnixAuthor", "Rust OpenSSL".into())])),
-            )])
-        }));
+    let tagged = openssl.override_attrs(|old| {
+        NixAttrs::new([(
+            "passthru",
+            old.get("passthru")
+                .merge_attrs(NixValue::record([("rusnixAuthor", "Rust OpenSSL".into())])),
+        )])
+    });
     graph::compose(
         tagged,
         |pkgs, openssl| {
-            pkgs.call_package(
+            pkgs.try_call_package(
                 &graph::curl::factory(),
                 graph::curl_arguments(pkgs, openssl.clone()),
             )
-            .select("overrideAttrs")
-            .call(NixValue::function(|old| {
-                NixValue::record([(
+            .expect("fixed authoring arguments")
+            .override_attrs(|old| {
+                NixAttrs::new([(
                     "passthru",
-                    old.select("passthru")
+                    old.get("passthru")
                         .merge_attrs(NixValue::record([("rusnixAuthor", "Rust curl".into())])),
                 )])
-            }))
+            })
         },
         graph::mariadb::model::Release::V1011.arguments(),
     )
@@ -83,7 +81,7 @@ fn tagged_graph() -> NixValue {
 fn tagged_factory_values_prove_all_three_rust_edges() {
     let generated = support::artifact(
         "composed",
-        [("graph", tagged_graph()), ("probe", true.into())],
+        [("graph", tagged_graph().into()), ("probe", true.into())],
     );
     let value = evaluate("tagged-edges", &generated);
     assert_eq!(value["result"]["edges"]["curlOpenSSL"], "Rust OpenSSL");
@@ -102,8 +100,7 @@ fn live_openssl_argument_override_propagates_to_the_whole_rewritten_region() {
             &graph::openssl::factory(graph::openssl::model::Release::Preview),
             graph::arguments(),
         )
-        .select("override")
-        .call(NixValue::record([("withZlib", true.into())]));
+        .override_arguments(NixValue::record([("withZlib", true.into())]));
     let changed = compare(
         "openssl-zlib",
         graph::with_openssl(openssl),
@@ -121,14 +118,14 @@ fn live_openssl_argument_override_propagates_to_the_whole_rewritten_region() {
 fn ordinary_openssl_also_composes_and_unused_graph_stays_lazy() {
     compare(
         "ordinary-openssl",
-        graph::with_openssl(Nixpkgs::new().value("openssl")),
+        graph::with_openssl(Nixpkgs::new().get("openssl").into()),
         [],
     );
     let bad = NixValue::builtin("throw").call("unused OpenSSL");
     let generated = rusnix_nix::compile(
         &Config::new()
             .set("good", true)
-            .set("graph", graph::with_openssl(bad)),
+            .set("graph", graph::with_openssl(Package::from_expression(bad))),
     )
     .unwrap();
     let session = support::session().lock().unwrap_or_else(|p| p.into_inner());
@@ -172,10 +169,14 @@ fn generated_graph_shares_factories_and_dependencies_lexically() {
 
 #[test]
 fn curl_consuming_invalid_supplied_openssl_keeps_child_boundary() {
-    let generated = rusnix_nix::compile(&Config::new().set(
-        "result",
-        graph::with_openssl(1_i64.into()).select("curl.drvPath"),
-    ))
+    let generated = rusnix_nix::compile(
+        &Config::new().set(
+            "result",
+            graph::with_openssl(Package::from_expression(1_i64.into()))
+                .as_expression()
+                .select("curl.drvPath"),
+        ),
+    )
     .unwrap();
     let error = failure(
         "curl_consuming_invalid_supplied_openssl_keeps_child_boundary",
@@ -194,7 +195,8 @@ fn curl_consuming_invalid_supplied_openssl_keeps_child_boundary() {
 #[test]
 fn disabled_openssl_is_not_forced_by_composition_or_overrides() {
     let bad = NixValue::builtin("throw").call("excluded supplied OpenSSL");
-    let curl = graph::with_openssl(bad)
+    let curl = graph::with_openssl(Package::from_expression(bad))
+        .as_expression()
         .select("curl.override")
         .call(NixValue::record([("opensslSupport", false.into())]));
     let generated =
@@ -218,10 +220,14 @@ fn child_openssl_definition_failure_survives_the_full_graph() {
         &graph::openssl::factory(graph::openssl::model::Release::Preview),
         NixValue::record([("fetchurl", 1_i64.into())]),
     );
-    let generated = rusnix_nix::compile(&Config::new().set(
-        "result",
-        graph::with_openssl(openssl).select("mariadb.drvPath"),
-    ))
+    let generated = rusnix_nix::compile(
+        &Config::new().set(
+            "result",
+            graph::with_openssl(openssl)
+                .as_expression()
+                .select("mariadb.drvPath"),
+        ),
+    )
     .unwrap();
     let error = failure(
         "child_openssl_definition_failure_survives_the_full_graph",
@@ -240,18 +246,21 @@ fn child_openssl_definition_failure_survives_the_full_graph() {
 #[test]
 fn mariadb_consuming_failing_rust_curl_keeps_child_definition() {
     let graph = graph::compose(
-        Nixpkgs::new().value("openssl"),
+        Nixpkgs::new().get("openssl").into(),
         |pkgs, openssl| {
-            pkgs.call_package(
+            pkgs.try_call_package(
                 &graph::curl::factory(),
                 graph::curl_arguments(pkgs, openssl.clone())
-                    .merge_attrs(NixValue::record([("fetchurl", 1_i64.into())])),
+                    .with_overrides(NixAttrs::new([("fetchurl", 1_i64.into())])),
             )
+            .expect("fixed authoring arguments")
         },
         graph::mariadb::model::Release::V1011.arguments(),
     );
-    let generated =
-        rusnix_nix::compile(&Config::new().set("result", graph.select("mariadb.drvPath"))).unwrap();
+    let generated = rusnix_nix::compile(
+        &Config::new().set("result", graph.as_expression().select("mariadb.drvPath")),
+    )
+    .unwrap();
     let error = failure("mariadb-consuming-curl", &generated);
     assert!(error.reason.contains("call"));
     assert!(
@@ -268,12 +277,14 @@ fn mariadb_consuming_failing_rust_curl_keeps_child_definition() {
 #[test]
 fn delayed_stdenv_dependency_validation_retains_reason_and_honest_mapping_limit() {
     let graph = graph::compose(
-        Nixpkgs::new().value("openssl"),
-        |_, _| 1_i64.into(),
+        Nixpkgs::new().get("openssl").into(),
+        |_, _| Package::from_expression(1_i64.into()),
         graph::mariadb::model::Release::V1011.arguments(),
     );
-    let generated =
-        rusnix_nix::compile(&Config::new().set("result", graph.select("mariadb.drvPath"))).unwrap();
+    let generated = rusnix_nix::compile(
+        &Config::new().set("result", graph.as_expression().select("mariadb.drvPath")),
+    )
+    .unwrap();
     let error = failure("backend-invalid-dependency", &generated);
     assert!(
         error
@@ -312,8 +323,8 @@ fn failure(name: &str, generated: &rusnix_nix::Generated) -> rusnix_nix::Diagnos
 #[test]
 fn ordinary_curl_feeds_rust_mariadb_without_rewriting_its_closure() {
     let graph = graph::compose(
-        Nixpkgs::new().value("openssl"),
-        |pkgs, _| pkgs.value("curl"),
+        Nixpkgs::new().get("openssl").into(),
+        |pkgs, _| pkgs.get("curl").into(),
         graph::mariadb::model::Release::V1011.arguments(),
     );
     compare("ordinary-curl-rust-mariadb", graph, []);
@@ -327,7 +338,9 @@ fn rust_openssl_feeds_git_while_curl_and_mariadb_are_unforced() {
     );
     let graph = graph::compose(
         openssl,
-        |_, _| NixValue::builtin("throw").call("unrequested curl/MariaDB"),
+        |_, _| {
+            Package::from_expression(NixValue::builtin("throw").call("unrequested curl/MariaDB"))
+        },
         graph::mariadb::model::Release::V1011.arguments(),
     );
     compare(
@@ -341,7 +354,7 @@ fn rust_openssl_feeds_git_while_curl_and_mariadb_are_unforced() {
 fn ordinary_nix_definitions_consume_the_tagged_rust_dependency_values() {
     let generated = support::artifact(
         "composed",
-        [("graph", tagged_graph()), ("reverse", true.into())],
+        [("graph", tagged_graph().into()), ("reverse", true.into())],
     );
     let value = evaluate("reverse-consumers", &generated);
     for name in ["curl", "git", "mariadb"] {
@@ -395,10 +408,11 @@ fn two_openssl_releases_compose_with_all_four_mariadb_releases() {
             let graph = graph::compose(
                 openssl,
                 |pkgs, openssl| {
-                    pkgs.call_package(
+                    pkgs.try_call_package(
                         &graph::curl::factory(),
                         graph::curl_arguments(pkgs, openssl.clone()),
                     )
+                    .expect("fixed authoring arguments")
                 },
                 mariadb_release.arguments(),
             );
@@ -435,13 +449,14 @@ fn normal_mariadb_argument_override_remains_live_in_the_connected_graph() {
 #[test]
 fn excluded_openssl_stays_lazy_through_both_curl_and_mariadb() {
     let graph = graph::compose(
-        NixValue::builtin("throw").call("excluded OpenSSL graph node"),
+        Package::from_expression(NixValue::builtin("throw").call("excluded OpenSSL graph node")),
         |pkgs, openssl| {
-            pkgs.call_package(
+            pkgs.try_call_package(
                 &graph::curl::factory(),
                 graph::curl_arguments(pkgs, openssl.clone())
-                    .merge_attrs(NixValue::record([("opensslSupport", false.into())])),
+                    .with_overrides(NixAttrs::new([("opensslSupport", false.into())])),
             )
+            .expect("fixed authoring arguments")
         },
         graph::mariadb::model::Release::V1011.arguments(),
     );

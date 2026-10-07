@@ -561,9 +561,10 @@ fn assertions() -> NixValue {
 fn service_config() -> NixValue {
     let pg = options::root().services.postgresql;
     let package = effective_package();
-    let group_access = Nixpkgs::new()
-        .library()
-        .version_at_least(package.clone().select("version"), "11.0");
+    let group_access = Nixpkgs::new().library().version_at_least(
+        package.clone().select("version").into_expr::<String>(),
+        "11.0",
+    );
 
     let data = NixValue::from(pg.data_dir());
     let standard_data = nix_text!(
@@ -578,7 +579,7 @@ fn service_config() -> NixValue {
         r#type: NixValue::if_else(
             Nixpkgs::new()
                 .library()
-                .version_at_least(pg.package().select("version"), "9.6"),
+                .version_at_least(pg.package().select("version").into_expr::<String>(), "9.6"),
             "notify",
             "simple",
         ),

@@ -1,6 +1,8 @@
 //! The four pinned release variants share the same Rust recipe.
-use rusnix_ir::interop::{NixValue, Nixpkgs};
-use rusnix_ir::nix_record;
+use rusnix_ir::{
+    IntoRusnixValue,
+    interop::{Nixpkgs, Package},
+};
 
 #[derive(Clone, Copy, Debug)]
 pub enum Release {
@@ -40,12 +42,22 @@ impl Release {
         }
     }
 
-    pub fn arguments(self) -> NixValue {
-        nix_record! {
-            "version": self.version(),
-            "hash": self.hash(),
-            "CoreServices": Nixpkgs::new()
-                .value("darwin.apple_sdk.frameworks.CoreServices"),
+    pub fn arguments(self) -> Arguments {
+        Arguments {
+            version: self.version(),
+            hash: self.hash(),
+            core_services: Nixpkgs::new()
+                .get("darwin.apple_sdk.frameworks.CoreServices")
+                .into(),
         }
     }
+}
+
+/// Pinned release inputs; the framework stays a deferred package dependency.
+#[derive(IntoRusnixValue)]
+pub struct Arguments {
+    version: &'static str,
+    hash: &'static str,
+    #[rusnix(rename = "CoreServices")]
+    core_services: Package,
 }

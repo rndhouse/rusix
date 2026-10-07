@@ -1,15 +1,16 @@
 //! Pinned shell phases using text interpolation with retained store contexts.
-use rusnix_ir::{interop::NixValue, nix_text};
+use rusnix_ir::{Expr, nix_text};
 
-pub fn pre_patch() -> NixValue {
+pub fn pre_patch() -> Expr<String> {
     nix_text!(
         r#"
             sed -i 's,[^"]*/var/log,/var/log,g' storage/mroonga/vendor/groonga/CMakeLists.txt
         "#,
     )
+    .into_expr()
 }
 
-pub fn post_install_common() -> NixValue {
+pub fn post_install_common() -> Expr<String> {
     nix_text!(
         r#"
             # Remove Development components. Need to use libmysqlclient.
@@ -19,19 +20,20 @@ pub fn post_install_common() -> NixValue {
             rm -r $out/include
             rm -r $out/lib/pkgconfig
         "#,
-    )
+    ).into_expr()
 }
 
-pub fn post_fixup(bin_path: NixValue) -> NixValue {
+pub fn post_fixup(bin_path: Expr<String>) -> Expr<String> {
     nix_text!(
         r#"
             wrapProgram $out/bin/mytop --set PATH {bin_path}
         "#,
         bin_path = bin_path,
     )
+    .into_expr()
 }
 
-pub fn post_install_client(lib_ext: NixValue) -> NixValue {
+pub fn post_install_client(lib_ext: Expr<String>) -> Expr<String> {
     nix_text!(
         r#"
             rm "$out"/bin/{{mariadb-test,mysqltest}}
@@ -42,26 +44,29 @@ pub fn post_install_client(lib_ext: NixValue) -> NixValue {
         "#,
         lib_ext = lib_ext,
     )
+    .into_expr()
 }
 
-pub fn post_patch_server() -> NixValue {
+pub fn post_patch_server() -> Expr<String> {
     nix_text!(
         r#"
             substituteInPlace scripts/galera_new_cluster.sh \
               --replace ":-mariadb" ":-mysql"
         "#,
     )
+    .into_expr()
 }
 
-pub fn pre_configure() -> NixValue {
+pub fn pre_configure() -> Expr<String> {
     nix_text!(
         r#"
             patchShebangs scripts/mytop.sh
         "#,
     )
+    .into_expr()
 }
 
-pub fn post_install_server() -> NixValue {
+pub fn post_install_server() -> Expr<String> {
     nix_text!(
         r#"
             rm -r "$out"/share/aclocal
@@ -69,17 +74,19 @@ pub fn post_install_server() -> NixValue {
             rm -f "$out"/bin/{{mariadb-client-test,mariadb-test,mysql_client_test,mysqltest}}
         "#,
     )
+    .into_expr()
 }
 
-pub fn install_mroonga() -> NixValue {
+pub fn install_mroonga() -> Expr<String> {
     nix_text!(
         r#"
             mv "$out"/share/{{groonga,groonga-normalizer-mysql}} "$out"/share/doc/mysql
         "#,
     )
+    .into_expr()
 }
 
-pub fn install_pam() -> NixValue {
+pub fn install_pam() -> Expr<String> {
     nix_text!(
         r#"
             mv "$out"/OFF/suite/plugins/pam/pam_mariadb_mtr.so "$out"/share/pam/lib/security
@@ -87,4 +94,5 @@ pub fn install_pam() -> NixValue {
             rm -r "$out"/OFF
         "#,
     )
+    .into_expr()
 }

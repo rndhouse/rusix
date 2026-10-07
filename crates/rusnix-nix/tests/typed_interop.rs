@@ -268,3 +268,148 @@ fn typed_text_keeps_package_output_string_context() {
         .equals(NixValue::builtin("getContext").call(text));
     assert_eq!(evaluate(result), true);
 }
+
+#[test]
+fn structured_bindings_preserve_views_and_reject_before_building_the_callback() {
+    #[derive(IntoRusnixValue)]
+    struct Recipe {
+        name: &'static str,
+        enabled: bool,
+    }
+
+    let result = views::Recipe::try_bind_record(
+        Recipe {
+            name: "shared",
+            enabled: true,
+        },
+        |recipe| {
+            recipe
+                .as_attrs()
+                .merge(NixAttrs::new([("extra", "retained".into())]))
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        evaluate(result),
+        serde_json::json!({"name":"shared", "enabled":true, "extra":"retained"})
+    );
+
+    let called = std::cell::Cell::new(false);
+    let result = views::Recipe::try_bind_record(
+        InvalidArguments {
+            name: "invalid".into(),
+        },
+        |recipe| {
+            called.set(true);
+            recipe.name()
+        },
+    );
+    assert!(result.is_err());
+    assert!(!called.get());
+}
+
+#[test]
+fn typed_library_operations_retain_the_supplied_helpers_and_output_fallbacks() {
+    use rusnix_ir::interop::{NixExpression, NixLibrary};
+
+    let lib = Nixpkgs::new().library();
+    assert_eq!(evaluate(lib.version_at_least("3.3.2", "3.0")), true);
+    let openssl: Package = Nixpkgs::new().get("openssl").into();
+    assert_eq!(
+        evaluate(
+            lib.get_dev(openssl.clone())
+                .field::<Expr<String>>("outputName")
+        ),
+        "dev"
+    );
+    assert_eq!(
+        evaluate(lib.get_lib(openssl).field::<Expr<String>>("outputName")),
+        "out"
+    );
+    let single = Package::from_expression(NixValue::record([("name", "single-output".into())]));
+    assert_eq!(
+        evaluate(lib.get_dev(single.clone()).field::<Expr<String>>("name")),
+        "single-output"
+    );
+    assert_eq!(
+        evaluate(lib.get_lib(single).field::<Expr<String>>("name")),
+        "single-output"
+    );
+
+    let replaced =
+        NixLibrary::from_expression(lib.as_expression().merge_attrs(NixValue::record([
+            (
+                "versionAtLeast",
+                NixValue::function(|_| NixValue::function(|_| false.into())),
+            ),
+            (
+                "concatLists",
+                NixValue::function(|_| NixValue::list(["replacement".into()])),
+            ),
+            (
+                "getDev",
+                NixValue::function(|_| NixValue::record([("name", "replaced-dev".into())])),
+            ),
+            (
+                "getLib",
+                NixValue::function(|_| NixValue::record([("name", "replaced-lib".into())])),
+            ),
+        ])));
+    assert_eq!(evaluate(replaced.version_at_least("3.3.2", "3.0")), false);
+    let ignored: NixList<Expr<String>> = NixList::from_expression(
+        NixValue::builtin("throw").call("must remain excluded by supplied concatLists"),
+    );
+    assert_eq!(
+        evaluate(NixList::concat_with(&replaced, [ignored])),
+        serde_json::json!(["replacement"])
+    );
+    let ignored = Package::from_expression(NixValue::builtin("throw").call("excluded package"));
+    assert_eq!(
+        evaluate(
+            replaced
+                .get_dev(ignored.clone())
+                .field::<Expr<String>>("name")
+        ),
+        "replaced-dev"
+    );
+    assert_eq!(
+        evaluate(replaced.get_lib(ignored).field::<Expr<String>>("name")),
+        "replaced-lib"
+    );
+}
+
+#[test]
+fn explicit_override_capabilities_survive_binding_and_calling_fetchers() {
+    use rusnix_ir::interop::{NixOverridable, Overridable};
+
+    let pkgs = Nixpkgs::new();
+    let curl: Package = pkgs.get("curl").into();
+    let curl = curl.override_attrs(|old| {
+        NixAttrs::new([(
+            "passthru",
+            old.field::<NixAttrs>("passthru")
+                .merge(NixAttrs::new([("typedDependency", true.into())]))
+                .into(),
+        )])
+    });
+    let fetcher: Overridable<NixCallable<Package>> =
+        Overridable::from_expression(pkgs.value("fetchurl"));
+    let source: Package = fetcher.bind(|fetcher| {
+        fetcher
+            .override_arguments(NixAttrs::new([("curl", curl)]))
+            .extend(NixAttrs::new([("version", 1_i64.into())]))
+            .call(NixValue::record([
+                ("url", "https://example.invalid/typed-source.tar.xz".into()),
+                (
+                    "hash",
+                    "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=".into(),
+                ),
+            ]))
+    });
+    let first = NixCallable::<Package>::from_expression(NixValue::builtin("head"));
+    let dependency = first.call(source.field::<NixList<Package>>("nativeBuildInputs"));
+    assert_eq!(
+        evaluate(dependency.field::<Expr<bool>>("typedDependency")),
+        true
+    );
+}

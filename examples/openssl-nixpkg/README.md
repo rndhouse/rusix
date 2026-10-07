@@ -13,8 +13,8 @@ including unused upstream parameters. Naming annotations cover exceptions such
 as `enableSSL2`; ordinary names use the default lowerCamelCase mapping.
 Fixed opaque records use `nix_record!`, with iterators retained for release families
 and dynamic target tables.
-Boolean conjunction and native list concatenation use `NixValue::and` and
-`NixValue::concat_lists`; version comparisons use the supplied
+Boolean conjunction uses `Expr<bool>::and`; typed list concatenation uses
+`NixList::concat` and dynamic lists use `NixValue::concat_lists`. Version comparisons use the supplied
 `NixLibrary::version_at_least` and `version_older`. Text replacement uses
 `NixValue::replace_text`; native attribute checks and fallbacks use `has_attr`
 and `attr_or`, including dynamically selected configuration targets.
@@ -55,3 +55,9 @@ let openssl = pkgs.call_package(
     nix_record! {},
 );
 ```
+
+The independent factory returns `PackageFunction<Package>` and the family factory
+returns `PackageFunction<NixAttrs<Package>>`. The supplied `Stdenv`, `NixLibrary`,
+fetcher callable, package dependencies, phase text and dependency/flag lists retain
+their Rust interfaces. No package-family schema was added to core.
+See [typed package authoring](../../docs/typed-package-values.md).

@@ -14,7 +14,10 @@ mod scripts;
 mod support;
 
 use model::Release;
-use rusnix_ir::{Config, Expr, interop::NixValue};
+use rusnix_ir::{
+    Config, Expr,
+    interop::{NixAttrs, NixExpression, NixValue},
+};
 
 fn artifact(
     release: Release,
@@ -23,7 +26,7 @@ fn artifact(
     let mut fields: Vec<_> = fields.into_iter().collect();
     fields.extend([
         ("factory", lowering::factory().into()),
-        ("family", lowering::family()),
+        ("family", lowering::family().into()),
         ("release", release.attribute().into()),
         ("version", release.version().into()),
         ("hash", release.hash().into()),
@@ -175,19 +178,25 @@ fn excluded_dependencies_defaults_and_client_server_siblings_remain_lazy() {
             ]),
         )],
     );
-    let package = rusnix_ir::interop::Nixpkgs::new().call_package(
-        &lowering::factory(),
-        Release::V1011.arguments().merge_attrs(NixValue::record([
-            ("bison", bad),
-            (
-                "withStorageMroonga",
-                NixValue::builtin("throw").call("server-only default"),
-            ),
-        ])),
-    );
-    let generated =
-        rusnix_nix::compile(&Config::new().set("client", package.select("client.drvPath")))
-            .unwrap();
+    let package = rusnix_ir::interop::Nixpkgs::new()
+        .try_call_package(
+            &lowering::factory(),
+            NixAttrs::try_from_record(Release::V1011.arguments())
+                .unwrap()
+                .merge(NixAttrs::from_expression(NixValue::record([
+                    ("bison", bad),
+                    (
+                        "withStorageMroonga",
+                        NixValue::builtin("throw").call("server-only default"),
+                    ),
+                ]))),
+        )
+        .expect("fixed authoring arguments");
+    let generated = rusnix_nix::compile(&Config::new().set(
+        "client",
+        package.field::<rusnix_ir::Expr<String>>("client.drvPath"),
+    ))
+    .unwrap();
     support::session()
         .lock()
         .unwrap_or_else(|p| p.into_inner())

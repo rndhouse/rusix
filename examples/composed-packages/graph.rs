@@ -11,14 +11,14 @@ pub mod git;
 #[path = "../mariadb-nixpkg/mod.rs"]
 pub mod mariadb;
 
-use rusnix_ir::interop::{NixValue, Nixpkgs};
-use rusnix_ir::nix_record;
+use rusnix_ir::interop::{NixAttrs, NixExpression, NixValue, Nixpkgs, Package};
+use rusnix_ir::{IntoRusnixValue, RusnixValue, nix_record};
 
-pub fn arguments() -> NixValue {
-    nix_record! {}
+pub fn arguments() -> NixAttrs {
+    NixAttrs::new([] as [(&str, NixValue); 0])
 }
 
-pub fn graph() -> NixValue {
+pub fn graph() -> NixAttrs<Package> {
     let pkgs = Nixpkgs::new();
     let openssl = pkgs.call_package(
         &openssl::factory(openssl::model::Release::Preview),
@@ -28,56 +28,87 @@ pub fn graph() -> NixValue {
 }
 
 /// Accepting an ordinary package value keeps the replacement boundary movable.
-pub fn with_openssl(openssl: NixValue) -> NixValue {
+pub fn with_openssl(openssl: Package) -> NixAttrs<Package> {
     compose(
         openssl,
-        |pkgs, openssl| pkgs.call_package(&curl::factory(), curl_arguments(pkgs, openssl.clone())),
+        |pkgs, openssl| {
+            pkgs.try_call_package(&curl::factory(), curl_arguments(pkgs, openssl.clone()))
+                .expect("fixed authoring arguments")
+        },
         mariadb::model::Release::V1011.arguments(),
     )
 }
 
 /// Match the normal pkgs.curl flavour selected by MariaDB, rather than curlMinimal.
-pub fn curl_arguments(pkgs: &Nixpkgs, openssl: NixValue) -> NixValue {
-    nix_record! {
-        "openssl": openssl,
-        "idnSupport": true,
-        "pslSupport": true,
-        "zstdSupport": true,
+pub fn curl_arguments(pkgs: &Nixpkgs, openssl: Package) -> CurlArguments {
+    CurlArguments {
+        openssl,
+        extra: NixAttrs::choose(
+            (!pkgs.value("stdenv.hostPlatform.isStatic")).into_expr::<bool>(),
+            NixAttrs::new([("brotliSupport", true.into())]),
+            arguments(),
+        ),
     }
-    .merge_attrs(NixValue::if_else(
-        !pkgs.value("stdenv.hostPlatform.isStatic"),
-        nix_record! { "brotliSupport": true },
-        arguments(),
-    ))
+}
+
+/// Typed dependency wiring with a deferred partial record for dynamic interop.
+pub struct CurlArguments {
+    openssl: Package,
+    extra: NixAttrs,
+}
+
+impl CurlArguments {
+    /// Additional overrides take precedence without reconstructing the dependency.
+    pub fn with_overrides(mut self, overrides: NixAttrs) -> Self {
+        self.extra = self.extra.merge(overrides);
+        self
+    }
+}
+
+impl IntoRusnixValue for CurlArguments {
+    #[track_caller]
+    fn into_value(self) -> RusnixValue {
+        RusnixValue::leaf(
+            NixAttrs::from_expression(nix_record! {
+                "openssl": self.openssl,
+                "idnSupport": true,
+                "pslSupport": true,
+                "zstdSupport": true,
+            })
+            .merge(self.extra),
+        )
+    }
 }
 
 /// Ordinary Rust callbacks allow replacing either side of the authoring boundary.
 pub fn compose(
-    openssl: NixValue,
-    make_curl: impl FnOnce(&Nixpkgs, &NixValue) -> NixValue,
-    mariadb_arguments: NixValue,
-) -> NixValue {
+    openssl: Package,
+    make_curl: impl FnOnce(&Nixpkgs, &Package) -> Package,
+    mariadb_arguments: impl IntoRusnixValue,
+) -> NixAttrs<Package> {
     let pkgs = Nixpkgs::new();
     // Existing callbacks supply lazy lexical bindings, sharing each dependency once.
-    NixValue::function(|openssl| {
+    openssl.bind(|openssl| {
         let curl = make_curl(&pkgs, &openssl);
-        let git = pkgs.call_package(
-            &git::factory(),
-            git::arguments().merge_attrs(nix_record! { "openssl": openssl.clone() }),
-        );
-        NixValue::function(|curl| {
+        let git = pkgs
+            .try_call_package(
+                &git::factory(),
+                git::arguments().with_openssl(openssl.clone()),
+            )
+            .expect("fixed authoring arguments");
+        curl.bind(|curl| {
             let mariadb = pkgs.call_package(
                 &mariadb::factory(),
-                mariadb_arguments.merge_attrs(nix_record! { "curl": curl.clone() }),
+                NixAttrs::try_from_record(mariadb_arguments)
+                    .expect("fixed MariaDB arguments")
+                    .merge(NixAttrs::new([("curl", curl.clone().into())])),
             );
-            nix_record! {
-                "openssl": openssl,
-                "curl": curl,
-                "git": git,
-                "mariadb": mariadb,
-            }
+            NixAttrs::new([
+                ("openssl", openssl),
+                ("curl", curl),
+                ("git", git),
+                ("mariadb", mariadb),
+            ])
         })
-        .call(curl)
     })
-    .call(openssl)
 }

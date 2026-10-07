@@ -5,13 +5,16 @@ use super::{
     scripts,
 };
 use rusnix_ir::{
-    IntoRusnixValue,
-    interop::{NixLibrary, NixValue, Nixpkgs, PackageFunction},
-    nix_record, nix_text, package,
+    Expr, IntoRusnixValue,
+    interop::{
+        NixAttrs, NixCallable, NixExpression, NixLibrary, NixList, NixValue, Nixpkgs, Package,
+        PackageFunction,
+    },
+    nix_record, nix_text,
 };
 
 /// The default nixpkgs OpenSSL is the 3.3 preview release at this pin.
-pub fn factory(release: Release) -> PackageFunction {
+pub fn factory(release: Release) -> PackageFunction<Package> {
     PackageFunction::from_function_attrs(args::argument_names().iter().copied(), |arguments| {
         let i = args::from_value(arguments);
         let defaults = defaults(&i);
@@ -20,14 +23,12 @@ pub fn factory(release: Release) -> PackageFunction {
 }
 
 /// Preserve upstream's multi-result family interface without duplicating recipe policy.
-pub fn family_factory() -> PackageFunction {
+pub fn family_factory() -> PackageFunction<NixAttrs<Package>> {
     PackageFunction::from_function_attrs(args::argument_names().iter().copied(), |arguments| {
         let i = args::from_value(arguments);
         (
             defaults(&i),
-            NixValue::record(
-                Release::ALL.map(|release| (release.attribute(), common(&i, release))),
-            ),
+            NixAttrs::new(Release::ALL.map(|release| (release.attribute(), common(&i, release)))),
         )
     })
 }
@@ -39,20 +40,28 @@ fn defaults(i: &Inputs) -> Vec<(&'static str, NixValue)> {
         ("enableSSL2", false.into()),
         ("enableSSL3", false.into()),
         ("enableMD2", false.into()),
-        ("enableKTLS", host(i, "isLinux")),
-        ("static", host(i, "isStatic")),
+        ("enableKTLS", host_bool(i, "isLinux").into()),
+        ("static", host_bool(i, "isStatic").into()),
         ("conf", NixValue::null()),
     ]
 }
 
 #[track_caller]
 fn host(i: &Inputs, field: &str) -> NixValue {
-    i.stdenv().select("hostPlatform").select(field)
+    i.stdenv()
+        .as_expression()
+        .select("hostPlatform")
+        .select(field)
 }
 
-fn common(i: &Inputs, release: Release) -> NixValue {
-    let lib = NixLibrary::from_value(i.lib());
-    let version: NixValue = release.version().into();
+#[track_caller]
+fn host_bool(i: &Inputs, field: &str) -> Expr<bool> {
+    host(i, field).into_expr::<bool>()
+}
+
+fn common(i: &Inputs, release: Release) -> Package {
+    let lib = i.lib();
+    let version: Expr<String> = release.version().into();
     let path = |file: &str| {
         Nixpkgs::new().source_path(&format!("pkgs/development/libraries/openssl/{file}"))
     };
@@ -64,7 +73,7 @@ fn common(i: &Inputs, release: Release) -> NixValue {
         patches.push(path("3.0/openssl-disable-kernel-detection.patch"));
     }
     patches.push(NixValue::if_else(
-        host(i, "isDarwin"),
+        host_bool(i, "isDarwin"),
         path(if matches!(release, Release::Preview) {
             "3.3/use-etc-ssl-certs-darwin.patch"
         } else {
@@ -82,12 +91,11 @@ fn common(i: &Inputs, release: Release) -> NixValue {
                 "OpenSSL 1.1 is reaching its end of life on 2023/09/11 and cannot be supported through the NixOS 23.11 release cycle. https://www.openssl.org/blog/blog/2023/03/28/1.1.1-EOL/".into(),
             ]),
         },
-        _ => nix_record! { "license": i.lib().select("licenses.asl20") },
+        _ => nix_record! { "license": i.lib().as_expression().select("licenses.asl20") },
     };
     // Upstream's version/hash are lexically captured by common, not finalAttrs.
-    i.stdenv()
-        .select("mkDerivation")
-        .call(NixValue::function(|final_attrs| {
+    i.stdenv().mk_derivation(
+        NixCallable::<NixAttrs>::try_from_function(|final_attrs: NixAttrs| {
             attributes(
                 i,
                 &lib,
@@ -98,7 +106,9 @@ fn common(i: &Inputs, release: Release) -> NixValue {
                 extra_meta,
                 final_attrs,
             )
-        }))
+        })
+        .expect("fixed OpenSSL recipe"),
+    )
 }
 
 /// The common recipe parameters mirror the upstream shared function, not a core schema.
@@ -106,17 +116,17 @@ fn common(i: &Inputs, release: Release) -> NixValue {
 fn attributes(
     i: &Inputs,
     lib: &NixLibrary,
-    version: NixValue,
-    hash: NixValue,
+    version: Expr<String>,
+    hash: Expr<String>,
     patches: NixValue,
-    with_docs: NixValue,
+    with_docs: Expr<bool>,
     extra_meta: NixValue,
-    final_attrs: NixValue,
-) -> NixValue {
+    final_attrs: NixAttrs,
+) -> Recipe {
     let modern = lib.version_at_least(version.clone(), "1.1.1");
     let v3 = lib.version_at_least(version.clone(), "3.0.0");
     let old = lib.version_older(version.clone(), "3.0");
-    let fixed = version.clone().replace_text([(".", "_")]);
+    let fixed = version.as_expression().replace_text([(".", "_")]);
     let source = i.fetchurl().call(nix_record! {
         "url": NixValue::if_else(
             old,
@@ -124,49 +134,62 @@ fn attributes(
                 "https://github.com/openssl/openssl/releases/download/OpenSSL_{fixed}/openssl-{version}.tar.gz",
                 fixed = fixed,
                 version = version.clone(),
-            ),
+            ).into_expr::<String>(),
             nix_text!(
                 "https://github.com/openssl/openssl/releases/download/openssl-{version}/openssl-{version}.tar.gz",
                 version = version.clone(),
-            ),
+            ).into_expr::<String>(),
         ),
         "hash": hash,
     });
-    let flags = NixValue::concat_lists([
-        NixValue::list([
+    let flags = NixList::concat([
+        NixList::<Expr<String>>::new([
             "shared".into(),
             "--libdir=lib".into(),
-            NixValue::if_else(
+            Expr::choose(
                 i.static_build(),
-                "--openssldir=/.$(etc)/etc/ssl",
-                "--openssldir=etc/ssl",
+                "--openssldir=/.$(etc)/etc/ssl".into(),
+                "--openssldir=etc/ssl".into(),
             ),
         ]),
-        lib.optionals(
-            i.with_cryptodev(),
-            NixValue::list(["-DHAVE_CRYPTODEV".into(), "-DUSE_CRYPTODEV_DIGESTS".into()]),
+        (NixList::<Expr<String>>::new([
+            "-DHAVE_CRYPTODEV".into(),
+            "-DUSE_CRYPTODEV_DIGESTS".into(),
+        ]))
+        .when(lib, i.with_cryptodev()),
+        NixList::optional(lib, i.enable_md2(), "enable-md2".into()),
+        NixList::optional(lib, i.enable_ssl2(), "enable-ssl2".into()),
+        NixList::optional(lib, i.enable_ssl3(), "enable-ssl3".into()),
+        NixList::optional(lib, (v3.clone()).and(i.enable_ktls()), "enable-ktls".into()),
+        NixList::optional(
+            lib,
+            (modern.clone()).and(host_bool(i, "isAarch64")),
+            "no-afalgeng".into(),
         ),
-        lib.optional(i.enable_md2(), "enable-md2"),
-        lib.optional(i.enable_ssl2(), "enable-ssl2"),
-        lib.optional(i.enable_ssl3(), "enable-ssl3"),
-        lib.optional(v3.clone().and(i.enable_ktls()), "enable-ktls"),
-        lib.optional(modern.clone().and(host(i, "isAarch64")), "no-afalgeng"),
-        lib.optional(modern.clone().and(i.static_build()), "no-shared"),
-        lib.optional(v3.and(i.static_build()), "no-module"),
-        lib.optional(i.static_build(), "no-ct"),
-        lib.optional(i.with_zlib(), "zlib"),
-        lib.optional(host(i, "isOpenBSD"), "no-devcryptoeng"),
-        lib.optionals(
-            host(i, "isMips").and(
-                i.stdenv()
+        NixList::optional(
+            lib,
+            (modern.clone()).and(i.static_build()),
+            "no-shared".into(),
+        ),
+        NixList::optional(lib, (v3).and(i.static_build()), "no-module".into()),
+        NixList::optional(lib, i.static_build(), "no-ct".into()),
+        NixList::optional(lib, i.with_zlib(), "zlib".into()),
+        NixList::optional(lib, host_bool(i, "isOpenBSD"), "no-devcryptoeng".into()),
+        (NixList::<Expr<String>>::new([nix_text!(
+            "CFLAGS=-march={arch}",
+            arch = host(i, "gcc.arch")
+        )
+        .into_expr::<String>()]))
+        .when(
+            lib,
+            (host_bool(i, "isMips")).and(
+                (i.stdenv()
+                    .as_expression()
                     .select("hostPlatform")
                     .has_attr("gcc")
-                    .and(host(i, "gcc").has_attr("arch")),
+                    .into_expr::<bool>())
+                .and(host(i, "gcc").has_attr("arch").into_expr::<bool>()),
             ),
-            NixValue::list([nix_text!(
-                "CFLAGS=-march={arch}",
-                arch = host(i, "gcc.arch")
-            )]),
         ),
     ]);
     Recipe {
@@ -174,59 +197,70 @@ fn attributes(
         version: version.clone(),
         src: source,
         patches,
-        post_patch: NixValue::concat_text([
+        post_patch: Expr::concat([
             scripts::patch_configure(),
             lib.optional_text(!modern.clone(), scripts::patch_old_tests()),
             lib.optional_text(
                 modern.clone(),
-                scripts::patch_env(i.build_packages().select("coreutils")),
+                scripts::patch_env(Package::from_expression(
+                    i.build_packages().select("coreutils"),
+                )),
             ),
-            lib.optional_text(modern.and(host(i, "isMusl")), scripts::patch_musl()),
+            lib.optional_text((modern).and(host_bool(i, "isMusl")), scripts::patch_musl()),
             lib.optional_text(i.static_build(), scripts::patch_static_engines()),
         ]),
-        outputs: NixValue::concat_lists([
-            NixValue::list(["bin".into(), "dev".into(), "out".into(), "man".into()]),
-            lib.optional(with_docs, "doc"),
-            lib.optional(i.static_build(), "etc"),
+        outputs: NixList::concat([
+            NixList::<Expr<String>>::new(["bin".into(), "dev".into(), "out".into(), "man".into()]),
+            NixList::optional(lib, with_docs, "doc".into()),
+            NixList::optional(lib, i.static_build(), "etc".into()),
         ]),
         set_output_flags: false,
-        separate_debug_info: (!host(i, "isDarwin")).and(
-            (!i.stdenv().select("hostPlatform").attr_or("useLLVM", false))
-                .and(i.stdenv().select("cc.isGNU")),
+        separate_debug_info: (!host_bool(i, "isDarwin")).and(
+            (!i.stdenv()
+                .as_expression()
+                .select("hostPlatform")
+                .attr_or("useLLVM", false)
+                .into_expr::<bool>())
+            .and(
+                i.stdenv()
+                    .as_expression()
+                    .select("cc.isGNU")
+                    .into_expr::<bool>(),
+            ),
         ),
-        native_build_inputs: NixValue::concat_lists([
-            lib.optional(!host(i, "isWindows"), i.make_binary_wrapper()),
-            NixValue::list([i.perl()]),
-            lib.optionals(i.static_build(), NixValue::list([i.remove_references_to()])),
+        native_build_inputs: NixList::concat([
+            NixList::optional(lib, !host_bool(i, "isWindows"), i.make_binary_wrapper()),
+            NixList::new([i.perl()]),
+            (NixList::new([i.remove_references_to()])).when(lib, i.static_build()),
         ]),
-        build_inputs: NixValue::concat_lists([
-            lib.optional(i.with_cryptodev(), i.cryptodev()),
-            lib.optional(i.with_zlib(), i.zlib()),
+        build_inputs: NixList::concat([
+            NixList::optional(lib, i.with_cryptodev(), i.cryptodev()),
+            NixList::optional(lib, i.with_zlib(), i.zlib()),
         ]),
-        configure_platforms: Vec::<NixValue>::new(),
+        configure_platforms: Vec::<Expr<String>>::new(),
         configure_script: configure_script(i, lib, &version),
         dont_add_static_configure_flags: true,
         configure_flags: flags,
         make_flags: vec!["MANDIR=$(man)/share/man", "MANSUFFIX=ssl"],
         enable_parallel_building: true,
-        post_install: NixValue::concat_text([
-            NixValue::if_else(
+        post_install: Expr::concat([
+            Expr::choose(
                 i.static_build(),
                 scripts::install_static(),
                 scripts::install_shared(),
             ),
             scripts::install_bin(),
-            lib.optional_text(!host(i, "isWindows"), scripts::install_rehash()),
+            lib.optional_text(!host_bool(i, "isWindows"), scripts::install_rehash()),
             scripts::install_dev(),
             lib.optional_text(
                 !i.conf().equals(NixValue::null()),
                 scripts::install_conf(i.conf()),
             ),
         ]),
-        post_fixup: NixValue::concat_text([
+        post_fixup: Expr::concat([
             lib.optional_text(
-                !host(i, "isWindows"),
-                scripts::fixup_perl(i.build_packages().select("perl")),
+                !host_bool(i, "isWindows"),
+                scripts::fixup_perl(Package::from_expression(i.build_packages().select("perl"))),
             ),
             lib.optional_text(
                 lib.version_at_least(version.clone(), "3.3.0"),
@@ -237,7 +271,7 @@ fn attributes(
             "tests": nix_record! {
                 "pkg-config": i.testers()
                     .select("testMetaPkgConfig")
-                    .call(final_attrs.select("finalPackage")),
+                    .call(final_attrs.field::<Package>("finalPackage")),
             },
         },
         meta: nix_record! {
@@ -245,82 +279,86 @@ fn attributes(
             "changelog": nix_text!(
                 "https://github.com/openssl/openssl/blob/openssl-{version}/CHANGES.md",
                 version = version,
-            ),
+            ).into_expr::<String>(),
             "description": "Cryptographic library that implements the SSL and TLS protocols",
-            "license": i.lib().select("licenses.openssl"),
+            "license": i.lib().as_expression().select("licenses.openssl"),
             "mainProgram": "openssl",
             "maintainers": NixValue::concat_lists([
-                NixValue::list([i.lib().select("maintainers.thillux")]),
-                i.lib().select("teams.stridtech.members"),
+                NixValue::list([i.lib().as_expression().select("maintainers.thillux")]),
+                i.lib().as_expression().select("teams.stridtech.members"),
             ]),
             "pkgConfigModules": NixValue::list([
                 "libcrypto".into(), "libssl".into(), "openssl".into(),
             ]),
-            "platforms": i.lib().select("platforms.all"),
+            "platforms": i.lib().as_expression().select("platforms.all"),
         }
         .merge_attrs(extra_meta),
     }
-    .try_into_nix_value()
-    .expect("fixed OpenSSL recipe")
 }
 
-fn configure_script(i: &Inputs, lib: &NixLibrary, version: &NixValue) -> NixValue {
+fn configure_script(i: &Inputs, lib: &NixLibrary, version: &Expr<String>) -> Expr<String> {
     let bits = host(i, "parsed.cpu.bits");
     let bsd = NixValue::if_else(
-        host(i, "isx86_64"),
+        host_bool(i, "isx86_64"),
         "./Configure BSD-x86_64",
         NixValue::if_else(
-            host(i, "isx86_32"),
+            host_bool(i, "isx86_32"),
             nix_text!(
                 "./Configure BSD-x86{elf}",
-                elf = lib.optional_text(host(i, "isElf"), "-elf")
-            ),
-            nix_text!("./Configure BSD-generic{bits}", bits = bits.clone()),
+                elf = lib.optional_text(host_bool(i, "isElf"), "-elf")
+            )
+            .into_expr::<String>(),
+            nix_text!("./Configure BSD-generic{bits}", bits = bits.clone()).into_expr::<String>(),
         ),
     );
     let linux = NixValue::if_else(
-        host(i, "isx86_64"),
+        host_bool(i, "isx86_64"),
         "./Configure linux-x86_64",
         NixValue::if_else(
-            host(i, "isMicroBlaze"),
+            host_bool(i, "isMicroBlaze"),
             "./Configure linux-latomic",
             NixValue::if_else(
-                host(i, "isMips32"),
+                host_bool(i, "isMips32"),
                 "./Configure linux-mips32",
                 NixValue::if_else(
-                    host(i, "isMips64n32"),
+                    host_bool(i, "isMips64n32"),
                     "./Configure linux-mips64",
                     NixValue::if_else(
-                        host(i, "isMips64n64"),
+                        host_bool(i, "isMips64n64"),
                         "./Configure linux64-mips64",
-                        nix_text!("./Configure linux-generic{bits}", bits = bits.clone()),
+                        nix_text!("./Configure linux-generic{bits}", bits = bits.clone())
+                            .into_expr::<String>(),
                     ),
                 ),
             ),
         ),
     );
     let fallback = NixValue::if_else(
-        package::build_host_equal(i.stdenv()),
+        i.stdenv().build_host_equal(),
         "./config",
         NixValue::if_else(
-            host(i, "isBSD"),
+            host_bool(i, "isBSD"),
             bsd,
             NixValue::if_else(
-                host(i, "isMinGW"),
+                host_bool(i, "isMinGW"),
                 nix_text!(
                     "./Configure mingw{bits}",
                     bits = lib.optional_text(!bits.clone().equals(32_i64), bits.clone().to_text())
-                ),
+                )
+                .into_expr::<String>(),
                 NixValue::if_else(
-                    host(i, "isLinux"),
+                    host_bool(i, "isLinux"),
                     linux,
                     NixValue::if_else(
-                        host(i, "isiOS"),
-                        nix_text!("./Configure ios{bits}-cross", bits = bits),
-                        NixValue::builtin("throw").call(nix_text!(
-                            "Not sure what configuration to use for {config}",
-                            config = host(i, "config")
-                        )),
+                        host_bool(i, "isiOS"),
+                        nix_text!("./Configure ios{bits}-cross", bits = bits).into_expr::<String>(),
+                        NixValue::builtin("throw").call(
+                            nix_text!(
+                                "Not sure what configuration to use for {config}",
+                                config = host(i, "config")
+                            )
+                            .into_expr::<String>(),
+                        ),
                     ),
                 ),
             ),
@@ -349,29 +387,31 @@ fn configure_script(i: &Inputs, lib: &NixLibrary, version: &NixValue) -> NixValu
         ),
     ));
     // Dynamic attribute lookup/fallback is appropriate NixValue interop; no platform schema.
-    NixValue::record(targets).attr_or(host(i, "system"), fallback)
+    NixValue::record(targets)
+        .attr_or(host(i, "system"), fallback)
+        .into_expr::<String>()
 }
 
 #[derive(IntoRusnixValue)]
 struct Recipe {
     pname: &'static str,
-    version: NixValue,
-    src: NixValue,
+    version: Expr<String>,
+    src: Package,
     patches: NixValue,
-    post_patch: NixValue,
-    outputs: NixValue,
+    post_patch: Expr<String>,
+    outputs: NixList<Expr<String>>,
     set_output_flags: bool,
-    separate_debug_info: NixValue,
-    native_build_inputs: NixValue,
-    build_inputs: NixValue,
-    configure_platforms: Vec<NixValue>,
-    configure_script: NixValue,
+    separate_debug_info: Expr<bool>,
+    native_build_inputs: NixList<Package>,
+    build_inputs: NixList<Package>,
+    configure_platforms: Vec<Expr<String>>,
+    configure_script: Expr<String>,
     dont_add_static_configure_flags: bool,
-    configure_flags: NixValue,
+    configure_flags: NixList<Expr<String>>,
     make_flags: Vec<&'static str>,
     enable_parallel_building: bool,
-    post_install: NixValue,
-    post_fixup: NixValue,
+    post_install: Expr<String>,
+    post_fixup: Expr<String>,
     passthru: NixValue,
     meta: NixValue,
 }

@@ -4,7 +4,7 @@ use rusnix_ir as rusnix;
 /// Local views describe only the external Nix values used by this compatibility adapter.
 #[rusnix::args]
 pub(super) mod args {
-    use rusnix_ir::interop::NixValue;
+    use rusnix_ir::interop::{NixCallable, NixValue, Overridable, Package};
 
     /// Deferred package dependencies and features, resolved by callPackage or an ordinary caller.
     #[rusnix(root)]
@@ -14,95 +14,95 @@ pub(super) mod args {
         /// Standard builder, compiler, and build/host platform records.
         stdenv: Stdenv,
         /// Bootstrap source fetcher; constructing its derivation does not fetch.
-        fetchurl: NixValue,
+        fetchurl: Overridable<NixCallable<Package>>,
         /// Apple framework packages used by the Darwin dependency branch.
         darwin: Darwin,
         /// Build-platform tool that supplies dependency flags.
         #[rusnix(rename = "pkg-config")]
-        pkg_config: NixValue,
+        pkg_config: Package,
         /// Build-platform interpreter used by curl scripts.
-        perl: NixValue,
+        perl: Package,
         /// Existing NixOS tests retained as passthru references.
         nixos_tests: NixosTests,
         /// Enables Brotli response decompression.
         brotli_support: bool,
         /// Brotli library propagated when that decompression feature is selected.
-        brotli: NixValue,
+        brotli: Package,
         /// Selects asynchronous DNS resolution through c-ares.
         #[rusnix(rename = "c-aresSupport")]
         c_ares_support: bool,
         /// Minimal c-ares package used by the asynchronous DNS branch.
         #[rusnix(rename = "c-aresMinimal")]
-        c_ares_minimal: NixValue,
+        c_ares_minimal: Package,
         /// Selects GnuTLS; the native Nix assertion excludes other simultaneous TLS backends.
         gnutls_support: bool,
         /// GnuTLS package used for encrypted connections and compatibility library links.
-        gnutls: NixValue,
+        gnutls: Package,
         /// Enables authentication through GNU SASL.
         gsasl_support: bool,
         /// GNU SASL implementation propagated when its authentication feature is selected.
-        gsasl: NixValue,
+        gsasl: Package,
         /// Selects GSS authentication; its default depends on platform and cross-build state.
         gss_support: bool,
         /// Kerberos implementation and development output used by GSS authentication.
-        libkrb5: NixValue,
+        libkrb5: Package,
         /// Enables the HTTP/2 library and defaults to true in Nix.
         http2_support: bool,
         /// HTTP/2 library propagated to libcurl consumers.
-        nghttp2: NixValue,
+        nghttp2: Package,
         /// Enables both HTTP/3 and QUIC dependencies and their configure switches.
         http3_support: bool,
         /// HTTP/3 protocol library selected by http3Support.
-        nghttp3: NixValue,
+        nghttp3: Package,
         /// QUIC transport library selected alongside nghttp3.
-        ngtcp2: NixValue,
+        ngtcp2: Package,
         /// Enables curl's experimental websocket protocol support.
         websocket_support: bool,
         /// Enables internationalized domain-name handling.
         idn_support: bool,
         /// Internationalized domain-name library and configure-time development output.
-        libidn2: NixValue,
+        libidn2: Package,
         /// Enables both LDAP and LDAPS protocol configure switches.
         ldap_support: bool,
         /// LDAP library propagated when LDAP support is enabled.
-        openldap: NixValue,
+        openldap: Package,
         /// Selects OpenSSL; its lazy default follows zlibSupport.
         openssl_support: bool,
         /// Caller-selected OpenSSL package, also exposed unchanged in passthru.
-        openssl: NixValue,
+        openssl: Package,
         /// Enables public-suffix handling, including the static linker workaround.
         psl_support: bool,
         /// Public suffix library propagated when PSL support is enabled.
-        libpsl: NixValue,
+        libpsl: Package,
         /// Enables RTMP streaming protocol support.
         rtmp_support: bool,
         /// RTMP implementation selected by the librtmp configure switch.
-        rtmpdump: NixValue,
+        rtmpdump: Package,
         /// Selects SCP; its default follows zlib and excludes SunOS/Cygwin.
         scp_support: bool,
         /// SSH library supplying SCP support and separate development/library outputs.
-        libssh2: NixValue,
+        libssh2: Package,
         /// Selects wolfSSL as one of the mutually exclusive TLS backends.
         wolfssl_support: bool,
         /// Caller-selected wolfSSL implementation and development output.
-        wolfssl: NixValue,
+        wolfssl: Package,
         /// Selects Rustls and the platform-specific CA-bundle configure switch.
         rustls_support: bool,
         /// Existing Rustls FFI package; its implementation stays in nixpkgs.
         #[rusnix(rename = "rustls-ffi")]
-        rustls_ffi: NixValue,
+        rustls_ffi: Package,
         /// Enables zlib and controls the dependent OpenSSL/SCP defaults.
         zlib_support: bool,
         /// Compression library propagated when zlib support is selected.
-        zlib: NixValue,
+        zlib: Package,
         /// Enables Zstandard response decompression.
         zstd_support: bool,
         /// Zstandard library propagated when that decompression feature is selected.
-        zstd: NixValue,
+        zstd: Package,
         /// Existing consuming package overridden to use the eventual curl in a passthru check.
-        coeurl: NixValue,
+        coeurl: Package,
         /// Existing C++ curl wrapper overridden to consume the eventual package.
-        curlpp: NixValue,
+        curlpp: Package,
         /// Package scope containing the Haskell curl binding checked recursively.
         haskell_packages: HaskellPackages,
         /// Package scope containing the OCaml curly binding checked recursively.
@@ -118,7 +118,7 @@ pub(super) mod args {
         /// nixpkgs test helpers used to validate the final package's pkg-config metadata.
         testers: Testers,
         /// Required passthru dependency; never used to fetch curl source or patches.
-        fetchpatch: NixValue,
+        fetchpatch: Overridable<NixCallable<Package>>,
     }
 
     /// Existing builder and the finite compiler/platform properties this recipe needs.
@@ -126,7 +126,7 @@ pub(super) mod args {
     #[rusnix(value)]
     struct Stdenv {
         /// Real mkDerivation function, including recursive finalAttrs and overrides.
-        mk_derivation: NixValue,
+        mk_derivation: NixCallable<Package>,
         /// Platform where the resulting curl runs.
         host_platform: Platform,
         /// Compiler metadata for the explicit C++ command names.
@@ -213,13 +213,13 @@ pub(super) mod args {
     struct Frameworks {
         /// Core Foundation dependency.
         #[rusnix(rename = "CoreFoundation")]
-        core_foundation: NixValue,
+        core_foundation: Package,
         /// Core Services dependency.
         #[rusnix(rename = "CoreServices")]
-        core_services: NixValue,
+        core_services: Package,
         /// System configuration dependency.
         #[rusnix(rename = "SystemConfiguration")]
-        system_configuration: NixValue,
+        system_configuration: Package,
     }
 
     /// The HTTP/3 NixOS test is referenced, never executed by this example.
@@ -232,25 +232,25 @@ pub(super) mod args {
     /// Haskell package that tests consuming the final curl.
     struct HaskellPackages {
         /// Haskell curl binding, overridden with the final package in passthru.
-        curl: NixValue,
+        curl: Package,
     }
 
     /// OCaml package that tests consuming the final curl.
     struct OcamlPackages {
         /// OCaml curly binding, overridden with the final package in passthru.
-        curly: NixValue,
+        curly: Package,
     }
 
     /// PHP extension that tests consuming the final curl.
     struct PhpExtensions {
         /// PHP curl extension, overridden with the final package in passthru.
-        curl: NixValue,
+        curl: Package,
     }
 
     /// Separately maintained static package referenced by upstream's tests.
     struct StaticPackages {
         /// Existing static curl; it is not replaced with the package being authored.
-        curl: NixValue,
+        curl: Package,
     }
 
     /// Python packages used by curl's consuming-package test.
@@ -262,7 +262,7 @@ pub(super) mod args {
     /// Only pycurl is needed from this package set.
     struct PythonPackages {
         /// Python binding overridden to use finalAttrs.finalPackage.
-        pycurl: NixValue,
+        pycurl: Package,
     }
 
     /// Fetcher test hierarchy supplied by the caller.
@@ -274,7 +274,7 @@ pub(super) mod args {
     /// Only the simple fetchpatch test participates in curl's passthru.
     struct FetchpatchTests {
         /// Test overridden with a fetchpatch that uses this curl through fetchurl.
-        simple: NixValue,
+        simple: Package,
     }
 
     /// Generic package test constructors remain opaque functions in nixpkgs.
