@@ -275,9 +275,9 @@ fn mariadb_consuming_failing_rust_curl_keeps_child_definition() {
     );
 }
 
-/// Backend-only delayed type validation has no generated child frame to map.
+/// A pinned backend index identifies the supplied Rust dependency.
 #[test]
-fn delayed_stdenv_dependency_validation_retains_reason_and_honest_mapping_limit() {
+fn delayed_stdenv_dependency_validation_recovers_supplied_child() {
     let graph = graph::compose(
         Nixpkgs::new().get("openssl").into(),
         |_, _| Package::from_expression(1_i64.into()),
@@ -288,6 +288,7 @@ fn delayed_stdenv_dependency_validation_retains_reason_and_honest_mapping_limit(
     )
     .unwrap();
     let error = failure("backend-invalid-dependency", &generated);
+    assert_eq!(error.provenance, rusnix_nix::Provenance::BackendCorrelation);
     assert!(
         error
             .reason
@@ -299,7 +300,7 @@ fn delayed_stdenv_dependency_validation_retains_reason_and_honest_mapping_limit(
             .as_ref()
             .unwrap()
             .purpose
-            .contains("mariadb.drvPath")
+            .contains("opaque call argument")
     );
 }
 

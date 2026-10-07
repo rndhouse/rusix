@@ -227,10 +227,12 @@ fn real_package_handoffs_do_not_recover_delayed_dependency_origins() {
             } else {
                 "curl.drvPath"
             };
-            let generated = rusnix_nix::compile(
+            let mut generated = rusnix_nix::compile(
                 &Config::new().set("result", graph.as_expression().select(path)),
             )
             .unwrap();
+            // Historical context-only experiment: correlation is tested separately.
+            generated.backend_metadata = None;
             let error = session.evaluate_interop(&generated).unwrap_err();
             assert_ne!(error.kind, rusnix_nix::DiagnosticKind::Tooling, "{error:?}");
             assert_ne!(
@@ -346,10 +348,12 @@ fn real_child_package_validation_loses_context_across_composed_edges() {
             } else {
                 "mariadb.drvPath"
             };
-            let generated = rusnix_nix::compile(
+            let mut generated = rusnix_nix::compile(
                 &Config::new().set("result", graph.as_expression().select(path)),
             )
             .unwrap();
+            // Historical context-only experiment: correlation is tested separately.
+            generated.backend_metadata = None;
             let error = session.evaluate_interop(&generated).unwrap_err();
             let expected = if case.starts_with("curl") {
                 "nativeBuildInputs for curl"

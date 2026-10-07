@@ -1,5 +1,10 @@
 # Delayed backend provenance investigation
 
+This records the context-only investigation at `e00fe587`. The later
+[out-of-band correlation investigation](backend-correlation-investigation.md)
+builds on this negative result without adding runtime wrappers. Historical
+context experiments disable correlation so they continue measuring contexts alone.
+
 Lazy `builtins.addErrorContext` does **not** fix the demonstrated delayed
 dependency validation gap. It covers exceptions raised while evaluating the
 wrapped expression. Once evaluation successfully produces an integer, list or

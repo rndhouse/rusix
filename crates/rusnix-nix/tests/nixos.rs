@@ -290,6 +290,7 @@ fn assertion_checking_is_explicit_and_does_not_force_unrelated_options() {
 fn invalid_generated_module_is_compiler_failure_without_rust_blame() {
     let mut artifact = compile_module(&fixtures::module("good").unwrap()).unwrap();
     artifact.module = Generated {
+        backend_metadata: None,
         source: "{ imports = [ ; ]; }".into(),
         spans: artifact.module.spans,
     };

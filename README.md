@@ -79,11 +79,13 @@ platform behavior, laziness and provenance; the composed suite additionally
 checks tagged dependency values and live override propagation.
 
 Package-operation failures retain useful child Rust origins across the graph.
-A delayed type check wholly inside stdenv can have no generated child frame:
-for example, a literal integer supplied as MariaDB's curl maps only to the outer
-`mariadb.drvPath` demand. The original diagnostic still names MariaDB's sixth
-buildInput. This limitation is tested explicitly; no broad forcing or invented
-child blame is added to compensate.
+A delayed type check wholly inside stdenv can have no generated child frame.
+For the pinned dependency-type validator, compiler-owned backend metadata now
+correlates the owner, field and list index with the supplied Rust child: an
+integer supplied as MariaDB's curl points to that integer rather than the outer
+`mariadb.drvPath` demand. Matching needs a known list prefix and package scope;
+unknown transformations keep the existing fallback, and indistinguishable
+suppliers produce multiple possible origins. Generated Nix and forcing are unchanged.
 
 ## Run
 
@@ -399,7 +401,14 @@ tests lazy contexts on fields and dependency elements entering stdenv. A context
 survives if evaluating that value throws, but ends after successful evaluation;
 stdenv's later rejection of an integer/attrset and later forcing of its children
 still lose the supplier's Rust origin. No backend-argument instrumentation is
-adopted. Raw diagnostics and explicit mapping limitations remain preserved.
+adopted. The [correlation investigation](docs/backend-correlation-investigation.md)
+adds a separate, out-of-band adapter for the pinned stdenv dependency-type error.
+It reads a versioned optional field in generated artifacts; older maps still
+load, and unsupported metadata is ignored. Direct generated failure positions
+remain stronger than correlation. Unknown overrides/custom backends, merged
+check-input tails, unindexed coercions and failures without corroborating owner
+frames retain their previous mapping. No early evaluation learns package paths.
+Raw diagnostics and explicit mapping limitations remain preserved.
 
 ## Store isolation
 

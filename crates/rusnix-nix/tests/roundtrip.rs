@@ -171,6 +171,7 @@ fn generated_syntax_failure_is_a_compiler_bug_even_with_a_rust_span() {
     let origin = Origin::new("innocent.rs", 10, 3, "set innocent");
 
     let generated = Generated {
+        backend_metadata: None,
         spans: vec![SourceSpan {
             start: 0,
             end: source.len(),
@@ -196,6 +197,7 @@ fn generated_syntax_failure_is_a_compiler_bug_even_with_a_rust_span() {
 #[test]
 fn backend_static_binding_failure_is_a_compiler_bug() {
     let generated = Generated {
+        backend_metadata: None,
         source: "__rusnix_undefined_variable\n".into(),
         spans: vec![],
     };
@@ -213,6 +215,7 @@ fn backend_static_binding_failure_is_a_compiler_bug() {
 #[test]
 fn missing_provenance_is_explicit_and_original_is_retained() {
     let generated = Generated {
+        backend_metadata: None,
         source: "builtins.throw \"backend failure without metadata\"\n".into(),
         spans: vec![],
     };
@@ -289,6 +292,7 @@ fn shallow_error_context_loses_nested_failure_context() {
     );
 
     let generated = Generated {
+        backend_metadata: None,
         source,
         spans: vec![],
     };
@@ -298,6 +302,7 @@ fn shallow_error_context_loses_nested_failure_context() {
     assert_eq!(diagnostic.reason, "lazy child failed");
     // Even with a lookup entry for the marker, the outer context is absent.
     let map = Generated {
+        backend_metadata: None,
         source: generated.source.clone(),
         spans: vec![SourceSpan {
             start: 0,
@@ -338,6 +343,7 @@ fn real_store_write_is_inside_disposable_root_and_is_cleaned_up() {
     let root = session.root().to_owned();
 
     let generated = Generated {
+        backend_metadata: None,
         source: "builtins.toFile \"rusnix-isolation-check\" \"isolated content\"".into(),
         spans: vec![],
     };

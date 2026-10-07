@@ -23,7 +23,7 @@ cargo test --locked -p rusnix-nix --test schema --test postgresql_schema
 cargo test --locked -p rusnix-nix --test symbolic_text
 cargo test --locked -p rusnix-nix --test structured_interop --test library --test typed_interop
 cargo test --locked -p rusnix-nix --test package --test package_functions --test git --test curl --test nix_operations
-cargo test --locked -p rusnix-nix --test openssl --test mariadb --test composed --test backend_provenance
+cargo test --locked -p rusnix-nix --test openssl --test mariadb --test composed --test backend_provenance --test backend_correlation
 cargo test --locked -p rusnix-nix --test overlay
 cargo test --locked -p rusnix-nix --test typed_examples --test ui --test interop
 

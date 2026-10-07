@@ -47,10 +47,12 @@ fn run() -> Result<(), String> {
     let generated = match args[1].as_str() {
         // Fault injections live in the CLI harness, never the configuration API.
         "codegen-bug" => Ok(Generated {
+            backend_metadata: None,
             source: "{ broken = ; }\n".into(),
             spans: vec![],
         }),
         "unmapped" => Ok(Generated {
+            backend_metadata: None,
             source: "builtins.throw \"backend failure without metadata\"\n".into(),
             spans: vec![],
         }),

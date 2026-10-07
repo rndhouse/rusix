@@ -18,11 +18,16 @@ pub mod diagnostic;
 
 mod interop;
 
+mod backend;
+
 pub mod isolated;
 
 pub mod nixos;
 
 mod render;
+
+#[cfg(test)]
+mod backend_audit;
 
 #[cfg(test)]
 mod context_audit;
@@ -77,7 +82,9 @@ pub fn compile_with_options(
         }
     }
 
-    Ok(render_with_options(&lower(config), options))
+    let mut generated = render_with_options(&lower(config), options);
+    generated.backend_metadata = backend::collect(config);
+    Ok(generated)
 }
 
 /// Find scoped dependencies without evaluating any values.

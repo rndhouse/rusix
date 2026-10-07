@@ -72,9 +72,10 @@ broad deepSeq forcing.
 Child failures in OpenSSL's fetcher operation, curl consuming supplied OpenSSL,
 and MariaDB demanding a supplied, failing Rust curl retain the relevant package
 operation origin and original Nix trace. A literal integer supplied as curl is
-a separate backend-validation limitation: stdenv reports the precise buildInput
-index but offers no generated child frame, so Rust mapping reaches the outer
-mariadb.drvPath demand. See the explicit limitation test and saved diagnostic.
+a separate backend-validation case: stdenv reports the precise buildInput
+index without a generated child frame. Compiler-owned dependency metadata now
+recovers the supplied Rust child instead of the outer
+`mariadb.drvPath` demand. See the correlation test and saved diagnostic.
 
 
 The stress suite covers seven distinct boundary configurations:

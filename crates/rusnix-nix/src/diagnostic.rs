@@ -43,6 +43,8 @@ pub enum Provenance {
     ErrorContext,
     /// A generated source position mapped back to a Rust expression span.
     SourceMap,
+    /// A pinned backend validator and field/index matched compiler-owned metadata.
+    BackendCorrelation,
     /// NixOS definition-file metadata identified one or more contributing operations.
     ModuleDefinition,
     /// An assertion message retained its Rust-origin marker.
@@ -66,9 +68,11 @@ pub enum OriginRole {
     ContributingDefinition,
     /// The Rust operation that introduced external Nix code.
     ImportedBoundary,
+    /// One of several indistinguishable backend suppliers; no unique culprit is known.
+    BackendCandidate,
 }
 
-/// One source that caused or contributed to an error.
+/// One confirmed source or possible backend supplier associated with an error.
 /// This differs from [`Diagnostic::related`], which describes enclosing operations
 /// that help explain where the failed computation fits in the configuration.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -102,7 +106,7 @@ pub struct Diagnostic {
     pub reason: String,
     /// Single-origin convenience; consult [`Self::origins`] to avoid discarding other causes.
     pub primary: Option<Origin>,
-    /// All identified sources that caused or contributed to the failure, including merge conflicts.
+    /// Confirmed sources and explicit candidate suppliers, including merge conflicts.
     #[serde(default)]
     pub origins: Vec<DiagnosticOrigin>,
     /// Enclosing configuration operations, not additional conflicting definitions.
@@ -257,6 +261,7 @@ impl Diagnostic {
             external_file: None,
         }
         .with_enclosing(generated, &local_spans)
+        .with_backend(generated, &text_frames(&text), &local_spans, false)
     }
 
     fn from_structured(
@@ -342,6 +347,12 @@ impl Diagnostic {
             external_file: None,
         }
         .with_enclosing(generated, &local_spans)
+        .with_backend(
+            generated,
+            &structured_frames(event, frames),
+            &local_spans,
+            mapped(event).is_some(),
+        )
     }
 
     fn with_enclosing(mut self, generated: &Generated, local_spans: &[&SourceSpan]) -> Self {
@@ -371,6 +382,53 @@ impl Diagnostic {
         }
 
         self.with_origin_set()
+    }
+
+    fn with_backend(
+        mut self,
+        generated: &Generated,
+        frames: &[BackendFrame],
+        local_spans: &[&SourceSpan],
+        direct_failure: bool,
+    ) -> Self {
+        if self.kind != DiagnosticKind::NixEval || direct_failure {
+            return self;
+        }
+        let Some(matches) = correlate_backend(&self.reason, frames, generated, local_spans) else {
+            return self;
+        };
+        let mut sources = Vec::new();
+        for BackendMatch {
+            boundary,
+            field,
+            child,
+        } in matches
+        {
+            for origin in [&boundary.call, &field.origin, &child.consumer] {
+                if !self.related.iter().any(|o| o.id == origin.id) {
+                    self.related.push(origin.clone());
+                }
+            }
+            if !sources.iter().any(|o: &Origin| o.id == child.origin.id) {
+                sources.push(child.origin.clone());
+            }
+        }
+        self.primary = (sources.len() == 1).then(|| sources[0].clone());
+        self.provenance = Provenance::BackendCorrelation;
+        self.origins = sources
+            .into_iter()
+            .map(|origin| DiagnosticOrigin {
+                origin: Some(origin),
+                role: if self.primary.is_some() {
+                    OriginRole::Primary
+                } else {
+                    OriginRole::BackendCandidate
+                },
+                provenance: Provenance::BackendCorrelation,
+                nix_file: None,
+            })
+            .collect();
+        self.with_enclosing(generated, local_spans)
     }
 
     pub(crate) fn with_origin_set(mut self) -> Self {
@@ -459,6 +517,7 @@ impl Diagnostic {
                         OriginRole::ConflictingDefinition => "conflicting definition",
                         OriginRole::ContributingDefinition => "contributing definition",
                         OriginRole::ImportedBoundary => "imported module boundary",
+                        OriginRole::BackendCandidate => "possible backend supplier",
                     }
                 ));
                 if let Some(file) = &source.nix_file {
@@ -575,6 +634,203 @@ fn recover_operation(
         Some(span) => (Some(span.origin.clone()), Provenance::SourceMap),
         None => (None, Provenance::Unavailable),
     }
+}
+
+// The dependency index is emitted by the pinned validator, not by arbitrary
+// English error matching. Require its source frame and the ordered owner chain.
+struct BackendFrame {
+    message: String,
+    file: Option<String>,
+    line: Option<u64>,
+    column: Option<u64>,
+}
+
+fn structured_frames(event: &serde_json::Value, frames: &[serde_json::Value]) -> Vec<BackendFrame> {
+    std::iter::once(event)
+        .chain(frames)
+        .map(|frame| BackendFrame {
+            message: strip_ansi(frame["raw_msg"].as_str().unwrap_or("")),
+            file: frame["file"].as_str().map(str::to_owned),
+            line: frame["line"].as_u64(),
+            column: frame["column"].as_u64(),
+        })
+        .collect()
+}
+
+fn text_frames(text: &str) -> Vec<BackendFrame> {
+    let mut frames: Vec<BackendFrame> = Vec::new();
+    for line in text.lines() {
+        let line = line.trim();
+        if let Some(message) = line
+            .strip_prefix("… ")
+            .or_else(|| line.strip_prefix("... "))
+        {
+            frames.push(BackendFrame {
+                message: message.into(),
+                file: None,
+                line: None,
+                column: None,
+            });
+        } else if let Some(location) = line.strip_prefix("at ")
+            && let Some(frame) = frames.last_mut()
+            && frame.file.is_none()
+        {
+            let mut parts = location.trim_end_matches(':').rsplitn(3, ':');
+            frame.column = parts.next().and_then(|s| s.parse().ok());
+            frame.line = parts.next().and_then(|s| s.parse().ok());
+            frame.file = parts.next().map(str::to_owned);
+        }
+    }
+    frames.reverse();
+    frames
+}
+
+fn pinned_frame(frame: &BackendFrame) -> bool {
+    let expected = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../vendor/nixpkgs/pkgs/stdenv/generic/make-derivation.nix");
+    let Ok(expected) = expected.canonicalize() else {
+        return false;
+    };
+    let Some(file) = &frame.file else {
+        return false;
+    };
+    let path = expected.to_string_lossy();
+    file == path.as_ref()
+        || file
+            == &format!(
+                "{path}:{}:{}",
+                frame.line.unwrap_or(0),
+                frame.column.unwrap_or(0)
+            )
+}
+
+fn dependency_clue(reason: &str) -> Option<(&str, &str, Vec<usize>)> {
+    let mut rest = reason.strip_prefix("Dependency is not of a valid type: ")?;
+    let mut path = Vec::new();
+    while let Some(indexed) = rest.strip_prefix("element ") {
+        let (index, tail) = indexed.split_once(" of ")?;
+        path.push(index.parse::<usize>().ok()?.checked_sub(1)?);
+        rest = tail;
+        if path.len() > 12 {
+            return None;
+        }
+    }
+    let (field, name) = rest.split_once(" for ")?;
+    if path.is_empty() || name.is_empty() || !crate::backend::dependency_field(field) {
+        return None;
+    }
+    path.reverse();
+    Some((field, name, path))
+}
+
+fn owner_frame(frame: &BackendFrame) -> Option<(&str, &str)> {
+    if !pinned_frame(frame) {
+        return None;
+    }
+    let rest = frame.message.strip_prefix("while evaluating attribute '")?;
+    let (field, owner) = rest.split_once("' of derivation '")?;
+    Some((field, owner.strip_suffix('\'')?))
+}
+
+fn owner_chain(
+    boundary: &crate::backend::Boundary,
+    owners: &[&str],
+    metadata: &crate::backend::Metadata,
+) -> bool {
+    if owners.first().copied() != Some(boundary.full_name.as_str()) {
+        return false;
+    }
+    if owners.len() == 1 {
+        return boundary.parents.is_empty();
+    }
+    boundary.parents.iter().any(|parent| {
+        parent == owners[1]
+            && metadata.boundaries.iter().any(|b| {
+                b.entry.id == boundary.entry.id
+                    && !b.opaque_children
+                    && b.full_name == *parent
+                    && owner_chain(b, &owners[1..], metadata)
+            })
+    })
+}
+
+struct BackendMatch {
+    boundary: crate::backend::Boundary,
+    field: crate::backend::Field,
+    child: crate::backend::Child,
+}
+
+fn correlate_backend(
+    reason: &str,
+    frames: &[BackendFrame],
+    generated: &Generated,
+    local_spans: &[&SourceSpan],
+) -> Option<Vec<BackendMatch>> {
+    let (field, name, path) = dependency_clue(reason)?;
+    let validator = frames.iter().position(|frame| {
+        pinned_frame(frame)
+            && frame.line == Some(284)
+            && frame.column == Some(14)
+            && frame.message == "while calling the 'throw' builtin"
+    })?;
+    // A generated operation preceding the backend validator remains stronger.
+    if frames[..validator]
+        .iter()
+        .any(|f| operation_frame(&f.message) && !pinned_frame(f))
+    {
+        return None;
+    }
+    let owner_frames: Vec<_> = frames[validator..].iter().filter_map(owner_frame).collect();
+    if owner_frames.first()?.0 != field {
+        return None;
+    }
+    // Repeated owner names can be distinct nested calls. Preserve depth rather
+    // than collapsing a child and parent with identical derivation names.
+    let owners: Vec<_> = owner_frames.into_iter().map(|(_, owner)| owner).collect();
+    let metadata = crate::backend::read(&generated.backend_metadata)?;
+    if local_spans.iter().any(|span| {
+        std::iter::once(&span.origin)
+            .chain(&span.enclosing)
+            .any(|origin| metadata.guard_operations.contains(&origin.id))
+    }) || frames.iter().any(|frame| {
+        metadata
+            .guard_operations
+            .iter()
+            .any(|id| id == &frame.message)
+    }) {
+        return None;
+    }
+    // Use the last mapped frame (the demanded assignment), not all occurrences
+    // of a shared origin or unrelated exported package descriptions.
+    let scope = local_spans.iter().rev().find(|span| {
+        metadata.boundaries.iter().any(|b| {
+            span.origin.id == b.entry.id || span.enclosing.iter().any(|o| o.id == b.entry.id)
+        })
+    })?;
+    let mut candidates = metadata
+        .boundaries
+        .iter()
+        .filter(|b| {
+            b.name == name
+                && (scope.origin.id == b.entry.id
+                    || scope.enclosing.iter().any(|o| o.id == b.entry.id))
+                && owner_chain(b, &owners, &metadata)
+        })
+        .peekable();
+    candidates.peek()?;
+    let mut result = Vec::new();
+    for boundary in candidates {
+        // Every plausible boundary must have the index. Unknown list lengths or
+        // merged check-input tails cannot justify choosing another candidate.
+        let field = boundary.fields.iter().find(|f| f.name == field)?;
+        let child = field.children.iter().find(|c| c.path == path)?;
+        result.push(BackendMatch {
+            boundary: boundary.clone(),
+            field: field.clone(),
+            child: child.clone(),
+        });
+    }
+    Some(result)
 }
 
 fn render_location(out: &mut String, origin: &Origin, source_root: &Path) {
@@ -728,6 +984,7 @@ mod tests {
     fn compact_structured_context_retains_the_origin_and_unmodified_raw_error() {
         let origin = Origin::new("config.rs", 12, 9, "opaque Nix function call");
         let generated = Generated {
+            backend_metadata: None,
             source: "f x".into(),
             spans: vec![SourceSpan {
                 start: 0,
@@ -796,6 +1053,7 @@ mod tests {
     fn maps_text_context_without_matching_a_spoofed_throw_or_excerpt() {
         let origin = Origin::new("config.rs", 12, 9, "integer division");
         let generated = Generated {
+            backend_metadata: None,
             source: "builtins.div 1 0".into(),
             spans: vec![SourceSpan {
                 start: 0,

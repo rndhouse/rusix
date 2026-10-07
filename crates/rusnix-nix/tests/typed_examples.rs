@@ -37,6 +37,7 @@ fn nix_module(source: &str) -> NixosArtifact {
     // Handwritten Nix comparison fixtures, not a frontend lowering shortcut.
     NixosArtifact {
         module: Generated {
+            backend_metadata: None,
             source: source.into(),
             spans: vec![],
         },
