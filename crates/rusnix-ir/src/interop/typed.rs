@@ -1,6 +1,6 @@
 //! Typed handles retain authoring contracts while sharing the existing deferred IR.
 use super::{
-    NixLibrary, PackageRef,
+    NixLibrary, OverlayRef, PackageRef,
     raw::{AsNixValue, NixRepresentation, NixValue},
 };
 use crate::{
@@ -381,6 +381,67 @@ impl Package {
     #[track_caller]
     pub fn extend(&self, attributes: NixAttrs) -> Self {
         Self::from_expression(self.value.clone().merge_attrs(attributes))
+    }
+}
+
+/// A Nix function that adds or replaces fields in a nixpkgs package set.
+///
+/// An *overlay* receives two sets: `final`, containing the results of all overlays,
+/// and `prev`, containing packages before this overlay. It returns named additions
+/// or replacements. Use `prev` to modify an existing package without referring to
+/// its own replacement; use `final` to depend on another package's final version.
+/// The returned fields can include packages, helpers and nested collections.
+///
+/// Construct one with [`Self::from_function`] or convert an existing [`OverlayRef`].
+/// Pass it to [`super::Nixpkgs::with_overlay`] to customize package lookups, or place
+/// it in a [`crate::Config`] to generate the overlay function itself. Rust constructs
+/// the expression; Nix applies it later without building the described packages.
+#[derive(Clone, Debug)]
+pub struct Overlay {
+    value: NixValue,
+}
+
+expression_handle!(Overlay);
+
+impl From<OverlayRef> for Overlay {
+    fn from(reference: OverlayRef) -> Self {
+        Self::from_expression(reference.as_value())
+    }
+}
+
+impl Overlay {
+    /// Describe `final: prev: { ... }` through typed attribute-set views.
+    ///
+    /// Rust runs `build` once immediately with symbolic `final` and `prev`
+    /// parameters. It returns the fields this overlay adds or replaces, leaving
+    /// other fields unchanged. Nix resolves lookups and applies the generated
+    /// function when a customized package-set value is needed. No package types
+    /// or external field names are checked during Rust construction.
+    ///
+    /// ```
+    /// use rusnix_ir::{Config, interop::{NixAttrs, Nixpkgs, Overlay, Package}};
+    ///
+    /// let overlay = Overlay::from_function(|_final_pkgs, prev_pkgs| {
+    ///     let curl: Package = prev_pkgs.field("curl");
+    ///     NixAttrs::new([("myCurl", curl.into())])
+    /// });
+    /// let pkgs = Nixpkgs::new().with_overlay(overlay.clone());
+    /// let config = Config::new()
+    ///     .set("overlay", overlay)
+    ///     .set("package", pkgs.get("myCurl"));
+    /// // Like Nix: final: prev: { myCurl = prev.curl; }.
+    /// ```
+    #[track_caller]
+    pub fn from_function(build: impl FnOnce(NixAttrs, NixAttrs) -> NixAttrs) -> Self {
+        Self::from_expression(NixValue::function(|final_pkgs| {
+            NixValue::function(|prev_pkgs| {
+                build(
+                    NixAttrs::from_expression(final_pkgs),
+                    NixAttrs::from_expression(prev_pkgs),
+                )
+                .as_expression()
+            })
+        }))
     }
 }
 

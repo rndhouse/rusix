@@ -5,7 +5,8 @@ mod authoring;
 use rusnix_ir::{
     Config, Expr,
     interop::{
-        InputRef, Nixpkgs,
+        InputRef, NixAttrs, NixCallable, NixList, Nixpkgs, Overlay, Package, PackageFunction,
+        ToNixText,
         raw::{AsNixValue, NixFunctionExt, NixValue, NixpkgsExt},
     },
 };
@@ -110,9 +111,9 @@ fn rust_overlay_matches_the_handwritten_recipe_and_downstream_dependency_exactly
             )
             .set(
                 "rustImported",
-                inspect(ordinary(Some(authoring::overlay()))),
+                inspect(ordinary(Some(authoring::overlay().into()))),
             )
-            .set("rust", inspect(authoring::package_set())),
+            .set("rust", inspect(authoring::package_set().as_value())),
     );
     assert_eq!(value["rust"], value["reference"]);
     assert_eq!(value["rustImported"], value["reference"]);
@@ -147,9 +148,7 @@ fn rust_overlay_matches_the_handwritten_recipe_and_downstream_dependency_exactly
 
 #[test]
 fn prev_modifies_the_previous_package_once_per_overlay_without_self_recursion() {
-    let twice = authoring::package_set()
-        .select("extend")
-        .call(authoring::overlay());
+    let twice = authoring::package_set().with_overlay(authoring::overlay());
     let reference_twice = ordinary(Some(reference().overlay("overlay").into()))
         .select("extend")
         .call(reference().overlay("overlay").as_value());
@@ -157,11 +156,21 @@ fn prev_modifies_the_previous_package_once_per_overlay_without_self_recursion() 
         "prev",
         Config::new()
             .set("baseline", inspect(ordinary(None)))
-            .set("once", inspect(authoring::package_set()))
-            .set("twice", inspect(twice))
+            .set("once", inspect(authoring::package_set().as_value()))
+            .set("twice", inspect(twice.as_value()))
+            .set(
+                "mixed",
+                inspect(
+                    Nixpkgs::new()
+                        .with_overlay(reference().overlay("overlay"))
+                        .with_overlay(authoring::overlay())
+                        .as_value(),
+                ),
+            )
             .set("referenceTwice", inspect(reference_twice)),
     );
     assert_eq!(value["twice"], value["referenceTwice"]);
+    assert_eq!(value["mixed"], value["referenceTwice"]);
     let mut flags = value["baseline"]["configureFlags"]
         .as_array()
         .unwrap()
@@ -178,26 +187,30 @@ fn prev_modifies_the_previous_package_once_per_overlay_without_self_recursion() 
 
 #[test]
 fn final_sees_a_later_overlay_while_prev_keeps_the_preceding_package() {
-    let probe = NixValue::function(|final_pkgs| {
-        NixValue::function(|prev_pkgs| {
-            NixValue::record([
-                ("rusnixFinalCurl", final_pkgs.select("curl.drvPath")),
-                ("rusnixPreviousCurl", prev_pkgs.select("curl.drvPath")),
-            ])
-        })
+    let probe = Overlay::from_function(|final_pkgs, prev_pkgs| {
+        let final_curl: Package = final_pkgs.field("curl");
+        let prev_curl: Package = prev_pkgs.field("curl");
+        NixAttrs::new([
+            (
+                "rusnixFinalCurl",
+                final_curl.field::<Expr<String>>("drvPath").into(),
+            ),
+            (
+                "rusnixPreviousCurl",
+                prev_curl.field::<Expr<String>>("drvPath").into(),
+            ),
+        ])
     });
     let pkgs = Nixpkgs::new()
-        .pkgs_function("extend")
-        .call(probe)
-        .select("extend")
-        .call(authoring::overlay());
+        .with_overlay(probe)
+        .with_overlay(authoring::overlay());
     let value = evaluate(
         "final",
         Config::new()
             .set("baseline", Nixpkgs::new().value("curl.drvPath"))
-            .set("modified", pkgs.clone().select("curl.drvPath"))
-            .set("final", pkgs.clone().select("rusnixFinalCurl"))
-            .set("prev", pkgs.select("rusnixPreviousCurl")),
+            .set("modified", pkgs.value("curl.drvPath"))
+            .set("final", pkgs.value("rusnixFinalCurl"))
+            .set("prev", pkgs.value("rusnixPreviousCurl")),
     );
     assert_eq!(value["final"], value["modified"]);
     assert_eq!(value["prev"], value["baseline"]);
@@ -206,23 +219,19 @@ fn final_sees_a_later_overlay_while_prev_keeps_the_preceding_package() {
 
 #[test]
 fn unrelated_failing_package_set_attributes_remain_lazy() {
-    let poison = NixValue::function(|_| {
-        NixValue::function(|_| {
-            NixValue::record([(
-                "rusnixUnusedPackage",
-                NixValue::builtin("throw").call("unused overlay attribute evaluated"),
-            )])
-        })
+    let poison = Overlay::from_function(|_, _| {
+        NixAttrs::new([(
+            "rusnixUnusedPackage",
+            NixValue::builtin("throw").call("unused overlay attribute evaluated"),
+        )])
     });
     let pkgs = Nixpkgs::new()
-        .pkgs_function("extend")
-        .call(poison)
-        .select("extend")
-        .call(authoring::overlay());
+        .with_overlay(poison)
+        .with_overlay(authoring::overlay());
     let generated = compile(
         &Config::new()
-            .set("curl", pkgs.clone().select("curl.drvPath"))
-            .set("hello", pkgs.clone().select("hello.drvPath"))
+            .set("curl", pkgs.value("curl.drvPath"))
+            .set("hello", pkgs.value("hello.drvPath"))
             .set("ordinaryHello", Nixpkgs::new().value("hello.drvPath")),
     )
     .unwrap();
@@ -232,7 +241,7 @@ fn unrelated_failing_package_set_attributes_remain_lazy() {
     let value = session.evaluate_interop(&generated).unwrap().value;
     save("lazy", &generated, &value);
     assert_eq!(value["hello"], value["ordinaryHello"]);
-    let demanded = compile(&Config::new().set("bad", pkgs.select("rusnixUnusedPackage"))).unwrap();
+    let demanded = compile(&Config::new().set("bad", pkgs.value("rusnixUnusedPackage"))).unwrap();
     let error = session.evaluate_interop(&demanded).unwrap_err();
     assert!(error.reason.contains("unused overlay attribute evaluated"));
 }
@@ -240,27 +249,22 @@ fn unrelated_failing_package_set_attributes_remain_lazy() {
 #[test]
 fn failure_inside_override_attrs_maps_to_the_rust_operation() {
     let operation_line = std::cell::Cell::new(0);
-    let overlay = NixValue::function(|_| {
-        NixValue::function(|prev| {
-            let curl = prev
-                .select("curl")
-                .override_attrs(NixValue::function(|old| {
-                    operation_line.set(line!() + 1);
-                    let bad: NixValue = Expr::int(1).divide(Expr::int(0)).into();
-                    NixValue::record([(
-                        "configureFlags",
-                        NixValue::concat_lists([
-                            old.select("configureFlags"),
-                            NixValue::list([bad.to_text()]),
-                        ]),
-                    )])
-                }));
-            NixValue::record([("curl", curl)])
-        })
+    let overlay = Overlay::from_function(|_, prev| {
+        let curl: Package = prev.field("curl");
+        let curl = curl.override_attrs(|old| {
+            operation_line.set(line!() + 1);
+            let bad = Expr::int(1).divide(Expr::int(0));
+            let flags: NixList<Expr<String>> = old.field("configureFlags");
+            NixAttrs::new([(
+                "configureFlags",
+                NixList::concat([flags, NixList::new([bad.to_nix_text()])]).into(),
+            )])
+        });
+        NixAttrs::new([("curl", curl.into())])
     });
-    let pkgs = Nixpkgs::new().pkgs_function("extend").call(overlay);
+    let pkgs = Nixpkgs::new().with_overlay(overlay);
     let generated =
-        compile(&Config::new().set("flags", pkgs.select("curl.configureFlags"))).unwrap();
+        compile(&Config::new().set("flags", pkgs.value("curl.configureFlags"))).unwrap();
     let error = NixSession::new()
         .unwrap()
         .evaluate_interop(&generated)
@@ -280,4 +284,132 @@ fn failure_inside_override_attrs_maps_to_the_rust_operation() {
     let root =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/overlay-equivalence/provenance");
     fs::write(root.join("nix.stderr"), &error.raw_nix).unwrap();
+}
+
+#[test]
+fn overlays_capture_outer_callback_parameters_and_reject_escaped_ones() {
+    let mut builds = 0;
+    let label = NixCallable::<Expr<String>, Expr<String>>::from_function(|label| {
+        let overlay = Overlay::from_function(|_, _| {
+            builds += 1;
+            NixAttrs::new([("rusnixLabel", label.into())])
+        });
+        Nixpkgs::new()
+            .with_overlay(overlay)
+            .value("rusnixLabel")
+            .into_expr()
+    });
+    assert_eq!(builds, 1);
+    let value = evaluate(
+        "captured",
+        Config::new().set("label", label.call("captured")),
+    );
+    assert_eq!(value["label"], "captured");
+
+    let named = PackageFunction::<Expr<String>>::from_function_attrs(["label"], |args| {
+        let overlay =
+            Overlay::from_function(|_, _| NixAttrs::new([("rusnixLabel", args.select("label"))]));
+        (
+            Vec::<(&str, NixValue)>::new(),
+            Nixpkgs::new()
+                .with_overlay(overlay)
+                .value("rusnixLabel")
+                .into_expr(),
+        )
+    });
+    let value = evaluate(
+        "named-capture",
+        Config::new().set(
+            "label",
+            named.call(NixAttrs::new([("label", NixValue::from("named"))])),
+        ),
+    );
+    assert_eq!(value["label"], "named");
+
+    let mut escaped = None;
+    let _callback = NixCallable::<Expr<String>, Expr<String>>::from_function(|label| {
+        escaped = Some(Overlay::from_function(|_, _| {
+            NixAttrs::new([("rusnixLabel", label.into())])
+        }));
+        "unused".into()
+    });
+    let generated = Config::new().set(
+        "label",
+        Nixpkgs::new()
+            .with_overlay(escaped.unwrap())
+            .value("rusnixLabel"),
+    );
+    let error = compile(&generated).unwrap_err();
+    assert_eq!(error.kind, DiagnosticKind::Validation);
+    assert!(error.reason.contains("escaped its function scope"));
+}
+
+#[test]
+fn overlay_bodies_cannot_hide_invalid_records_or_nixos_scoped_references() {
+    let invalid = Overlay::from_function(|_, _| {
+        NixAttrs::new([("duplicate", NixValue::from(1)), ("duplicate", 2.into())])
+    });
+    let error =
+        compile(&Config::new().set("package", Nixpkgs::new().with_overlay(invalid).get("hello")))
+            .unwrap_err();
+    assert_eq!(error.kind, DiagnosticKind::Validation);
+    assert!(error.reason.contains("duplicate record field"));
+
+    let option = Overlay::from_function(|_, _| {
+        NixAttrs::new([(
+            "label",
+            rusnix_ir::nixos::OptionRef::<String>::new("example.label")
+                .into_expr()
+                .into(),
+        )])
+    });
+    let error =
+        compile(&Config::new().set("label", Nixpkgs::new().with_overlay(option).value("label")))
+            .unwrap_err();
+    assert_eq!(error.kind, DiagnosticKind::Validation);
+    assert!(
+        error
+            .reason
+            .contains("option references require NixosModule")
+    );
+}
+
+#[test]
+fn authored_overlays_extend_the_module_package_set_and_can_read_final_options() {
+    use rusnix_ir::nixos::{NixosModule, OptionDecl, OptionRef, OptionType};
+    use rusnix_nix::nixos::compile_module;
+
+    #[derive(rusnix_ir::IntoConfig)]
+    struct Schema {
+        #[rusnix(rename = "rusnixPrefix")]
+        prefix: OptionDecl,
+    }
+
+    let overlay = Overlay::from_function(|_, prev| {
+        let hello: Package = prev.field("hello");
+        let label = Expr::concat([
+            OptionRef::<String>::new("rusnixPrefix").into_expr(),
+            hello.field("pname"),
+        ]);
+        NixAttrs::new([("rusnixLabel", label.into())])
+    });
+    let pkgs = Nixpkgs::from_module().with_overlay(overlay);
+    let module = NixosModule::new(
+        Config::new()
+            .set("rusnixPrefix", "module-")
+            .set("environment.rusnixResult", pkgs.value("rusnixLabel")),
+    )
+    .declare(Schema {
+        prefix: OptionDecl::new(OptionType::named("str")),
+    });
+    let value = NixSession::new()
+        .unwrap()
+        .evaluate_nixos_interop(
+            &compile_module(&module).unwrap(),
+            &["environment", "rusnixResult"],
+            false,
+        )
+        .unwrap()
+        .value;
+    assert_eq!(value, "module-hello");
 }

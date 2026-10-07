@@ -17,9 +17,10 @@ Start with [authoring.rs](authoring.rs) to change the curl customization.
 
 ```rust
 let pkgs = authoring::package_set();
+let curl: rusnix_ir::interop::Package = pkgs.get("curl").into();
 let output = rusnix_ir::Config::new()
     .set("overlay", authoring::overlay())
-    .set("curlDerivation", pkgs.select("curl.drvPath"));
+    .set("curlDerivation", curl.field::<rusnix_ir::Expr<String>>("drvPath"));
 ```
 
 Both calls construct deferred expressions in Rust. The executable prints the
@@ -36,13 +37,18 @@ final: prev: {
 }
 ```
 
-[authoring.rs](authoring.rs) explicitly imports `interop::raw::{NixValue, NixFunctionExt}`
-and uses nested `NixValue::function` callbacks for
-`final` and `prev`, the existing `override_attrs` operation, and `nix_record!`.
-`Nixpkgs::new().pkgs_function("extend").call(overlay())` asks ordinary nixpkgs to
-apply the function. Selecting `curl` from the returned set observes the modified
-package. The same Rust-authored function can be passed in an import's `overlays`
-list.
+[authoring.rs](authoring.rs) returns an `Overlay`, using
+`Overlay::from_function(|final_pkgs, prev_pkgs| ...)` to describe the two Nix
+parameters. Both are `NixAttrs` views; a `Package` lookup exposes `override_attrs`,
+and `NixList` appends the configure flag. The returned attribute set can contain
+packages, helpers or nested collections. The Rust callback runs once while
+constructing the expression; Nix resolves its symbolic lookups later.
+
+`Nixpkgs::new().with_overlay(overlay())` retains the overlay for application by
+nixpkgs. Package lookups use that customized set, and further `with_overlay`
+calls apply overlays in order. The method also accepts an `OverlayRef` from a
+local Nix file. `Overlay` supports direct placement in `Config`, as shown above,
+and can be passed in a Nix import's `overlays` list.
 
 - Rusnix package examples replace package definitions written in Nixlang.
 - This overlay example replaces overlay/customization code written in Nixlang.

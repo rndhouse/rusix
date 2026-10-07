@@ -877,6 +877,12 @@ fn guard_operations(node: &Node, out: &mut BTreeSet<String>, remaining: &mut usi
             defaults.iter().all(|(_, n)| visit(n)) && visit(body)
         }
         ValueKind::If(a, b, c) => visit(a) && visit(b) && visit(c),
+        ValueKind::Reference(reference) => match &reference.source {
+            Source::Packages { overlays } | Source::NixosPackages { overlays } => {
+                overlays.iter().all(visit)
+            }
+            _ => true,
+        },
         _ => true,
     }
 }

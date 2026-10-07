@@ -4,7 +4,7 @@ use crate::{
     ast::{BinaryOp, Builtin, NixExpr, NixKind},
 };
 use rusnix_ir::{
-    backend::{Reference, Source},
+    backend::{Node, Reference, Source},
     interop::raw::AttrPath,
 };
 use std::{
@@ -25,6 +25,10 @@ pub(crate) fn select(mut root: NixExpr, path: &AttrPath) -> NixExpr {
 }
 
 pub(crate) fn source(source: &Source) -> NixExpr {
+    source_scoped(source, &crate::lower_value)
+}
+
+fn source_scoped<'a>(source: &'a Source, lower: &impl Fn(&'a Node) -> NixExpr) -> NixExpr {
     let imported = |path| NixExpr::plain(NixKind::Call(Builtin::Import, vec![path]));
 
     match source {
@@ -41,9 +45,7 @@ pub(crate) fn source(source: &Source) -> NixExpr {
                 ),
                 (
                     vec!["overlays".into()],
-                    NixExpr::plain(NixKind::List(
-                        overlays.iter().map(lower_reference).collect(),
-                    )),
+                    NixExpr::plain(NixKind::List(overlays.iter().map(lower).collect())),
                 ),
             ]))),
         )),
@@ -52,7 +54,7 @@ pub(crate) fn source(source: &Source) -> NixExpr {
             |pkgs, overlay| {
                 NixExpr::plain(NixKind::Apply(
                     Box::new(select(pkgs, &AttrPath::dotted("extend"))),
-                    Box::new(lower_reference(overlay)),
+                    Box::new(lower(overlay)),
                 ))
             },
         ),
@@ -82,7 +84,14 @@ pub(crate) fn source(source: &Source) -> NixExpr {
 }
 
 pub(crate) fn lower_reference(reference: &Reference) -> NixExpr {
-    let root = source(&reference.source);
+    lower_reference_scoped(reference, &crate::lower_value)
+}
+
+pub(crate) fn lower_reference_scoped<'a>(
+    reference: &'a Reference,
+    lower: &impl Fn(&'a Node) -> NixExpr,
+) -> NixExpr {
+    let root = source_scoped(&reference.source, lower);
     let value = match &reference.path {
         Some(path) => select(root, path),
         None => root,

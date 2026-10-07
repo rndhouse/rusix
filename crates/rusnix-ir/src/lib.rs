@@ -585,7 +585,7 @@ fn validate_scoped(node: &Node, scope: &[u64]) -> Result<(), ValidationError> {
             });
         }
         ValueKind::Bool(_) | ValueKind::Int(_) | ValueKind::Float(_) | ValueKind::Null => {}
-        ValueKind::Reference(reference) => reference.validate()?,
+        ValueKind::Reference(reference) => reference.validate_scoped(scope)?,
         ValueKind::Select(value, path) => {
             validate_value(value)?;
             path.validate(&node.origin)?;

@@ -63,3 +63,42 @@ fn an_explicit_raw_adapter_preserves_a_custom_interface_through_normal_operation
         .value;
     assert_eq!(value["result"], "adapted");
 }
+
+#[rusnix_ir::args]
+mod overlay_inputs {
+    use rusnix_ir::prelude::*;
+
+    #[rusnix(root)]
+    struct Inputs {
+        overlay: Overlay,
+    }
+}
+
+#[test]
+fn overlays_keep_their_type_through_views_and_bindings_without_raw_imports() {
+    let overlay = Overlay::from_function(|_, prev| {
+        let hello: Package = prev.field("hello");
+        NixAttrs::new([("rusnixHello", hello.into())])
+    });
+    let inputs = NixCallable::from_function(|inputs: NixAttrs| {
+        let inputs = overlay_inputs::from_value(inputs.into());
+        let overlay = inputs.overlay().bind(|overlay| overlay.asserted(true));
+        let overlay = Overlay::choose(true, overlay.clone(), overlay.asserted(false));
+        let hello: Package = Nixpkgs::new()
+            .with_overlay(overlay)
+            .get("rusnixHello")
+            .into();
+        hello.field::<Expr<String>>("pname")
+    });
+    let generated = compile(&Config::new().set(
+        "name",
+        inputs.call(NixAttrs::new([("overlay", overlay.into())])),
+    ))
+    .unwrap();
+    let value = NixSession::new()
+        .unwrap()
+        .evaluate_interop(&generated)
+        .unwrap()
+        .value;
+    assert_eq!(value["name"], "hello");
+}

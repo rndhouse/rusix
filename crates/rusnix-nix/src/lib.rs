@@ -177,21 +177,19 @@ fn scoped_reference(node: &Node, packages_only: bool) -> Option<&Node> {
         ValueKind::If(condition, yes, no) => option_reference(condition)
             .or_else(|| option_reference(yes))
             .or_else(|| option_reference(no)),
-        ValueKind::Reference(reference)
-            if matches!(
-                reference.source,
-                rusnix_ir::backend::Source::NixosPackages { .. }
-            ) =>
-        {
-            Some(node)
-        }
+        ValueKind::Reference(reference) => match &reference.source {
+            rusnix_ir::backend::Source::NixosPackages { .. } => Some(node),
+            rusnix_ir::backend::Source::Packages { overlays } => {
+                overlays.iter().find_map(option_reference)
+            }
+            _ => None,
+        },
         ValueKind::Parameter(_) => None,
         ValueKind::Bool(_)
         | ValueKind::Int(_)
         | ValueKind::Float(_)
         | ValueKind::Null
-        | ValueKind::String(_)
-        | ValueKind::Reference(_) => None,
+        | ValueKind::String(_) => None,
     }
 }
 
@@ -387,7 +385,9 @@ fn lower_scoped(node: &Node, scope: &[ParameterScope<'_>]) -> NixExpr {
                 .map(|(name, node)| (vec![name.clone()], lower_value(node)))
                 .collect(),
         ),
-        ValueKind::Reference(reference) => return interop::lower_reference(reference),
+        ValueKind::Reference(reference) => {
+            return interop::lower_reference_scoped(reference, &lower_value);
+        }
         ValueKind::OptionReference(path) => {
             NixKind::Select(Box::new(variable("config")), path.parts().to_vec())
         }

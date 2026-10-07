@@ -36,7 +36,7 @@ pub use library::NixLibrary;
 
 pub use typed::{
     IntoNixExpression, NixAttrs, NixCallable, NixExpression, NixList, NixNullable, NixOverridable,
-    NixPath, Overridable, Package, Stdenv,
+    NixPath, Overlay, Overridable, Package, Stdenv,
 };
 
 macro_rules! handle {
@@ -201,7 +201,8 @@ handle!(
 Such a function is called an *overlay*. It receives the final package set and
 the preceding package set, then returns named additions or replacements. Pass
 it to [`Nixpkgs::with_overlay`]; Nix applies it later. Rust does not inspect
-package internals or verify the overlay’s function arguments."
+package internals or verify the overlay’s function arguments. Convert it to
+[`Overlay`] when composing it with authored overlays as a value."
 );
 
 impl sealed::Sealed for PackageRef {}
@@ -319,7 +320,7 @@ pub struct Nixpkgs {
     /// Whether package lookups use the NixOS module’s supplied `pkgs` value.
     module_scope: bool,
     /// Functions that extend or replace packages, applied in the author’s order.
-    overlays: Vec<Reference>,
+    overlays: Vec<Node>,
 }
 
 impl Nixpkgs {
@@ -372,10 +373,11 @@ impl Nixpkgs {
 
     /// Add a function that extends or replaces packages in this package set.
     /// Nixpkgs calls these functions *overlays*; Nix applies them in the supplied
-    /// order. This extends the NixOS-supplied set or configures the standalone import.
-    /// Rust does not run the overlay.
-    pub fn with_overlay(mut self, overlay: OverlayRef) -> Self {
-        self.overlays.push(overlay.0);
+    /// order. Accepts Rust-authored [`Overlay`] values or existing [`OverlayRef`]
+    /// handles. This extends the NixOS-supplied set or configures the standalone
+    /// import. Rust retains the expression without running the overlay in Nix.
+    pub fn with_overlay(mut self, overlay: impl Into<Overlay>) -> Self {
+        self.overlays.push(overlay.into().as_expression().0);
         self
     }
 

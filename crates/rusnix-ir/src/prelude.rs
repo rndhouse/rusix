@@ -14,7 +14,7 @@
 //! ```
 pub use crate::interop::{
     FinalAttrs, IntoNixExpression, NixAttrs, NixCallable, NixExpression, NixLibrary, NixList,
-    NixNullable, NixOverridable, NixPath, Nixpkgs, Overridable, Package, PackageFunction,
+    NixNullable, NixOverridable, NixPath, Nixpkgs, Overlay, Overridable, Package, PackageFunction,
     PackageRef, Platform, Stdenv, ToNixText,
 };
 pub use crate::nixos::{NixosModule, OptionRef};

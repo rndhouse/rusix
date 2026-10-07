@@ -818,14 +818,18 @@ cargo test --locked -p rusnix-nix --test interop
 The [overlay example](examples/overlay/README.md) authors ordinary
 `final: prev: { ... }` customization code in Rust. It appends `--disable-dict`
 through `prev.curl.overrideAttrs`, keeping the existing pinned nixpkgs package
-definition. Existing deferred callbacks and nixpkgs' `extend` suffice; Nix
-evaluates the fixed point. Tests compare complete recipes with the handwritten
+definition. `Overlay::from_function` exposes typed `final` and `prev` attribute-set
+views, and `Nixpkgs::with_overlay` accepts both authored overlays and `OverlayRef`
+handles for existing Nix functions. Rust constructs the callback once; Nix
+resolves dependencies on the final package set when needed. Tests compare complete recipes with the handwritten
 overlay, including the ordinary downstream `curlpp` dependency, and verify
 `final`/`prev`, laziness and Rust operation provenance. The package examples
 replace package definitions; this example replaces overlay/customization code.
 
 `rusnix_ir::interop` owns distinct PackageRef/ModuleRef/OverlayRef/NixFunction
-handles and InputRef. The explicit NixValue escape hatch lives in `interop::raw`. A reference carries its
+handles and InputRef. `Overlay` represents an authored or referenced overlay
+expression and supports direct placement in `Config`. The explicit NixValue
+escape hatch lives in `interop::raw`. A reference carries its
 source identity, structured attribute segments, and Rust lookup origin. It
 lowers to AST imports, escaped getAttr operations, and function applications.
 Nix owns existence, object schemas, overlay semantics, and actual package type

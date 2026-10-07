@@ -209,8 +209,8 @@ pub enum Source {
     Builtins,
     /// The pinned standalone package set, with Nix applying overlays in order.
     Packages {
-        /// Deferred overlay functions, ordered as supplied by the author.
-        overlays: Vec<Reference>,
+        /// Referenced or Rust-authored overlay expressions, ordered as supplied by the author.
+        overlays: Vec<Node>,
     },
     /// The pinned nixpkgs library, independent of package-set overlays.
     Library,
@@ -221,8 +221,8 @@ pub enum Source {
     },
     /// The NixOS module's supplied `pkgs`, preserving its configuration and overlays.
     NixosPackages {
-        /// Additional overlays applied to the supplied package set in order.
-        overlays: Vec<Reference>,
+        /// Referenced or Rust-authored overlays applied to the supplied package set in order.
+        overlays: Vec<Node>,
     },
     /// An existing NixOS module file in the pinned nixpkgs tree.
     ModuleFile {
@@ -254,8 +254,15 @@ pub struct Reference {
 }
 
 impl Reference {
-    /// Check path/input invariants without opening files or validating Nix object types.
+    /// Check lookup paths, inputs and overlay expressions without opening files or evaluating Nix.
+    /// Overlay callback parameters must stay within their function scopes; to
+    /// validate a reference that captures an enclosing parameter, validate the
+    /// enclosing [`Node`] instead.
     pub fn validate(&self) -> Result<(), ValidationError> {
+        self.validate_scoped(&[])
+    }
+
+    pub(crate) fn validate_scoped(&self, scope: &[u64]) -> Result<(), ValidationError> {
         if let Some(path) = &self.path {
             path.validate(&self.origin)?;
         }
@@ -263,7 +270,7 @@ impl Reference {
         match &self.source {
             Source::Packages { overlays } | Source::NixosPackages { overlays } => {
                 for overlay in overlays {
-                    overlay.validate()?;
+                    validate_scoped(overlay, scope)?;
                 }
             }
             Source::ModuleFile { path } | Source::PinnedPath { path } => {
