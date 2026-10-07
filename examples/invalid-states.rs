@@ -28,11 +28,17 @@ pub enum Transport {
 
 /// A reusable certificate-path type whose inner string is preserved during lowering.
 #[derive(IntoRusnixValue)]
-pub struct Certificate(pub String);
+pub struct Certificate(
+    /// Certificate filename emitted as Nix text without reading the file.
+    pub String,
+);
 
 /// A separate key-path type; Rust prevents mixing it up with a Certificate.
 #[derive(IntoRusnixValue)]
-pub struct PrivateKey(pub String);
+pub struct PrivateKey(
+    /// Private-key filename emitted as Nix text without reading the file.
+    pub String,
+);
 
 // Local structs lower automatically; the reusable types above supply their own conversions.
 #[rusnix::config]
@@ -72,14 +78,17 @@ impl IntoRusnixValue for Transport {
         // Plain emits { tls = false; }; Tls adds both credential paths with tls = true.
         #[derive(IntoRusnixValue)]
         struct Plain {
+            /// Disabled TLS flag; this record shape omits both credential paths.
             tls: bool,
         }
 
         #[derive(IntoRusnixValue)]
         struct Tls {
+            /// Enabled TLS flag emitted together with both credential paths.
             tls: bool,
+            /// Certificate filename emitted as a Nix string without reading the file.
             certificate: Certificate,
-            // Becomes `privateKey` under Rusnix's default naming convention.
+            // Private-key filename emitted as `privateKey` without reading the file.
             private_key: PrivateKey,
         }
 

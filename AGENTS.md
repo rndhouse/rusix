@@ -8,8 +8,8 @@ Users edit Rust; generated Nix is compiler output.
 Core docs explain concepts. Examples teach usage. Both assume Rust knowledge,
 not deep Nix, nixpkgs or NixOS knowledge.
 
-Every library struct field must have a meaningful comment, including private
-fields, tuple fields and fields emitted by macro templates. Public fields use
+Every library and example struct field must have a meaningful comment, including
+private fields, tuple fields and fields emitted by macro templates. Public fields use
 Rust doc comments and explain what the field actually represents.
 
 For core/library code:

@@ -30,6 +30,7 @@ mod config {
 
     // Groups a typed choice with a decision computed from it before lowering.
     struct ConnectionPolicy {
+        /// Typed choice emitted as server or client in the generated Nix record.
         mode: Mode,
         // A concrete Rust decision, not a read of final NixOS configuration.
         accepts_connections: bool,

@@ -12,6 +12,7 @@ use rusnix_ir::{
     interop::{NixAttrs, Nixpkgs, Package, PackageFunction},
 };
 
+/// Exports the reusable recipe, release family and selected MariaDB package.
 #[derive(IntoConfig)]
 struct Output {
     /// Reusable Nix function accepting a release, dependencies and feature arguments.

@@ -10,6 +10,7 @@ use rusnix_ir::{
     interop::{Nixpkgs, Package, PackageFunction},
 };
 
+/// Exports the reusable curl recipe and a package with the Rust model's feature choices.
 #[derive(IntoConfig)]
 struct Output {
     /// Reusable Nix function accepting curl's dependencies and feature arguments.

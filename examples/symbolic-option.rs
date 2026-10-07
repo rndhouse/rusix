@@ -25,6 +25,7 @@ mod config {
 
     // Places this configuration's service under the `services` namespace.
     struct Services {
+        /// Input options for the fictional service, emitted under services.example.
         example: ExampleOptions,
     }
 
@@ -35,10 +36,12 @@ mod config {
     }
 
     struct Systemd {
+        /// Named service units contributed under the NixOS systemd.services namespace.
         services: Units,
     }
 
     struct Units {
+        /// Service unit whose startup command follows the final services.example.port option.
         example: Unit,
     }
 

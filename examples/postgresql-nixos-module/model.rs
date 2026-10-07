@@ -1,5 +1,5 @@
 //! User-defined PostgreSQL configuration types and an example server configuration.
-//! Packages and open settings use opaque boundary values; compatibility policy stays in lowering.rs.
+//! Package references and arbitrary server settings can stay deferred to Nix; lowering.rs handles NixOS compatibility.
 use rusnix_ir::interop::{PackageRef, raw::NixValue};
 use std::collections::BTreeMap;
 
@@ -60,7 +60,7 @@ pub enum Database {
 pub struct Postgresql {
     /// Defines the existing NixOS enable option, gating the generated service behavior.
     pub enable: bool,
-    /// Selects an existing nixpkgs package; Rusnix keeps its version and internals opaque.
+    /// Selects an existing nixpkgs package; Nix resolves its version and build recipe.
     pub package: Option<PackageRef>,
     /// Requests the package's JIT variant; nixpkgs remains authoritative for its implementation.
     pub enable_jit: Option<bool>,
@@ -80,7 +80,7 @@ pub struct Postgresql {
     pub ident_map: Option<String>,
     /// Extra initdb arguments, shell-escaped by the existing Nix library.
     pub initdb_args: Vec<String>,
-    /// An opaque SQL-file path or derivation to run only when initializing the database cluster.
+    /// SQL-file path, possibly supplied by a package output, applied only when initializing the cluster.
     pub initial_script: Option<NixValue>,
     /// Optional recovery.conf content, retained for compatibility with the pinned module.
     pub recovery_config: Option<String>,

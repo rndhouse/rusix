@@ -1,4 +1,5 @@
-//! Explicit Rust-authored edges; all other dependencies stay in pinned nixpkgs.
+//! Wire OpenSSL into curl and Git, then wire curl into MariaDB.
+//! The pinned nixpkgs package set supplies the other dependencies.
 use rusnix_ir::interop::raw::NixRepresentation;
 use rusnix_ir::interop::raw::NixpkgsExt;
 

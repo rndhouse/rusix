@@ -13,6 +13,7 @@ use rusnix_ir::{
     nix_record,
 };
 
+/// Exports a reusable release family and one selected package as named Nix attributes.
 #[derive(IntoConfig)]
 struct Output {
     /// Nix function returning all three releases with the caller's dependencies.

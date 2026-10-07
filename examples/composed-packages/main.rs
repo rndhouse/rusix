@@ -1,4 +1,4 @@
-//! Emit the connected Rust-authored region, using the ordinary Nix backend.
+//! Print Nix for the package set assembled by composition::packages.
 pub mod composition;
 
 use rusnix_ir::{
@@ -6,6 +6,7 @@ use rusnix_ir::{
     interop::{NixAttrs, Package},
 };
 
+/// Exports packages whose selected dependencies are wired together in Rust.
 #[derive(IntoConfig)]
 struct Output {
     /// Connected package set: OpenSSL feeds curl and Git; curl feeds MariaDB.

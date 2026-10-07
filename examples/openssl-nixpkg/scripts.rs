@@ -1,4 +1,5 @@
-//! Exact pinned phase text; these are shell scripts, not embedded Nix recipes.
+//! Shell commands used by the pinned OpenSSL build recipes.
+//! Rust constructs their text; Nix runs them during package builds.
 use rusnix_ir::{
     Expr,
     interop::{Package, raw::NixValue},

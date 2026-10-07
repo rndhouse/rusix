@@ -19,7 +19,10 @@ mod config {
     }
 
     /// An ordinary Rust port type; its inner number lowers to a Nix integer.
-    pub struct Port(pub u16);
+    pub struct Port(
+        /// Listening port emitted as an integer in Nix.
+        pub u16,
+    );
 
     /// The firewall decision computed from the model before any Nix evaluation.
     pub struct FirewallPolicy {
@@ -58,8 +61,11 @@ mod config {
 
     // Collects the model choice and both decisions under one fictional option tree.
     struct Policies {
+        /// Chosen mode emitted as server or client beside the policies derived from it.
         mode: Mode,
+        /// Inbound ports computed in Rust and emitted under demo.firewall.
         firewall: FirewallPolicy,
+        /// Connection behavior computed in Rust and emitted under demo.service.
         service: ServicePolicy,
     }
 

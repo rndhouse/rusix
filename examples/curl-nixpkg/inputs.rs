@@ -1,4 +1,5 @@
-//! Finite symbolic access to the pinned package arguments; Rust never reads their values.
+//! Declare dependencies and feature choices supplied to curl's Nix package function.
+//! Accessors describe deferred lookups; Rust does not evaluate the arguments.
 use rusnix_ir as rusnix;
 
 /// Local views describe only the external Nix values used by this compatibility adapter.

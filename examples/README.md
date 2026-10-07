@@ -121,12 +121,24 @@ use rusnix_ir::{self as rusnix, nixos::NixosModule};
 
 #[rusnix::config]
 mod config {
+    /// A contribution to the NixOS configuration's service options.
     #[rusnix(root)]
-    pub struct Machine { services: Services }
+    pub struct Machine {
+        /// Service choices placed under `services` in Nix.
+        services: Services,
+    }
 
-    struct Services { example: Example }
+    struct Services {
+        /// This example service's options, placed under `services.example`.
+        example: Example,
+    }
 
-    struct Example { enable: bool, listen_port: u16 }
+    struct Example {
+        /// Whether NixOS should enable the example service.
+        enable: bool,
+        /// Listening port emitted as `services.example.listenPort`.
+        listen_port: u16,
+    }
 
     pub fn model() -> Machine {
         Machine { services: Services {
@@ -253,7 +265,14 @@ has a tested rejection of `"proxy"`.
 ## Typed submodule
 
 ```rust
-struct Endpoint { host: Hostname, port: Port }
+/// A reusable service address; its enclosing Rust field determines its Nix path.
+struct Endpoint {
+    /// Host name emitted as the endpoint's `host` attribute.
+    host: Hostname,
+    /// Listening port emitted as the endpoint's `port` attribute.
+    port: Port,
+}
+
 let endpoint = Endpoint { host: Hostname("service.internal".into()), port: Port(443) };
 ```
 
@@ -448,10 +467,12 @@ in `systemd.services.example.serviceConfig.ExecStart`:
 // Inside the #[rusnix::config] module:
 #[rusnix(rename_all = "PascalCase")]
 struct ServiceConfig {
+    /// Startup command whose option references Nix resolves after merging all modules.
     exec_start: Expr<String>,
 }
-``` The generated dependency is
-equivalent to:
+```
+
+The generated dependency is equivalent to:
 
 ```nix
 { config, ... }: {

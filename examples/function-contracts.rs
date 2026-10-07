@@ -10,11 +10,17 @@ use rusnix_ir::{self as rusnix, IntoRusnixValue, RusnixValue};
 
 /// A reusable hostname-domain string; no hostname syntax check is implied.
 #[derive(IntoRusnixValue)]
-pub struct Hostname(pub String);
+pub struct Hostname(
+    /// Hostname preserved as text in the generated Nix value.
+    pub String,
+);
 
 /// A listening-port value, kept distinct from other integer domains in Rust.
 #[derive(IntoRusnixValue)]
-pub struct Port(pub u16);
+pub struct Port(
+    /// Listening port emitted as an integer in Nix.
+    pub u16,
+);
 
 /// A reusable input record whose fields keep their semantic types across function calls.
 #[derive(IntoRusnixValue)]
@@ -87,14 +93,17 @@ impl IntoRusnixValue for Transport {
         // Plain emits { tls = false; }; Tls adds both credential paths with tls = true.
         #[derive(IntoRusnixValue)]
         struct Plain {
+            /// Disabled TLS flag; this record shape omits both credential paths.
             tls: bool,
         }
 
         #[derive(IntoRusnixValue)]
         struct Tls {
+            /// Enabled TLS flag emitted together with both credential paths.
             tls: bool,
+            /// Certificate filename emitted as a Nix string without reading the file.
             certificate: String,
-            // Emitted as `privateKey` by the default field naming rule.
+            // Private-key filename emitted as `privateKey` without reading the file.
             private_key: String,
         }
 

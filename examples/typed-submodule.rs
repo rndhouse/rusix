@@ -11,11 +11,17 @@ use rusnix_ir::{self as rusnix, IntoRusnixValue};
 /// An ordinary Rust domain type; its inner value lowers to a Nix string.
 /// This separates names from other strings without adding hostname validation.
 #[derive(IntoRusnixValue)]
-pub struct Hostname(pub String);
+pub struct Hostname(
+    /// Hostname preserved as text in the generated Nix value.
+    pub String,
+);
 
 /// A distinct Rust type for a listening port; its inner value lowers to an integer.
 #[derive(IntoRusnixValue)]
-pub struct Port(pub u16);
+pub struct Port(
+    /// Listening port emitted as an integer in Nix.
+    pub u16,
+);
 
 /// A reusable record that can appear wherever a parent places it.
 #[derive(IntoRusnixValue)]
@@ -34,6 +40,7 @@ mod config {
     /// Places the reusable Endpoint in this configuration's attribute tree.
     #[rusnix(root)]
     pub struct Root {
+        /// Fictional demo namespace where the reusable endpoint becomes nested Nix fields.
         demo: Demo,
     }
 

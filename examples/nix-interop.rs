@@ -29,15 +29,18 @@ impl IntoRusnixValue for Transport {
         // The plain shape omits credential fields entirely.
         #[derive(IntoRusnixValue)]
         struct Plain {
+            /// Disabled TLS flag; this record shape omits both credential paths.
             tls: bool,
         }
 
         // The TLS shape carries the two paths required by Transport::Tls.
         #[derive(IntoRusnixValue)]
         struct Tls {
+            /// Enabled TLS flag emitted together with both credential paths.
             tls: bool,
+            /// Certificate filename emitted as a Nix string without reading the file.
             certificate: String,
-            // Becomes `privateKey` under the default naming rule.
+            // Private-key filename emitted as `privateKey` without reading the file.
             private_key: String,
         }
 

@@ -1,4 +1,5 @@
-//! Complete OpenSSL family policy; nixpkgs retains fetchers, stdenv and overrides.
+//! Describe OpenSSL build recipes for the pinned releases.
+//! Nix evaluates them with the source fetchers and compiler environment supplied by nixpkgs.
 use super::{
     inputs::{Inputs, args},
     model::Release,

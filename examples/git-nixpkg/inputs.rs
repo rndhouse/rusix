@@ -271,7 +271,9 @@ pub(super) fn arguments(model: super::model::Git) -> Arguments {
 
 /// Named authoring inputs retain the model and supplied dependency until lowering.
 pub struct Arguments {
+    /// Rust feature choices converted into explicit arguments to the Git package function.
     model: super::model::Git,
+    /// Optional OpenSSL dependency; None keeps nixpkgs' automatic callPackage lookup.
     openssl: Option<Package>,
 }
 

@@ -1,5 +1,5 @@
-//! Configuration implementation / lowering compatible with the pinned NixOS PostgreSQL module.
-//! Final-option dependencies stay symbolic; schema.rs separately supplies the public declarations.
+//! Derive PostgreSQL service files and startup commands from the final NixOS options.
+//! Rust constructs expressions; Nix resolves them after combining the declarations in schema.rs with other modules.
 use super::{
     model::{Clause, Database, Postgresql, Role, RoleClauses},
     options,
@@ -380,7 +380,7 @@ struct ServiceConfig {
 
     // Selects notification support from the final PostgreSQL package version.
     r#type: NixValue,
-    // Starts the opaque package selected after NixOS merging.
+    // Starts PostgreSQL from the package selected after NixOS combines all definitions.
     exec_start: NixValue,
     // Signals the running server to reread its configuration.
     exec_reload: NixValue,
@@ -724,10 +724,13 @@ mod config {
     // Places the author's optional input record at the existing PostgreSQL option path.
     #[rusnix(root)]
     pub(super) struct Inputs {
+        /// Places the optional Rust inputs under the existing NixOS services namespace.
         services: InputServices,
     }
 
+    /// Author-supplied choices grouped under the NixOS service namespace.
     struct InputServices {
+        /// PostgreSQL choices contributed before NixOS resolves defaults and other modules.
         postgresql: PostgresqlInput,
     }
 
@@ -736,7 +739,7 @@ mod config {
     pub(super) struct PostgresqlInput {
         // Always contribute enable; the remaining scalars leave upstream defaults intact when unset.
         pub(super) enable: bool,
-        // Selects an opaque package only when the author supplies one.
+        // Selects an existing package only when the author supplies one.
         pub(super) package: Option<PackageRef>,
         #[rusnix(rename = "enableJIT")]
         // Leaves the package-specific JIT default intact when unset.
@@ -752,7 +755,7 @@ mod config {
         pub(super) authentication: Option<String>,
         // Defines ident-map content only when supplied.
         pub(super) ident_map: Option<String>,
-        // Preserves the supplied SQL-file object as an opaque Nix value.
+        // Retains the SQL-file reference for Nix to resolve; PostgreSQL applies it at initialization.
         pub(super) initial_script: Option<NixValue>,
         // Contributes optional recovery content rather than a null definition.
         pub(super) recovery_config: Option<String>,
@@ -760,7 +763,7 @@ mod config {
         // The adapter explicitly decides whether empty collections should contribute.
         // Carries the callback that selects extensions from the final package set.
         pub(super) extra_plugins: Option<NixValue>,
-        // Keeps arbitrary setting keys literal inside an opaque record.
+        // Keeps arbitrary PostgreSQL setting names literal in the Nix attribute set.
         pub(super) settings: Option<NixValue>,
         // An absent list preserves upstream initialization defaults.
         pub(super) initdb_args: Option<Vec<String>>,
@@ -789,18 +792,26 @@ mod config {
         pub(super) bypassrls: Option<NixValue>,
     }
 
+    /// PostgreSQL defaults and authentication rules computed from the final options.
     struct Services {
+        /// Computed PostgreSQL defaults and authentication rules contributed to services.postgresql.
         postgresql: NixValue,
     }
 
     // A separate contribution deriving service behavior from final merged options.
     #[rusnix(root)]
     pub(super) struct Implementation {
+        /// Deferred configuration rules NixOS checks when the PostgreSQL service is enabled.
         assertions: NixValue,
+        /// PostgreSQL defaults derived from the final merged option values.
         services: Services,
+        /// Unix account and group definitions used to own the database directory and process.
         users: NixValue,
+        /// PostgreSQL packages and shared files included in the system environment.
         environment: NixValue,
+        /// Build-time configuration checks described for NixOS; Rust does not execute them.
         system: NixValue,
+        /// Service-unit commands, dependencies and hardening settings derived from PostgreSQL options.
         systemd: NixValue,
     }
 

@@ -4,7 +4,10 @@ use rusnix_ir::{self as rusnix, IntoRusnixValue};
 
 /// A reusable port-domain number; Rusnix lowers the inner u16 without checking NixOS's schema.
 #[derive(IntoRusnixValue)]
-pub struct Port(pub u16);
+pub struct Port(
+    /// Listening port emitted as an integer in Nix.
+    pub u16,
+);
 
 // Automatic structural lowering supplies paths, not NixOS option declarations.
 #[rusnix::config]

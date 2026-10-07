@@ -1,4 +1,5 @@
-//! Complete pinned client/server family; CMake and builders remain ordinary nixpkgs.
+//! Describe MariaDB client and server build recipes for the pinned releases.
+//! Nix evaluates the recipes using the CMake tools and build environment supplied by nixpkgs.
 use super::{
     inputs::{Inputs, args},
     model::Release,
@@ -402,23 +403,32 @@ struct Common {
     meta: NixValue,
 }
 
-// Finite access to the shared recipe; the full supplied record remains authoritative.
+// Declare the shared fields used below while retaining the caller's complete recipe.
 #[rusnix::args]
 mod common_view {
     use rusnix_ir::interop::{NixList, NixPath, Package};
 
+    /// Arguments carrying the recipe shared by both MariaDB package variants.
     #[rusnix(root)]
     struct Inputs {
+        /// Shared recipe fields bound once and reused by the MariaDB client and server packages.
         common: Common,
     }
 
+    /// Shared build choices extended separately for the client and server packages.
     #[rusnix(value)]
     struct Common {
+        /// Shared source version referenced by both deferred build recipes.
         version: String,
+        /// Ordered patch-file paths shared by the client and server builds.
         patches: NixList<NixPath>,
+        /// Shared libraries used where the resulting MariaDB programs run.
         build_inputs: NixList<Package>,
+        /// Shared tools that execute on the build machine, including during cross-compilation.
         native_build_inputs: NixList<Package>,
+        /// Shared CMake switches extended with client- or server-specific choices.
         cmake_flags: NixList<rusnix_ir::Expr<String>>,
+        /// Shared shell commands to run after installation during a Nix build.
         post_install: String,
     }
 }

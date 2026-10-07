@@ -64,10 +64,16 @@ pub fn model() -> Curl {
 #[derive(IntoRusnixValue)]
 #[rusnix(omit_none)]
 pub struct Arguments {
+    /// Adds the HTTP/3 dependencies and configure flags through the Nix package function.
     http3_support: bool,
+    /// Selects curl's experimental websocket support through its Nix feature argument.
     websocket_support: bool,
+    /// Explicitly enables or disables OpenSSL; None preserves the Nix default.
     openssl_support: Option<bool>,
+    /// Explicitly enables or disables GnuTLS; None preserves the Nix default.
     gnutls_support: Option<bool>,
+    /// Explicitly enables or disables wolfSSL; None preserves the Nix default.
     wolfssl_support: Option<bool>,
+    /// Explicitly enables or disables Rustls; None preserves the Nix default.
     rustls_support: Option<bool>,
 }
