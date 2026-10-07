@@ -51,8 +51,14 @@ fetches, flakes, or builders to this POC. The explicitly requested NixOS
 experiment uses the checked, pinned `vendor/nixpkgs` Git submodule (a staged minimal
 subset and the same full checkout for interoperability); evaluation is offline.
 
-Run `cargo test --workspace --locked`, `cargo fmt --all --check`, and
-`cargo clippy --workspace --all-targets --locked -- -D warnings` after changes.
+Choose checks based on what changed. For edits limited to prose, comments or
+Markdown links, check `git diff --check` and any changed links. Do not run Cargo
+tests, rustfmt, Clippy or rustdoc for these edits. If a documentation code example
+changes, verify that example with a focused check instead of the workspace suite.
+
+For changes to Rust code, dependencies or build behavior, run
+`cargo test --workspace --locked`, `cargo fmt --all --check`, and
+`cargo clippy --workspace --all-targets --locked -- -D warnings`.
 The tests require `nix` and `nix-instantiate`; missing tooling is a failure,
 not a reason to silently skip the round-trip tests.
 

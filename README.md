@@ -1,16 +1,14 @@
 # Rusix
 
-Author Nix packages and NixOS configuration in Rust. Use your own types and
-functions, compile them into Nix, and compose them with the existing Nix ecosystem.
+Rusix lets you define Nix packages and NixOS configuration in Rust.
+It compiles those definitions into Nix expressions.
 
-- **Your types define your model.** Rust's type checking, enums and reusable
-  libraries help you express valid configuration.
-- **Nix evaluates the result.** Deferred expressions preserve lazy evaluation,
-  package dependencies and NixOS module semantics.
-- **Adopt it incrementally.** Rust-authored packages and modules can use existing
-  nixpkgs values and ordinary Nix definitions.
-- **Trace errors back to Rust.** Source mappings connect Nix evaluation failures
-  to the Rust code that produced them, where an origin can be recovered.
+- Define configuration with your own Rust types. Rust checks those types
+  when compiling your crate.
+- Nix evaluates the generated expressions when their values are needed.
+  NixOS combines module definitions during evaluation.
+- Rust definitions can use existing nixpkgs packages and Nix modules.
+- Source mappings can connect Nix errors to their Rust source locations.
 
 ```rust
 use rusix::{IntoConfig, compile};
@@ -30,17 +28,17 @@ fn main() {
 }
 ```
 
-Structs become Nix attribute sets. Rust constructs the description; deferred
-expressions are evaluated later by Nix. Generated Nix is compiler output—edit Rust.
+Structs become Nix attribute sets. In this example, `Service` produces
+`enable` and `port` attributes. Edit the Rust source to change the output.
 
-Use `rusix` as a library in your own crate. It re-exports the authoring macros,
-compilation and evaluation APIs; no separate macro dependency is needed.
-Compilation requires only Rust. The optional evaluator runs offline in a
-disposable Nix store and never builds packages or activates a system.
+Use `rusix` as a library in your own crate. It includes authoring macros and
+the compiler. It also provides an optional Nix evaluator.
+Generating Nix requires only Rust. Evaluation requires Nix.
+The evaluator runs offline in a temporary store.
 
-**Experimental.** Rust checks your model; NixOS still validates options and
-combines module definitions. Some backend errors cannot be mapped precisely to Rust.
+Rusix is experimental. NixOS checks option values during evaluation.
+Some Nix errors cannot be mapped to a Rust source location.
 
-- [Examples](examples/README.md): configuration models, package definitions and NixOS modules.
-- [Library usage](crates/rusix/README.md): dependencies, evaluation and local nixpkgs setup.
-- [Development and design](docs/development.md): running the project, verification and limitations.
+- [Examples](examples/README.md)
+- [Library usage](crates/rusix/README.md)
+- [Development and design](docs/development.md)
