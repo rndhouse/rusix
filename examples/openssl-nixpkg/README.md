@@ -26,8 +26,8 @@ From the repository root:
 cargo run --locked -p rusnix-nix --example openssl-nixpkg
 ```
 
-The executable prints `factory` for the selected release, `family` as a function
-returning all three releases, and `openssl` as the selected package expression.
+The executable prints `family` as a function returning all three releases and
+`openssl` as the selected package expression.
 `Preview` means OpenSSL 3.3.2 at this pin; `Lts` means 3.0.15 and `Legacy` means
 1.1.1w. These labels describe the pinned checkout's policy.
 To select another pinned release, change the enum variant in `main.rs`.

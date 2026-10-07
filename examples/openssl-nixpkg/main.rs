@@ -14,7 +14,6 @@ fn main() {
     let openssl = Nixpkgs::new().call_package(&factory, nix_record! {});
     let generated = rusnix_nix::compile(
         &Config::new()
-            .set("factory", factory)
             .set("family", lowering::family_factory())
             .set("openssl", openssl),
     )
