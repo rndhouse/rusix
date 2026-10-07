@@ -2,6 +2,12 @@
 #[path = "../../../examples/overlay/authoring.rs"]
 mod authoring;
 
+#[path = "../../../examples/overlay/inputs.rs"]
+mod inputs;
+
+#[path = "../../../examples/overlay/model.rs"]
+mod model;
+
 use rusnix_ir::{
     Config, Expr,
     interop::{
@@ -144,6 +150,54 @@ fn rust_overlay_matches_the_handwritten_recipe_and_downstream_dependency_exactly
     assert_eq!(expected_recipe, modified["recipe"].as_str().unwrap());
     assert_eq!(baseline["source"], modified["source"]);
     assert_eq!(baseline["hello"], modified["hello"]);
+}
+
+#[test]
+fn declared_views_and_the_output_model_select_metadata_without_forcing_the_overlay_function() {
+    let pkgs = authoring::package_set().view::<inputs::Packages>();
+    let output = model::Output {
+        overlay: authoring::overlay(),
+        curl_derivation: pkgs.curl().view::<inputs::PackageMetadata>().drv_path(),
+    };
+    let output = NixAttrs::try_from_record(output).unwrap();
+    let value = evaluate(
+        "declared-views",
+        Config::new()
+            .set_dynamic("rust", output.field::<Expr<String>>("curlDerivation"))
+            .set_dynamic(
+                "reference",
+                ordinary(Some(reference().overlay("overlay").into())).select("curl.drvPath"),
+            ),
+    );
+    assert_eq!(value["rust"], value["reference"]);
+}
+
+#[test]
+fn structured_overlay_and_attribute_callbacks_return_conversion_errors_immediately() {
+    #[derive(rusnix_ir::IntoRusnixValue)]
+    struct Invalid {
+        #[rusnix(flatten)]
+        fields: bool,
+    }
+
+    let mut builds = 0;
+    let error = Overlay::try_from_function(|_: inputs::Packages, _: inputs::Packages| {
+        builds += 1;
+        Invalid { fields: false }
+    })
+    .unwrap_err();
+    assert_eq!(builds, 1);
+    assert!(error.message.contains("flatten"));
+
+    let package: Package = Nixpkgs::new().get("rusnixMissingPackage").into();
+    let error = package
+        .try_override_attrs(|_: inputs::BuildAttrs| {
+            builds += 1;
+            Invalid { fields: false }
+        })
+        .unwrap_err();
+    assert_eq!(builds, 2);
+    assert!(error.message.contains("flatten"));
 }
 
 #[test]

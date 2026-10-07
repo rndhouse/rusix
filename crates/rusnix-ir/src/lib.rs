@@ -150,9 +150,15 @@ pub use rusnix_derive::options;
 /// ```
 ///
 /// Bind the view to an existing [`interop::raw::NixValue`] using generated `from_value`.
-/// This also works with the placeholders supplied by
+/// This also works with placeholders supplied by
 /// [`interop::raw::NixValue::function_attrs`]. Nix remains responsible for caller
 /// arguments, defaults and actual types.
+///
+/// Argument roots also implement [`interop::NixExpression`]: they can be typed
+/// callback parameters or package-set views through [`interop::Nixpkgs::view`].
+/// Their `as_attrs()` method retains the complete argument record, including
+/// undeclared fields, without reading it in Rust. Nested views need `#[rusnix(value)]`
+/// to support these whole-value operations.
 ///
 /// Use one root in an inline module. Leaf types, naming and optional subtree
 /// `as_value()` access follow [`options`]. Views can be cloned without evaluating

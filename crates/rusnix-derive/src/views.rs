@@ -193,7 +193,7 @@ fn parse_view(mut item: syn::ItemStruct) -> syn::Result<View> {
     if root && value {
         return Err(syn::Error::new_spanned(
             &item.ident,
-            "whole-root access is not supported; mark a specific subtree with #[rusnix(value)]",
+            "root and value cannot be combined; mark a specific subtree with #[rusnix(value)]",
         ));
     }
 
@@ -363,6 +363,7 @@ fn expand_from(mut module: ItemMod, source: Source) -> syn::Result<TokenStream> 
     let mut graph = BTreeMap::new();
 
     for view in &views {
+        let whole_value = view.value || (view.root && matches!(source, Source::Arguments));
         let mut keys = BTreeSet::new();
         let mut children = Vec::new();
 
@@ -371,7 +372,7 @@ fn expand_from(mut module: ItemMod, source: Source) -> syn::Result<TokenStream> 
             if matches!(
                 name.to_string().as_str(),
                 "__rusnix_path" | "__rusnix_at" | "__rusnix_source"
-            ) || (view.value
+            ) || (whole_value
                 && (name == "as_value"
                     || (matches!(source, Source::Arguments) && name == "as_attrs")))
             {
@@ -412,6 +413,7 @@ fn expand_from(mut module: ItemMod, source: Source) -> syn::Result<TokenStream> 
     let mut generated = Vec::new();
 
     for view in views {
+        let whole_value = view.value || (view.root && matches!(source, Source::Arguments));
         let name = &view.item.ident;
         let attrs = &view.item.attrs;
         let description = match source {
@@ -527,7 +529,7 @@ fn expand_from(mut module: ItemMod, source: Source) -> syn::Result<TokenStream> 
             }
         }
 
-        let as_value = view.value.then(|| {
+        let as_value = whole_value.then(|| {
             let selection = match source {
                 Source::Options => {
                     quote!(
@@ -562,7 +564,7 @@ fn expand_from(mut module: ItemMod, source: Source) -> syn::Result<TokenStream> 
             )
         });
 
-        let expression_impl = (view.value && matches!(source, Source::Arguments)).then(|| {
+        let expression_impl = (whole_value && matches!(source, Source::Arguments)).then(|| {
             quote!(
                 impl #name {
                     /// Retain this record as a deferred attribute set for shallow union.
@@ -798,13 +800,19 @@ mod tests {
 
     #[test]
     fn attribute_accessors_cannot_be_shadowed() {
-        let arguments: syn::ItemMod = syn::parse_str("mod arguments { #[rusnix(root)] struct Root { value: Value } #[rusnix(value)] struct Value { as_attrs: String } }").unwrap();
-        assert!(
-            super::expand_args(arguments)
-                .unwrap_err()
-                .to_string()
-                .contains("collides")
-        );
+        for source in [
+            "mod arguments { #[rusnix(root)] struct Root { value: Value } #[rusnix(value)] struct Value { as_attrs: String } }",
+            "mod arguments { #[rusnix(root)] struct Root { as_attrs: String } }",
+            "mod arguments { #[rusnix(root)] struct Root { as_value: String } }",
+        ] {
+            let arguments: syn::ItemMod = syn::parse_str(source).unwrap();
+            assert!(
+                super::expand_args(arguments)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("collides")
+            );
+        }
     }
 
     #[test]

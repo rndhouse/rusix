@@ -322,7 +322,7 @@
     "count": 1,
     "source": "Root",
     "reason_tokens": [
-      "whole-root access",
+      "root and value cannot be combined",
       "specific subtree"
     ]
   },
@@ -519,13 +519,13 @@
     ]
   },
   {
-    "file": "args-whole-root.rs",
+    "file": "args-unmarked-subtree.rs",
     "code": "E0599",
     "count": 1,
     "source": "as_value",
     "reason_tokens": [
       "as_value",
-      "Root"
+      "Subtree"
     ]
   },
   {

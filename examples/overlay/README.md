@@ -13,19 +13,25 @@ dependencies and upstream package definition stay in nixpkgs. The remaining
 package set stays ordinary nixpkgs.
 
 Start with [authoring.rs](authoring.rs) to change the curl customization.
-[main.rs](main.rs) composes it with source generation:
+[inputs.rs](inputs.rs) declares the fields read from package sets and recipes;
+[model.rs](model.rs) defines the ordinary Rust structs returned by the callbacks
+and printed by [main.rs](main.rs).
 
 ```rust
-let pkgs = authoring::package_set();
-let curl: rusnix_ir::interop::Package = pkgs.get("curl").into();
-let output = rusnix_ir::Config::new()
-    .set("overlay", authoring::overlay())
-    .set("curlDerivation", curl.field::<rusnix_ir::Expr<String>>("drvPath"));
+let pkgs = authoring::package_set().view::<inputs::Packages>();
+let curl = pkgs.curl().view::<inputs::PackageMetadata>();
+let output = model::Output {
+    overlay: authoring::overlay(),
+    curl_derivation: curl.drv_path(),
+};
 ```
 
-Both calls construct deferred expressions in Rust. The executable prints the
-overlay function and an expression selecting the modified curl's build-recipe
-path (`drvPath`); Nix applies the overlay only when that output is evaluated.
+Rust field names supply the Nix attribute names, so lookups and replacements use
+accessors and struct fields. Names follow Rusnix's usual lowerCamelCase mapping:
+`configure_flags` becomes `configureFlags`, and `drv_path` becomes `drvPath`.
+The executable compiles `output` directly and prints the overlay function
+and an expression selecting the customized curl's build-recipe path. Nix applies
+the overlay only when that lookup is evaluated; no package is built.
 
 The equivalent handwritten overlay is:
 
@@ -38,11 +44,20 @@ final: prev: {
 ```
 
 [authoring.rs](authoring.rs) returns an `Overlay`, using
-`Overlay::from_function(|final_pkgs, prev_pkgs| ...)` to describe the two Nix
-parameters. Both are `NixAttrs` views; a `Package` lookup exposes `override_attrs`,
-and `NixList` appends the configure flag. The returned attribute set can contain
-packages, helpers or nested collections. The Rust callback runs once while
-constructing the expression; Nix resolves its symbolic lookups later.
+`Overlay::try_from_function(|final_pkgs: Packages, prev: Packages| ...)`.
+The `Packages` view exposes `curl()` without reading the Nix package set in Rust.
+The callback returns `Changes { curl }`; that struct names the package to replace.
+Curl's `try_override_attrs` callback similarly receives a `BuildAttrs` view and
+returns `ConfigureChanges`, preserving the previous configure flags before
+appending the new flag. Packages, helpers and nested collections can all be
+fields in an overlay's result struct.
+
+Rust runs each callback once during construction and checks conversion of its
+returned struct. Nix resolves the symbolic lookups and applies the generated
+functions later. A declared view describes the fields this overlay needs; it
+keeps the complete underlying package set, including undeclared packages. Nix
+still checks whether selected fields exist and whether their values have the
+expected types. Rust compilation catches misspelled Rust accessors and fields.
 
 `Nixpkgs::new().with_overlay(overlay())` retains the overlay for application by
 nixpkgs. Package lookups use that customized set, and further `with_overlay`

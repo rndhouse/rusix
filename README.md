@@ -843,10 +843,13 @@ cargo test --locked -p rusnix-nix --test interop
 The [overlay example](examples/overlay/README.md) authors ordinary
 `final: prev: { ... }` customization code in Rust. It appends `--disable-dict`
 through `prev.curl.overrideAttrs`, keeping the existing pinned nixpkgs package
-definition. `Overlay::from_function` exposes typed `final` and `prev` attribute-set
-views, and `Nixpkgs::with_overlay` accepts both authored overlays and `OverlayRef`
+definition. `Overlay::try_from_function` accepts declared `final` and `prev`
+package views and ordinary Rust result structs; field names define the Nix
+lookups and replacements. `Nixpkgs::view` exposes accessors such as `curl()`.
+`Nixpkgs::with_overlay` accepts both authored overlays and `OverlayRef`
 handles for existing Nix functions. Rust constructs the callback once; Nix
-resolves dependencies on the final package set when needed. Tests compare complete recipes with the handwritten
+resolves dependencies on the final package set when needed. Tests compare
+complete recipes with the handwritten
 overlay, including the ordinary downstream `curlpp` dependency, and verify
 `final`/`prev`, laziness and Rust operation provenance. The package examples
 replace package definitions; this example replaces overlay/customization code.
@@ -1238,10 +1241,12 @@ navigation over a supplied deferred argument record. Bind it with
 `args.stdenv.host_platform.is_darwin()` construct symbolic selections. Scalar and
 opaque leaf mappings, naming rules and explicit subtree access match
 `#[rusnix::options]`. Rust declares expected shapes; it never reads argument values
-or validates the external function's schema. Roots have no dynamic traversal or
-whole-root accessor; retain the raw NixValue for advanced access. An argument
-subtree marked `#[rusnix(value)]` also implements `NixExpression`, allowing typed
-bindings and `as_attrs()` for deferred shallow record union. External aliases
+or validates the external function's schema. Argument roots implement
+`NixExpression`, allowing typed callback parameters and package-set views through
+`Nixpkgs::view`. Their `as_value()` and `as_attrs()` methods retain the complete
+argument record, including undeclared fields. Nested argument views need
+`#[rusnix(value)]` for these whole-value operations and deferred shallow record
+union. External aliases
 and reusable views use `#[rusnix(expression)]` to retain their interface without
 source inspection. The shared `Platform` and `FinalAttrs` views use this machinery
 across the four package examples.
