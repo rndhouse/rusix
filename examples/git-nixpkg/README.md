@@ -136,16 +136,15 @@ stdenv rejects while forcing a returned derivation may map only to the Rust
 crossing boundary; the original Nix trace is retained. Rust does not inspect
 package internals or attribute every upstream failure to an exact Rust field.
 
-The [runtime diagnostic audit](../../docs/runtime-diagnostics.md) keeps opaque-call
-boundaries while mapping ordinary symbolic operations through source spans. It
-records the earlier runtime-context measurements. The [pretty-printer](../../docs/generated-nix-layout.md)
+The [runtime diagnostics guide](../../docs/runtime-diagnostics.md) explains opaque-call
+boundaries and source-span mapping for ordinary symbolic operations.
+The [pretty-printer](../../docs/generated-nix-layout.md)
 uses a 100-character target, formatting functions, dependency lists and fields
 while recording their source spans. Normal output has no fine-grained origin
 comments. For manual inspection,
 `rusix::compile_with_options` accepts `RenderOptions { origin_comments: true }`,
 adding origin comments. Both modes retain the same mapped origins; each source
-map has offsets for its own text. Historical sizes are recorded in the renderer
-audits and vary as the authored recipe changes.
+map has offsets for its own text.
 [Precedence-aware rendering](../../docs/nix-expression-rendering.md) removes blanket
 application/selection parentheses while preserving explicit AST groups.
 Quoted shell fragments remain unchanged and can exceed the target width.
