@@ -3,8 +3,7 @@
 Rusix lets you define Nix packages and NixOS configuration in Rust.
 It compiles those definitions into Nix expressions.
 
-- Define configuration with your own Rust types. Rust checks those types
-  when compiling your crate.
+- Define configuration with your own Rust types.
 - Nix evaluates the generated expressions when their values are needed.
   NixOS combines module definitions during evaluation.
 - Rust definitions can use existing nixpkgs packages and Nix modules.
