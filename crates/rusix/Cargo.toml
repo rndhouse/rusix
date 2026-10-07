@@ -4,6 +4,9 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+description = "Typed Rust authoring, compilation and isolated evaluation for Nix"
+repository = "https://github.com/rndhouse/rusix"
+readme = "README.md"
 
 [dependencies]
 rusix-derive = { path = "../rusix-derive", version = "=0.1.0" }

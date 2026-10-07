@@ -234,5 +234,8 @@
     "nixos/modules/misc/label.nix": "54dcb570c8558fa549963d6852751c0f527ac7ab057ac88a5973f0ee3b19cd84",
     "nixos/modules/services/networking/ssh/sshd.nix": "5d8d29a15783b57e11eec8432c4234abadccfa18b4e5ab94da502ccdce53d326",
     "nixos/modules/system/activation/top-level.nix": "49b893780bb088b07a135d8f35bbd10bb823d8599a813f660786303d5eaef2ba"
+  },
+  "diagnostic_files": {
+    "pkgs/stdenv/generic/make-derivation.nix": "9fb65fa5c201c67c9cddf343a1f5d7e85c69cdb5af158dca96b7344ce1d9e864"
   }
 }

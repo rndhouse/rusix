@@ -5,7 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-#[path = "../../rusix-cli/src/fixtures.rs"]
+#[path = "../src/bin/cli/fixtures.rs"]
 mod fixtures;
 
 fn session() -> NixSession {

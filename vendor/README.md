@@ -25,11 +25,15 @@ Missing or mismatched submodules are tooling failures with initialization advice
 Git must be available on PATH. Verification is cached while sessions share a
 source handle; keep the checkout unchanged while evaluation is running.
 
-`nixpkgs-pin.json` records that same revision and individual SHA-256 digests for
+[`nixpkgs-pin.json`](../crates/rusix/src/nixos/nixpkgs-pin.json) records that same revision and individual SHA-256 digests for
 232 upstream files (about 1 MB of content). The minimal module evaluator verifies
 every listed file once per process and stages the checked subset once per
 disposable session. Later evaluations reuse the staged files.
-The manifest is reviewed repository data, not an upstream signature.
+The manifest is reviewed repository data, not an upstream signature. Its
+`diagnostic_files` hashes identify the supported upstream dependency validator
+even when a library consumer supplies a checkout outside this repository.
+Consumers select that existing checkout with `NixSession::with_nixpkgs(path)`;
+revision and cleanliness checks remain the same.
 
 The minimal selection is all of upstream `lib/`, root `.version`,
 `.version-suffix`, `COPYING`, and these four modules:

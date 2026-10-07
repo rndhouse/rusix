@@ -42,6 +42,10 @@ fn classify(ty: &Type, locals: &BTreeSet<String>) -> syn::Result<Leaf> {
         }
 
         let qualified = names[..names.len() - 1].join("::");
+        let qualified = qualified
+            .strip_prefix(&format!("{}::", super::library_ident()))
+            .map(|rest| format!("rusix::{rest}"))
+            .unwrap_or(qualified);
         let expected_namespace = match last.ident.to_string().as_str() {
             "bool" | "i64" => "std::primitive",
             "String" => "std::string",
@@ -286,6 +290,7 @@ pub(super) fn expand_args(module: ItemMod) -> syn::Result<TokenStream> {
 }
 
 fn expand_from(mut module: ItemMod, source: Source) -> syn::Result<TokenStream> {
+    let rusix = super::library_path();
     let macro_name = match source {
         Source::Options => "options",
         Source::Arguments => "args",
@@ -433,12 +438,12 @@ fn expand_from(mut module: ItemMod, source: Source) -> syn::Result<TokenStream> 
         let source_field = matches!(source, Source::Arguments).then(|| {
             quote!(
                 /// Supplied Nix argument expression on which this view's field lookups operate.
-                __rusix_source: ::rusix::interop::raw::NixValue,
+                __rusix_source: #rusix::interop::raw::NixValue,
             )
         });
         let source_parameter = matches!(source, Source::Arguments).then(|| {
             quote!(
-                source: ::rusix::interop::raw::NixValue,
+                source: #rusix::interop::raw::NixValue,
             )
         });
         let source_initialize = matches!(source, Source::Arguments).then(|| {
@@ -494,17 +499,17 @@ fn expand_from(mut module: ItemMod, source: Source) -> syn::Result<TokenStream> 
                 }
                 leaf => {
                     let result = match leaf {
-                        Leaf::Scalar => quote!(::rusix::Expr<#ty>),
+                        Leaf::Scalar => quote!(#rusix::Expr<#ty>),
                         Leaf::Expression => quote!(#ty),
-                        _ => quote!(::rusix::interop::raw::NixValue),
+                        _ => quote!(#rusix::interop::raw::NixValue),
                     };
                     let selection = match source {
                         Source::Options if matches!(leaf, Leaf::Scalar) => quote!(
-                            ::rusix::nixos::OptionRef::<#ty>::from_segments(path).into_expr()
+                            #rusix::nixos::OptionRef::<#ty>::from_segments(path).into_expr()
                         ),
                         Source::Options => quote!(
-                            ::rusix::interop::raw::AsNixValue::as_value(
-                                &::rusix::nixos::OptionRef::<#ty>::from_segments(path)
+                            #rusix::interop::raw::AsNixValue::as_value(
+                                &#rusix::nixos::OptionRef::<#ty>::from_segments(path)
                             )
                         ),
                         Source::Arguments => {
@@ -517,7 +522,7 @@ fn expand_from(mut module: ItemMod, source: Source) -> syn::Result<TokenStream> 
                         }
                     };
                     let selection = if matches!(leaf, Leaf::Expression) {
-                        quote!(::rusix::interop::raw::expect::<#ty>(#selection))
+                        quote!(#rusix::interop::raw::expect::<#ty>(#selection))
                     } else {
                         selection
                     };
@@ -538,8 +543,8 @@ fn expand_from(mut module: ItemMod, source: Source) -> syn::Result<TokenStream> 
             let selection = match source {
                 Source::Options => {
                     quote!(
-                        ::rusix::interop::raw::AsNixValue::as_value(&::rusix::nixos::OptionRef::<
-                            ::rusix::interop::raw::NixValue,
+                        #rusix::interop::raw::AsNixValue::as_value(&#rusix::nixos::OptionRef::<
+                            #rusix::interop::raw::NixValue,
                         >::from_segments(
                             self.__rusix_path.clone(),
                         ))
@@ -561,7 +566,7 @@ fn expand_from(mut module: ItemMod, source: Source) -> syn::Result<TokenStream> 
                 /// Nix evaluates the lookup later; Rust does not read its contents.
                 #[track_caller]
                 #[doc(hidden)]
-                pub fn as_value(&self) -> ::rusix::interop::raw::NixValue {
+                pub fn as_value(&self) -> #rusix::interop::raw::NixValue {
                     #selection
                 }
             )
@@ -572,25 +577,25 @@ fn expand_from(mut module: ItemMod, source: Source) -> syn::Result<TokenStream> 
                 impl #name {
                     /// Retain this record as a deferred attribute set for shallow union.
                     #[track_caller]
-                    pub fn as_attrs(&self) -> ::rusix::interop::NixAttrs {
-                        ::rusix::interop::raw::expect(self.as_value())
+                    pub fn as_attrs(&self) -> #rusix::interop::NixAttrs {
+                        #rusix::interop::raw::expect(self.as_value())
                     }
                 }
 
-                impl ::rusix::interop::raw::NixRepresentation for #name {
-                    fn from_expression(value: ::rusix::interop::raw::NixValue) -> Self {
+                impl #rusix::interop::raw::NixRepresentation for #name {
+                    fn from_expression(value: #rusix::interop::raw::NixValue) -> Self {
                         Self::__rusix_at(value, ::std::vec::Vec::new())
                     }
 
-                    fn as_expression(&self) -> ::rusix::interop::raw::NixValue {
+                    fn as_expression(&self) -> #rusix::interop::raw::NixValue {
                         self.as_value()
                     }
                 }
 
-                impl ::rusix::IntoRusixValue for #name {
+                impl #rusix::IntoRusixValue for #name {
                     #[track_caller]
-                    fn into_value(self) -> ::rusix::RusixValue {
-                        ::rusix::RusixValue::leaf(self.as_value())
+                    fn into_value(self) -> #rusix::RusixValue {
+                        #rusix::RusixValue::leaf(self.as_value())
                     }
                 }
             )
@@ -636,7 +641,7 @@ fn expand_from(mut module: ItemMod, source: Source) -> syn::Result<TokenStream> 
         Source::Arguments => quote!(
             /// Provide the Nix argument value whose declared fields these accessors refer to.
             /// Rust does not evaluate it; each leaf method records its own call location.
-            pub fn from_value(value: ::rusix::interop::raw::NixValue) -> #root {
+            pub fn from_value(value: #rusix::interop::raw::NixValue) -> #root {
                 #root::__rusix_at(value, ::std::vec::Vec::new())
             }
         ),

@@ -1,6 +1,6 @@
 //! Finite structural views share OptionRef IR, laziness and NixOS composition.
 use rusix::{
-    self as rusix, Config, Expr,
+    Config, Expr,
     interop::{InputRef, raw::NixValue},
     ir::ValueKind,
     nixos::{DefinitionPriority, NixosModule, OptionRef},

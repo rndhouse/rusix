@@ -1,4 +1,4 @@
-#[path = "../support/nixos.rs"]
+#[path = "../../crates/rusix/src/bin/cli/support.rs"]
 mod support;
 
 use support::OpenSsh;

@@ -4,6 +4,9 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+description = "Procedural macros for Rusix configuration and symbolic values"
+repository = "https://github.com/rndhouse/rusix"
+readme = "README.md"
 
 [lib]
 proc-macro = true
@@ -12,3 +15,4 @@ proc-macro = true
 proc-macro2 = { version = "1", features = ["span-locations"] }
 quote = "1"
 syn = { version = "3", features = ["full", "visit"] }
+proc-macro-crate = "3"

@@ -118,10 +118,21 @@ pub(crate) struct FullSource {
     pub(crate) path: PathBuf,
 }
 
+impl FullSource {
+    pub(crate) fn checked(path: &Path) -> Result<Arc<Self>, Box<Diagnostic>> {
+        let pin = crate::nixos::pin().map_err(Diagnostic::tooling)?;
+        check_source(path, &pin.revision).map_err(Diagnostic::tooling)?;
+        let path = path
+            .canonicalize()
+            .map_err(|e| Diagnostic::tooling(e.to_string()))?;
+        Ok(Arc::new(Self { path }))
+    }
+}
+
 fn check_source(path: &Path, revision: &str) -> Result<(), String> {
     if !path.join(".git").exists() || !path.join("default.nix").is_file() {
         return Err(
-            "nixpkgs submodule is missing; run git submodule update --init --depth=1".into(),
+            "pinned nixpkgs checkout is missing; in the Rusix repository run git submodule update --init --depth=1, or supply an existing checkout with NixSession::with_nixpkgs".into(),
         );
     }
 
@@ -175,25 +186,26 @@ pub(crate) fn full_source() -> Result<Arc<FullSource>, Box<Diagnostic>> {
     }
 
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../vendor/nixpkgs");
-    let pin = crate::nixos::pin().map_err(Diagnostic::tooling)?;
-    check_source(&path, &pin.revision).map_err(Diagnostic::tooling)?;
-
-    let source = Arc::new(FullSource { path });
+    let source = FullSource::checked(&path)?;
 
     *cache = Arc::downgrade(&source);
     Ok(source)
 }
 
 impl NixSession {
+    pub(crate) fn nixpkgs_source(&self) -> Result<Arc<FullSource>, Box<Diagnostic>> {
+        if let Some(source) = self.full_source.get() {
+            return Ok(source.clone());
+        }
+
+        let source = full_source()?;
+        let _ = self.full_source.set(source.clone());
+        Ok(source)
+    }
+
     pub(crate) fn stage_interop(&self) -> Result<PathBuf, Box<Diagnostic>> {
         let pin_root = self.stage_pinned()?;
-        let source = if let Some(source) = self.full_source.get() {
-            source.clone()
-        } else {
-            let source = full_source()?;
-            let _ = self.full_source.set(source.clone());
-            source
-        };
+        let source = self.nixpkgs_source()?;
 
         let link = self.root().join("nixpkgs-full");
         if !link.exists() {

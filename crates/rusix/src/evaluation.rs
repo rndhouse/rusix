@@ -67,6 +67,19 @@ impl NixSession {
         })
     }
 
+    /// Create an isolated session using an existing local nixpkgs checkout.
+    /// Use this constructor when depending on Rusix outside its repository.
+    /// The checkout must be clean and match [`crate::nixos::NIXPKGS_REVISION`].
+    /// Verification reads local files and Git metadata; it never downloads sources
+    /// or launches Nix. Keep the checkout unchanged while the session is alive.
+    /// Both minimal NixOS evaluation and full interoperability use this source.
+    pub fn with_nixpkgs(path: impl AsRef<Path>) -> Result<Self, Box<Diagnostic>> {
+        let source = crate::compiler::interop::FullSource::checked(path.as_ref())?;
+        let session = Self::new().map_err(|e| Diagnostic::tooling(e.to_string()))?;
+        let _ = session.full_source.set(source);
+        Ok(session)
+    }
+
     /// Directory for staging local fixtures/drivers; it is deleted when this session drops.
     pub fn root(&self) -> &Path {
         self.disposable.path()

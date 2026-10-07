@@ -12,7 +12,7 @@ use rusix::{Diagnostic, NixSession, Provenance, compile, nixos::compile_module};
 mod example;
 
 #[allow(dead_code)] // Shared fixture helpers include cases unused here.
-#[path = "../../../tests/support/nixos.rs"]
+#[path = "../src/bin/cli/support.rs"]
 mod support;
 
 mod config {

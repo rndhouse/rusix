@@ -1,5 +1,5 @@
 error[nixos-assertion]: NixOS configuration assertion failed
-  --> crates/rusix-cli/src/nixos_fixtures.rs:25:14
+  --> crates/rusix/src/bin/cli/nixos_fixtures.rs:25:14
    = origin: assertion assertions.port-policy
    = option: assertions.port-policy
    = Nix: 

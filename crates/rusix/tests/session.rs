@@ -18,6 +18,14 @@ fn ssh(port: i64) -> NixosModule {
 }
 
 #[test]
+fn explicit_source_rejects_missing_checkouts_before_evaluation() {
+    let missing = tempfile::tempdir().unwrap();
+    let error = NixSession::with_nixpkgs(missing.path()).err().unwrap();
+    assert_eq!(error.kind, rusix::DiagnosticKind::Tooling);
+    assert!(error.reason.contains("NixSession::with_nixpkgs"));
+}
+
+#[test]
 fn concurrent_calls_keep_values_and_diagnostics_with_their_artifacts() {
     let session = Arc::new(NixSession::new().unwrap());
     let barrier = Arc::new(Barrier::new(4));

@@ -6,8 +6,6 @@
 //! demo = { mode = "server"; acceptsConnections = true; };
 //! ```
 
-use rusix::{self as rusix};
-
 /// Defines the connection mode and Rust policy emitted under the demo Nix attribute set.
 /// Enum variants become strings and nested structs determine the output's fields.
 #[rusix::config]

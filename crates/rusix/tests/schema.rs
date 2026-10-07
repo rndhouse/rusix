@@ -1,7 +1,7 @@
 //! Structural declarations reuse existing traits and real NixOS evaluation.
 use rusix::interop::raw::NixFunctionExt;
 use rusix::{
-    self as rusix, Expr, IntoConfig, IntoRusixValue,
+    Expr, IntoConfig, IntoRusixValue,
     interop::{InputRef, Nixpkgs, raw::NixValue},
     nixos::{NixosModule, OptionDecl, OptionRef, OptionType},
 };

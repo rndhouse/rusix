@@ -36,7 +36,7 @@ fn ports(port: u16) -> ListenPorts {
 }
 
 #[allow(dead_code)] // Shared fixture helpers include cases unused in this test target.
-#[path = "../../../tests/support/nixos.rs"]
+#[path = "../src/bin/cli/support.rs"]
 mod support;
 
 use support::{ExistingModule, OpenSsh};

@@ -1,10 +1,39 @@
 use std::{fs, process::Command};
 
 #[test]
+fn cli_can_select_an_existing_nixpkgs_checkout() {
+    let artifacts = tempfile::tempdir().unwrap();
+    let checkout = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../vendor/nixpkgs")
+        .canonicalize()
+        .unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_rusix"))
+        .arg("--nixpkgs")
+        .arg(checkout)
+        .args(["check-nixos", "good", "--out"])
+        .arg(artifacts.path())
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "[\n  22\n]");
+
+    let missing = Command::new(env!("CARGO_BIN_EXE_rusix"))
+        .arg("--nixpkgs")
+        .output()
+        .unwrap();
+    assert_eq!(missing.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&missing.stderr).contains("existing-checkout"));
+}
+
+#[test]
 fn cli_merge_diagnostic_serializes_both_origins_and_priority_case_succeeds() {
     let artifacts = tempfile::tempdir().unwrap();
     let run = |fixture: &str| {
-        Command::new(env!("CARGO_BIN_EXE_rusix-cli"))
+        Command::new(env!("CARGO_BIN_EXE_rusix"))
             .args(["check-nixos", fixture, "--out"])
             .arg(artifacts.path())
             .output()
@@ -37,7 +66,7 @@ fn cli_merge_diagnostic_serializes_both_origins_and_priority_case_succeeds() {
 fn cli_nixos_fixtures_retain_module_map_and_raw_errors() {
     let artifacts = tempfile::tempdir().unwrap();
     let run = |fixture: &str| {
-        Command::new(env!("CARGO_BIN_EXE_rusix-cli"))
+        Command::new(env!("CARGO_BIN_EXE_rusix"))
             .args(["check-nixos", fixture, "--out"])
             .arg(artifacts.path())
             .output()
@@ -78,7 +107,7 @@ fn cli_nixos_fixtures_retain_module_map_and_raw_errors() {
 fn cli_retains_artifacts_and_replaces_stale_results() {
     let artifacts = tempfile::tempdir().unwrap();
     let run = |fixture: &str| {
-        Command::new(env!("CARGO_BIN_EXE_rusix-cli"))
+        Command::new(env!("CARGO_BIN_EXE_rusix"))
             .args(["check", fixture, "--out"])
             .arg(artifacts.path())
             .output()
@@ -122,7 +151,7 @@ fn cli_retains_artifacts_and_replaces_stale_results() {
 fn cli_can_select_good_and_bad_from_the_same_configuration() {
     let artifacts = tempfile::tempdir().unwrap();
     let run = |attribute: &str| {
-        Command::new(env!("CARGO_BIN_EXE_rusix-cli"))
+        Command::new(env!("CARGO_BIN_EXE_rusix"))
             .args(["check", "selective", "--out"])
             .arg(artifacts.path())
             .args(["--select", attribute])
@@ -166,7 +195,7 @@ fn switching_commands_clears_all_owned_artifacts_and_preserves_unrelated_files()
     let artifacts = tempfile::tempdir().unwrap();
     fs::write(artifacts.path().join("notes.txt"), "keep me").unwrap();
     let run = |command: &str, fixture: &str| {
-        Command::new(env!("CARGO_BIN_EXE_rusix-cli"))
+        Command::new(env!("CARGO_BIN_EXE_rusix"))
             .args([command, fixture, "--out"])
             .arg(artifacts.path())
             .output()

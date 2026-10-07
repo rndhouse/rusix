@@ -244,7 +244,7 @@ global overlays, builds and arbitrary-platform composed graphs are not claimed.
 
 No Nix package was built. No network fetch, activation, profile operation,
 deployment, host GC or Nix configuration change occurred. Every Nix subprocess
-used the existing isolated.rs infrastructure and a disposable local store.
+used the existing evaluation.rs infrastructure and a disposable local store.
 
 ## Final verification
 

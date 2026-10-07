@@ -87,6 +87,23 @@ integer supplied as MariaDB's curl points to that integer rather than the outer
 unknown transformations keep the existing fallback, and indistinguishable
 suppliers produce multiple possible origins. Generated Nix and forcing are unchanged.
 
+## Use from another Rust crate
+
+The workspace publishes two packages: `rusix` and its macro implementation,
+`rusix-derive`. Consumers need only `rusix`; it re-exports configuration macros,
+conversion derives, authoring interfaces, compilation and evaluation. See the
+[package README](crates/rusix/README.md) for library usage. The CLI binary is named
+`rusix` and currently retains the demonstration fixture commands below.
+
+For local development, depend on `crates/rusix` by path. Registry consumers use
+`rusix = "0.1"` after publication. Renamed Cargo dependencies are supported by
+both the procedural macros and the `nix_text!`/`nix_record!` wrappers.
+
+Standalone expressions use `NixSession::new()`. Outside this repository, nixpkgs
+and NixOS evaluation use `NixSession::with_nixpkgs(path)` with an existing clean
+checkout matching `rusix::nixos::NIXPKGS_REVISION`. Both constructors preserve
+isolated, offline evaluation; neither downloads nixpkgs or builds derivations.
+
 ## Run
 
 Prerequisites: Git, Rust 1.88+ and `nix` plus `nix-instantiate` on PATH. Tested here
@@ -107,15 +124,15 @@ its full history. Once initialized, evaluation is offline. See [vendor/README.md
 ```bash
 cargo test --workspace --locked
 cargo run --locked -p rusix --example nix-interop
-cargo run --locked -p rusix-cli -- check good --out target/demo/good
-cargo run --locked -p rusix-cli -- check nested --out target/demo/nested
+cargo run --locked -p rusix -- check good --out target/demo/good
+cargo run --locked -p rusix -- check nested --out target/demo/nested
 ```
 
 The last command deliberately exits 1, with a diagnostic like:
 
 ```text
 error[nix-eval]: generated configuration was rejected by Nix
-  --> crates/rusix-cli/src/fixtures.rs:15:47
+  --> crates/rusix/src/bin/cli/fixtures.rs:15:47
    |
  15 |             vec![Expr::int(22), Expr::int(44).divide(Expr::int(0))],
    |                                               ^
@@ -134,15 +151,15 @@ preserved. Unknown fixtures are rejected before cleanup, and compilation failure
 in either mode save diagnostics.
 
 `emit` generates artifacts without running Nix. `version` probes Nix through
-the isolated helper too. `rusix-cli` is a fixture harness; it does not dynamically
+the isolated helper too. `rusix` is a fixture harness; it does not dynamically
 load or sandbox arbitrary Rust programs. To configure something new, edit
 `examples/*.rs`, the fixture functions, or call these libraries from Rust.
 
 Select a single top-level attribute with the isolated evaluator:
 
 ```bash
-cargo run --locked -p rusix-cli -- check selective --out target/selective/good --select good
-cargo run --locked -p rusix-cli -- check selective --out target/selective/bad --select bad
+cargo run --locked -p rusix -- check selective --out target/selective/good --select good
+cargo run --locked -p rusix -- check selective --out target/selective/bad --select bad
 ```
 
 Both commands compile the same Rust fixture:
@@ -155,7 +172,7 @@ Config::new()
 
 Selecting `good` returns `42` without encountering the failure in `bad`.
 Selecting `bad` exits 1 and identifies `.divide()` at
-`crates/rusix-cli/src/fixtures.rs:22:39`, retaining `option: bad`.
+`crates/rusix/src/bin/cli/fixtures.rs:22:39`, retaining `option: bad`.
 The backend API is `NixSession::evaluate_attribute(&generated, "good")`.
 It adds an escaped `--apply 'value: builtins.getAttr "good" value'` through the
 existing private command factory. Attribute names are literal data, not CLI
@@ -276,7 +293,7 @@ The sealed value conversion trait deliberately keeps the API small.
 | `rusix/src/compiler/render.rs` | Escaped Nix source, optional inspection comments, contexts, byte source map |
 | `rusix/src/evaluation.rs` | Sole Nix subprocess boundary and disposable store owner |
 | `rusix/src/diagnostic.rs` | JSON/text adaptation into owned Rusix diagnostics |
-| `rusix-cli` | Reviewable fixture artifacts and exit status |
+| `rusix/src/bin/rusix.rs` | Reviewable fixture artifacts and exit status |
 
 Build the public API documentation with `cargo doc --workspace --no-deps`;
 start at `target/doc/rusix/index.html` for authoring, compilation and isolated evaluation.
@@ -538,7 +555,7 @@ diagnostics with Rust origins.
 **Evaluation surface:** pinned nixpkgs commit
 `8b27c1239e5c421a2bbc2c65d52e4a6fbf2ff296` (24.11), with its complete library
 and four modules staged from the unmodified upstream submodule. See
-`vendor/README.md` and `vendor/nixpkgs-pin.json`. The backend reads the revision
+`vendor/README.md` and `crates/rusix/src/nixos/nixpkgs-pin.json`. The backend reads the revision
 and file hashes from that manifest. Every listed file is SHA-256 checked once per
 process, then copied once into each disposable session. The library is imported
 from there offline.
@@ -616,13 +633,13 @@ policy described above; no generated `deepSeq` or broad forcing was added.
 Run reviewable fixtures (the four error fixtures exit 1):
 
 ```bash
-cargo run --locked -p rusix-cli -- check-nixos good --out target/nixos/good
-cargo run --locked -p rusix-cli -- check-nixos type --out target/nixos/type
-cargo run --locked -p rusix-cli -- check-nixos unknown --out target/nixos/unknown
-cargo run --locked -p rusix-cli -- check-nixos assertion --out target/nixos/assertion
-cargo run --locked -p rusix-cli -- check-nixos external --out target/nixos/external
-cargo run --locked -p rusix-cli -- check-nixos lazy --out target/nixos/lazy
-cargo run --locked -p rusix-cli -- check-nixos lazy --out target/nixos/lazy-bad --select services.openssh.ports
+cargo run --locked -p rusix -- check-nixos good --out target/nixos/good
+cargo run --locked -p rusix -- check-nixos type --out target/nixos/type
+cargo run --locked -p rusix -- check-nixos unknown --out target/nixos/unknown
+cargo run --locked -p rusix -- check-nixos assertion --out target/nixos/assertion
+cargo run --locked -p rusix -- check-nixos external --out target/nixos/external
+cargo run --locked -p rusix -- check-nixos lazy --out target/nixos/lazy
+cargo run --locked -p rusix -- check-nixos lazy --out target/nixos/lazy-bad --select services.openssh.ports
 ```
 
 Artifacts are `module.nix`, `module-map.json` (source spans and definition/import/
@@ -715,11 +732,11 @@ Rusix renders both source points, with source excerpts/carets and role labels:
 ```text
 error[nixos-merge]: conflicting definitions for a NixOS option
 
-  --> crates/rusix-cli/src/merge_fixtures.rs:12:36
+  --> crates/rusix/src/bin/cli/merge_fixtures.rs:12:36
    = origin: set services.openssh.authorizedKeysCommandUser
    = conflicting definition
 
-  --> crates/rusix-cli/src/merge_fixtures.rs:9:36
+  --> crates/rusix/src/bin/cli/merge_fixtures.rs:9:36
    = origin: set services.openssh.authorizedKeysCommandUser
    = conflicting definition
 
@@ -1110,7 +1127,7 @@ remain important. During priority filtering Nix can inspect the head of an
 unwrapped definition; an override wrapper keeps its discarded content lazy.
 
 Domain models belong to the examples. Fixture-only SSH/module helpers live in
-`tests/support/nixos.rs`. Pinned imports carry validated relative paths as data,
+`crates/rusix/src/bin/cli/support.rs`. Pinned imports carry validated relative paths as data,
 rendered through the Nix AST with escaped string addition. UI fixtures compile
 actual example-owned types or deliberately evolved test-local enums and check
 codes, spans and type labels. See [verification](#verification) for the shared

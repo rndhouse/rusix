@@ -5,6 +5,7 @@
 use crate::ir::Origin;
 use crate::{Generated, SourceSpan};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::path::Path;
 
 /// The layer that rejected a configuration or prevented its evaluation.
@@ -690,22 +691,20 @@ fn text_frames(text: &str) -> Vec<BackendFrame> {
 }
 
 fn pinned_frame(frame: &BackendFrame) -> bool {
-    let expected = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../vendor/nixpkgs/pkgs/stdenv/generic/make-derivation.nix");
-    let Ok(expected) = expected.canonicalize() else {
-        return false;
-    };
     let Some(file) = &frame.file else {
         return false;
     };
-    let path = expected.to_string_lossy();
-    file == path.as_ref()
-        || file
-            == &format!(
-                "{path}:{}:{}",
-                frame.line.unwrap_or(0),
-                frame.column.unwrap_or(0)
-            )
+    let suffix = format!(":{}:{}", frame.line.unwrap_or(0), frame.column.unwrap_or(0));
+    let file = Path::new(file.strip_suffix(&suffix).unwrap_or(file));
+    let Ok(pin) = crate::nixos::pin() else {
+        return false;
+    };
+
+    pin.diagnostic_files.iter().any(|(name, hash)| {
+        file.ends_with(name)
+            && std::fs::read(file)
+                .is_ok_and(|bytes| format!("{:x}", Sha256::digest(bytes)) == *hash)
+    })
 }
 
 fn dependency_clue(reason: &str) -> Option<(&str, &str, Vec<usize>)> {
@@ -973,6 +972,35 @@ fn strip_ansi(text: &str) -> String {
 mod tests {
     use super::*;
     use crate::SourceSpan;
+
+    #[test]
+    fn backend_frames_require_pinned_contents_in_external_checkouts() {
+        let source = crate::compiler::interop::full_source().unwrap();
+        let name = "pkgs/stdenv/generic/make-derivation.nix";
+        let external = tempfile::tempdir().unwrap();
+        let file = external.path().join(name);
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::copy(source.path.join(name), &file).unwrap();
+        let frame = BackendFrame {
+            message: "upstream dependency validation".into(),
+            file: Some(file.to_string_lossy().into_owned()),
+            line: Some(1),
+            column: Some(1),
+        };
+        assert!(pinned_frame(&frame));
+
+        let located = BackendFrame {
+            message: frame.message.clone(),
+            file: Some(format!("{}:1:1", file.display())),
+            line: frame.line,
+            column: frame.column,
+        };
+        assert!(pinned_frame(&located));
+
+        std::fs::write(&file, "builtins.throw \"unreviewed contents\"").unwrap();
+        assert!(!pinned_frame(&frame));
+        assert!(!pinned_frame(&located));
+    }
 
     #[test]
     fn origin_frames_require_one_complete_canonical_id() {

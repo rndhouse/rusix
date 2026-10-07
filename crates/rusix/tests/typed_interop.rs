@@ -2,7 +2,7 @@
 use rusix::interop::raw::NixRepresentation;
 use rusix::interop::raw::{AsNixValue, NixFunctionExt, NixpkgsExt};
 use rusix::{
-    self as rusix, Config, Expr, IntoRusixValue,
+    Config, Expr, IntoRusixValue,
     interop::{
         NixAttrs, NixCallable, NixExpression, NixList, NixNullable, NixPath, Nixpkgs, Package,
         PackageFunction, raw::NixValue,

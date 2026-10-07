@@ -381,6 +381,8 @@ pub(crate) struct Pin {
     pub(crate) revision: String,
     /// Expected content hashes keyed by relative paths of the minimal evaluator files.
     files: std::collections::BTreeMap<String, String>,
+    /// Checked upstream files whose contents identify supported backend diagnostics.
+    pub(crate) diagnostic_files: std::collections::BTreeMap<String, String>,
 }
 
 // Both evaluation modes use this reviewed descriptor. The revision constant
@@ -389,8 +391,8 @@ pub(crate) fn pin() -> Result<&'static Pin, String> {
     static PIN: OnceLock<Result<Pin, String>> = OnceLock::new();
 
     PIN.get_or_init(|| {
-        let pin: Pin = serde_json::from_str(include_str!("../../../../vendor/nixpkgs-pin.json"))
-            .map_err(|e| e.to_string())?;
+        let pin: Pin =
+            serde_json::from_str(include_str!("nixpkgs-pin.json")).map_err(|e| e.to_string())?;
         if pin.revision != NIXPKGS_REVISION {
             return Err("nixpkgs pin revision mismatch".into());
         }
@@ -402,13 +404,11 @@ pub(crate) fn pin() -> Result<&'static Pin, String> {
 
 type PinnedFiles = Vec<(String, Vec<u8>)>;
 
-fn pinned_files() -> Result<&'static PinnedFiles, String> {
+fn pinned_files(root: &Path) -> Result<&'static PinnedFiles, String> {
     static SNAPSHOT: OnceLock<Result<PinnedFiles, String>> = OnceLock::new();
 
     SNAPSHOT
         .get_or_init(|| {
-            let source = crate::compiler::interop::full_source().map_err(|e| e.reason.clone())?;
-            let root = &source.path;
             pin()?
                 .files
                 .iter()
@@ -438,7 +438,8 @@ impl NixSession {
         if self.pinned_staged.get().is_some() {
             return Ok(pin_root);
         }
-        let files = pinned_files().map_err(Diagnostic::tooling)?;
+        let source = self.nixpkgs_source()?;
+        let files = pinned_files(&source.path).map_err(Diagnostic::tooling)?;
 
         for (name, bytes) in files {
             let path = pin_root.join(name);

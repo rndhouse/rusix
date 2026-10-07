@@ -2,6 +2,7 @@
 use rusix::{Config, IntoConfig};
 
 pub struct OpenSsh {
+    /// Settings contributed by this fixture-only SSH model.
     config: Config,
 }
 

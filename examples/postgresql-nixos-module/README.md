@@ -12,7 +12,7 @@ source tree containing the original
 NixOS library and package definitions used in comparisons. It is not a PostgreSQL
 version number. Tests use the pinned `vendor/nixpkgs` submodule offline.
 The minimal staged subset retains its SHA-256 checksums in
-[nixpkgs-pin.json](../../vendor/nixpkgs-pin.json).
+[nixpkgs-pin.json](../../crates/rusix/src/nixos/nixpkgs-pin.json).
 
 | File | Purpose |
 |---|---|

@@ -218,7 +218,23 @@ impl Naming {
     }
 }
 
+// The self alias in rusix also works in its integration tests and examples,
+// where `crate` names the test/example rather than the library.
+fn library_ident() -> syn::Ident {
+    let name = match proc_macro_crate::crate_name("rusix") {
+        Ok(proc_macro_crate::FoundCrate::Name(name)) => name,
+        Ok(proc_macro_crate::FoundCrate::Itself) | Err(_) => "rusix".into(),
+    };
+    syn::Ident::new(&name, proc_macro2::Span::call_site())
+}
+
+fn library_path() -> proc_macro2::TokenStream {
+    let name = library_ident();
+    quote!(::#name)
+}
+
 fn expand(input: DeriveInput, rooted: bool) -> syn::Result<proc_macro2::TokenStream> {
+    let rusix = library_path();
     let mut rename_all = None;
     let mut omit_none = None;
 
@@ -382,7 +398,7 @@ fn expand(input: DeriveInput, rooted: bool) -> syn::Result<proc_macro2::TokenStr
                 generics
                     .make_where_clause()
                     .predicates
-                    .push(parse_quote!(#ty: ::rusix::IntoRusixValue));
+                    .push(parse_quote!(#ty: #rusix::IntoRusixValue));
 
                 let key = if flatten {
                     quote!(None)
@@ -394,12 +410,12 @@ fn expand(input: DeriveInput, rooted: bool) -> syn::Result<proc_macro2::TokenStr
                 values.push(if omit {
                     quote_spanned!(field.span()=>
                         if let ::core::option::Option::Some(__rusix_value) = self.#name {
-                            __rusix_fields.push((#key, ::rusix::IntoRusixValue::into_value(__rusix_value)));
+                            __rusix_fields.push((#key, #rusix::IntoRusixValue::into_value(__rusix_value)));
                         }
                     )
                 } else {
                     quote_spanned!(field.span()=>
-                        __rusix_fields.push((#key, ::rusix::IntoRusixValue::into_value(self.#name)));
+                        __rusix_fields.push((#key, #rusix::IntoRusixValue::into_value(self.#name)));
                     )
                 });
             }
@@ -409,7 +425,7 @@ fn expand(input: DeriveInput, rooted: bool) -> syn::Result<proc_macro2::TokenStr
 
                 #(#values)*
 
-                ::rusix::RusixValue::__record(__rusix_fields)
+                #rusix::RusixValue::__record(__rusix_fields)
             })
         }
         Fields::Unnamed(fields) if !rooted && fields.unnamed.len() == 1 => {
@@ -425,8 +441,8 @@ fn expand(input: DeriveInput, rooted: bool) -> syn::Result<proc_macro2::TokenStr
             generics
                 .make_where_clause()
                 .predicates
-                .push(parse_quote!(#ty: ::rusix::IntoRusixValue));
-            quote!(::rusix::IntoRusixValue::into_value(self.0))
+                .push(parse_quote!(#ty: #rusix::IntoRusixValue));
+            quote!(#rusix::IntoRusixValue::into_value(self.0))
         }
         _ => {
             return Err(syn::Error::new_spanned(
@@ -441,9 +457,9 @@ fn expand(input: DeriveInput, rooted: bool) -> syn::Result<proc_macro2::TokenStr
     let config_impl = rooted.then(|| config_impl(&input.ident, &generics));
 
     Ok(quote!(
-        impl #impl_generics ::rusix::IntoRusixValue for #name #ty_generics #where_clause {
+        impl #impl_generics #rusix::IntoRusixValue for #name #ty_generics #where_clause {
             #[track_caller]
-            fn into_value(self) -> ::rusix::RusixValue { #body }
+            fn into_value(self) -> #rusix::RusixValue { #body }
         }
 
         #config_impl
@@ -488,6 +504,7 @@ fn enum_value(
     data: &syn::DataEnum,
     naming: Naming,
 ) -> syn::Result<proc_macro2::TokenStream> {
+    let rusix = library_path();
     let mut arms = Vec::new();
     let mut names = std::collections::BTreeSet::new();
 
@@ -546,7 +563,7 @@ fn enum_value(
 
         arms.push(quote_spanned!(variant.span()=>
             #(#gates)*
-            Self::#variant_name => ::rusix::IntoRusixValue::into_value(#name)
+            Self::#variant_name => #rusix::IntoRusixValue::into_value(#name)
         ));
     }
 
@@ -554,9 +571,9 @@ fn enum_value(
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
     Ok(quote!(
-        impl #impl_generics ::rusix::IntoRusixValue for #name #ty_generics #where_clause {
+        impl #impl_generics #rusix::IntoRusixValue for #name #ty_generics #where_clause {
             #[track_caller]
-            fn into_value(self) -> ::rusix::RusixValue {
+            fn into_value(self) -> #rusix::RusixValue {
                 match self { #(#arms),* }
             }
         }
@@ -564,17 +581,18 @@ fn enum_value(
 }
 
 fn config_impl(name: &syn::Ident, generics: &syn::Generics) -> proc_macro2::TokenStream {
+    let rusix = library_path();
     let mut generics = generics.clone();
     generics
         .make_where_clause()
         .predicates
-        .push(parse_quote!(Self: ::rusix::IntoRusixValue));
+        .push(parse_quote!(Self: #rusix::IntoRusixValue));
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     quote!(
-        impl #impl_generics ::rusix::IntoConfig for #name #ty_generics #where_clause {
+        impl #impl_generics #rusix::IntoConfig for #name #ty_generics #where_clause {
             #[track_caller]
-            fn into_config(self) -> ::rusix::Config {
-                ::rusix::Config::from_value(::rusix::IntoRusixValue::into_value(self))
+            fn into_config(self) -> #rusix::Config {
+                #rusix::Config::from_value(#rusix::IntoRusixValue::into_value(self))
             }
         }
     )

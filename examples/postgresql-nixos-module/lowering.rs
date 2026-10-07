@@ -6,7 +6,7 @@ use super::{
 };
 use rusix::interop::raw::{NixFunctionExt, NixpkgsExt};
 use rusix::{
-    self as rusix, Config, Expr, IntoConfig, IntoRusixValue,
+    Config, Expr, IntoConfig, IntoRusixValue,
     interop::{Nixpkgs, PackageRef, raw::NixValue},
     nix_record as record, nix_text,
     nixos::{self, DefinitionPriority, NixosModule},

@@ -4,7 +4,7 @@
 
 use rusix::interop::raw::NixFunctionExt;
 use rusix::{
-    self as rusix, Config, IntoRusixValue, RusixValue,
+    Config, IntoRusixValue, RusixValue,
     interop::{InputRef, ModuleRef, NixFunction, Nixpkgs, OverlayRef, PackageRef, raw::NixValue},
     nix_record,
     nixos::NixosModule,

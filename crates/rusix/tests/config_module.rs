@@ -1,13 +1,13 @@
 //! Inline module sugar uses the same traits, IR, and evaluator as explicit derives.
 use rusix::interop::raw::NixFunctionExt;
 use rusix::ir::ReferencedExpression;
+use rusix::{DiagnosticKind, NixSession, Provenance, compile, nixos::compile_module};
 use rusix::{
-    self as rusix, Expr, IntoConfig, IntoRusixValue,
+    Expr, IntoConfig, IntoRusixValue,
     interop::{InputRef, Nixpkgs},
     ir::ValueKind,
     nixos::{DefinitionPriority, NixosModule},
 };
-use rusix::{DiagnosticKind, NixSession, Provenance, compile, nixos::compile_module};
 
 // A reusable type defined outside the authoring boundary.
 #[derive(IntoRusixValue)]

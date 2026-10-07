@@ -18,7 +18,13 @@ use std::marker::PhantomData;
 /// and [`Self::implies`].
 ///
 /// Integer and boolean expressions cannot be interchanged:
-#[doc = concat!("```compile_fail,E0308\n", include_str!("../../../tests/fixtures/rust-type-failure.rs"), "\n```")]
+/// ```compile_fail,E0308
+/// use rusix::Expr;
+///
+/// fn main() {
+///     let _ = Expr::int(22).divide(Expr::boolean(true));
+/// }
+/// ```
 #[derive(Clone, Debug)]
 pub struct Expr<T> {
     /// The literal or computation Nix should evaluate, with its Rust source location.

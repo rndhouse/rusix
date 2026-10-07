@@ -2,7 +2,7 @@
 use rusix::interop::raw::NixFunctionExt;
 use rusix::interop::raw::NixRepresentation;
 use rusix::{
-    self as rusix, Config, Expr,
+    Config, Expr,
     interop::{InputRef, Nixpkgs, raw::NixValue},
     ir::ValueKind,
 };

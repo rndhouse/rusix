@@ -1,10 +1,13 @@
-#[path = "../../../tests/support/nixos.rs"]
+#[path = "cli/support.rs"]
 mod fixture_support;
 
+#[path = "cli/fixtures.rs"]
 mod fixtures;
 
+#[path = "cli/merge_fixtures.rs"]
 mod merge_fixtures;
 
+#[path = "cli/nixos_fixtures.rs"]
 mod nixos_fixtures;
 
 use rusix::{Diagnostic, Evaluation, Generated, NixSession, compile};
@@ -25,13 +28,24 @@ fn main() -> ExitCode {
 }
 
 fn run() -> Result<(), String> {
-    let args: Vec<_> = env::args().skip(1).collect();
+    let mut args: Vec<_> = env::args().skip(1).collect();
+    let nixpkgs = if args.first().is_some_and(|arg| arg == "--nixpkgs") {
+        if args.len() < 2 {
+            return Err("usage: rusix --nixpkgs <existing-checkout> <command>".into());
+        }
+        let path = PathBuf::from(&args[1]);
+        args.drain(..2);
+        Some(path)
+    } else {
+        None
+    };
+
     if args.first().is_some_and(|arg| arg == "check-nixos") {
-        return run_nixos(&args);
+        return run_nixos(&args, nixpkgs.as_deref());
     }
 
     if args.as_slice() == ["version"] {
-        let session = NixSession::new().map_err(|e| e.to_string())?;
+        let session = new_session(nixpkgs.as_deref())?;
         println!("{}", session.version().map_err(|e| e.to_string())?);
         return Ok(());
     }
@@ -41,7 +55,7 @@ fn run() -> Result<(), String> {
         || args[2] != "--out"
         || (args.len() == 6 && (args[0] != "check" || args[4] != "--select"))
     {
-        return Err("usage: rusix-cli <emit|check> <good|bad-port|nested|conflict|selective|codegen-bug|unmapped> --out <artifact-directory> [--select <attribute>]\n       rusix-cli version".into());
+        return Err("usage: rusix [--nixpkgs <existing-checkout>] <emit|check> <good|bad-port|nested|conflict|selective|codegen-bug|unmapped> --out <artifact-directory> [--select <attribute>]\n       rusix version".into());
     }
 
     let generated = match args[1].as_str() {
@@ -70,7 +84,7 @@ fn run() -> Result<(), String> {
         return Ok(());
     }
 
-    let session = NixSession::new().map_err(|e| e.to_string())?;
+    let session = new_session(nixpkgs.as_deref())?;
     let result = if args.len() == 6 {
         session.evaluate_attribute(&generated, &args[5])
     } else {
@@ -80,14 +94,21 @@ fn run() -> Result<(), String> {
     retain_evaluation(&out, result)
 }
 
-fn run_nixos(args: &[String]) -> Result<(), String> {
+fn new_session(nixpkgs: Option<&Path>) -> Result<NixSession, String> {
+    match nixpkgs {
+        Some(path) => NixSession::with_nixpkgs(path).map_err(|e| e.reason),
+        None => NixSession::new().map_err(|e| e.to_string()),
+    }
+}
+
+fn run_nixos(args: &[String], nixpkgs: Option<&Path>) -> Result<(), String> {
     use rusix::nixos::{DRIVER, compile_module, evaluation_source};
 
     if !matches!(args.len(), 4 | 6)
         || args[2] != "--out"
         || (args.len() == 6 && args[4] != "--select")
     {
-        return Err("usage: rusix-cli check-nixos <good|type|unknown|assertion|external|lazy|merge-two|merge-three|merge-ok|merge-mixed|merge-priority|merge-three-type> --out <dir> [--select option.path]".into());
+        return Err("usage: rusix [--nixpkgs <existing-checkout>] check-nixos <good|type|unknown|assertion|external|lazy|merge-two|merge-three|merge-ok|merge-mixed|merge-priority|merge-three-type> --out <dir> [--select option.path]".into());
     }
 
     let module = nixos_fixtures::module(&args[1])
@@ -118,7 +139,7 @@ fn run_nixos(args: &[String]) -> Result<(), String> {
     )
     .map_err(|e| e.to_string())?;
 
-    let session = NixSession::new().map_err(|e| e.to_string())?;
+    let session = new_session(nixpkgs)?;
 
     retain_evaluation(
         &out,

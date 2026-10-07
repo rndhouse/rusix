@@ -7,7 +7,7 @@ use super::{
 };
 use rusix::interop::raw::NixRepresentation;
 use rusix::{
-    self as rusix, Expr, IntoRusixValue,
+    Expr, IntoRusixValue,
     interop::{
         NixAttrs, NixExpression, NixLibrary, NixList, NixPath, Nixpkgs, Package, PackageFunction,
         raw::NixValue,

@@ -92,6 +92,7 @@ fn take_root(attrs: &mut Vec<Attribute>) -> syn::Result<bool> {
 }
 
 pub(super) fn expand(mut module: ItemMod) -> syn::Result<proc_macro2::TokenStream> {
+    let rusix = super::library_path();
     let Some((_, items)) = &mut module.content else {
         return Err(syn::Error::new_spanned(
             &module,
@@ -155,9 +156,9 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<proc_macro2::TokenStrea
                     item.attrs.insert(
                         0,
                         if root {
-                            parse_quote!(#[derive(::rusix::IntoConfig)])
+                            parse_quote!(#[derive(#rusix::IntoConfig)])
                         } else {
-                            parse_quote!(#[derive(::rusix::IntoRusixValue)])
+                            parse_quote!(#[derive(#rusix::IntoRusixValue)])
                         },
                     );
                 }
@@ -180,7 +181,7 @@ pub(super) fn expand(mut module: ItemMod) -> syn::Result<proc_macro2::TokenStrea
                         .all(|variant| matches!(variant.fields, Fields::Unit))
                 {
                     item.attrs
-                        .insert(0, parse_quote!(#[derive(::rusix::IntoRusixValue)]));
+                        .insert(0, parse_quote!(#[derive(#rusix::IntoRusixValue)]));
                 }
                 // Data-carrying enums retain user-defined conversion semantics.
             }

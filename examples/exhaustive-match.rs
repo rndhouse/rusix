@@ -5,8 +5,6 @@
 //! demo = { mode = "client"; firewall.allowedPorts = []; service.acceptsConnections = false; };
 //! ```
 
-use rusix::{self as rusix};
-
 /// Computes firewall and service choices from one Rust mode and places them under demo in Nix.
 /// Both policies are decided in Rust before their resulting fields are emitted.
 #[rusix::config]

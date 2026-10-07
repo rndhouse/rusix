@@ -8,11 +8,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
-#[path = "../../rusix-cli/src/nixos_fixtures.rs"]
+#[path = "../src/bin/cli/nixos_fixtures.rs"]
 mod fixtures;
 
 #[allow(dead_code)] // Shared fixture helpers include cases unused in this test target.
-#[path = "../../../tests/support/nixos.rs"]
+#[path = "../src/bin/cli/support.rs"]
 mod fixture_support;
 
 use fixture_support::{ExistingModule, OpenSsh};

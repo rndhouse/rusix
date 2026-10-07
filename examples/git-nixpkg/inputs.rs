@@ -2,7 +2,7 @@
 //! Rust accessors generate references; Nix resolves their values only when the recipe needs them.
 use rusix::interop::raw::NixpkgsExt;
 use rusix::{
-    self as rusix, IntoRusixValue, RusixValue,
+    IntoRusixValue, RusixValue,
     interop::{NixPath, Nixpkgs, Package, raw::NixValue},
 };
 
