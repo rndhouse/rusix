@@ -10,6 +10,54 @@
 //! [`Diagnostic`]. Evaluations use temporary, disposable Nix stores, without
 //! building packages or activating a system. [`ast`] is an advanced code-generation
 //! API; normal authors use `rusnix-ir` instead.
+//!
+//! Describe a value, compile it, then ask Nix to evaluate it:
+//!
+//! ```
+//! use rusnix_ir::{Config, Expr};
+//! use rusnix_nix::{NixSession, compile};
+//! use std::path::Path;
+//!
+//! let config = Config::new().set("answer", Expr::from(84_i64).divide(2.into()));
+//! let generated = compile(&config).expect("valid Rust configuration");
+//! // generated.source contains Nix; no Nix process has run yet.
+//!
+//! let session = NixSession::new().expect("temporary evaluation workspace");
+//! match session.evaluate(&generated) {
+//!     Ok(evaluation) => println!("answer: {}", evaluation.value["answer"]),
+//!     Err(diagnostic) => {
+//!         eprintln!("{}", diagnostic.render(Path::new(".")));
+//!         eprintln!("Original Nix output: {}", diagnostic.raw_nix);
+//!     }
+//! }
+//! ```
+//!
+//! [`Evaluation::value`] holds the selected result as JSON. JSON conversion makes
+//! Nix compute the data being returned, including nested fields; selecting a small
+//! result can leave unrelated expressions unevaluated. Evaluation failures and
+//! compilation failures both return [`Diagnostic`]. Its [`Diagnostic::reason`]
+//! explains the error, [`Diagnostic::origins`] lists recovered causes, and
+//! [`Diagnostic::raw_nix`] preserves the original Nix output. Some errors have
+//! several causes or no known Rust location; [`Diagnostic::render`] displays the
+//! available information without requiring one culprit.
+//!
+//! Choose an evaluation method based on the inputs and result you need:
+//!
+//! | Method | Use it for |
+//! | --- | --- |
+//! | [`NixSession::evaluate`] | Standalone expressions with no external nixpkgs inputs; return the whole result as JSON. |
+//! | [`NixSession::evaluate_attribute`] | One literal top-level field of a standalone result; leave unrelated fields unevaluated. |
+//! | [`NixSession::evaluate_interop`] | Expressions referring to the pinned local nixpkgs packages, library, or local Nix files. |
+//! | [`NixSession::evaluate_nixos`] | A selected configuration path from a compiled module, using the minimal pinned NixOS harness. |
+//! | [`NixSession::evaluate_nixos_interop`] | The same minimal module harness with the full pinned package set and module files available. |
+//! | [`NixSession::evaluate_nixos_with_driver`] | A custom Nix evaluation expression, including complete NixOS evaluation or a comparison of selected data. |
+//!
+//! The module methods take a [`nixos::NixosArtifact`] from
+//! [`nixos::compile_module`], rather than standalone [`Generated`] configuration.
+//! The minimal harness checks only imported option declarations; making the full
+//! package set available does not load all NixOS modules or establish full-system
+//! validity. A custom driver controls which modules and data are evaluated.
+//! These methods evaluate offline through the same isolated session.
 #![warn(missing_docs)]
 
 pub mod ast;

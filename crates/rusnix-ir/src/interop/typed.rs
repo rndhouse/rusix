@@ -10,15 +10,29 @@ use crate::{
 };
 use std::marker::PhantomData;
 
-/// Typed lazy operations for a deferred expression.
+/// A value described in Rust that Nix will compute when it is needed.
 ///
-/// Normal authoring retains the Rust interface through bindings, conditionals
-/// and guards. Custom symbolic interfaces implement
+/// Nix expressions can share a value, choose between alternatives, or reject a
+/// value when a condition fails. Use this trait to describe those operations
+/// while keeping the Rust type, such as [`Package`] or [`Expr<String>`].
+/// Constructing an expression does not evaluate Nix or validate an external value.
+/// Custom symbolic interfaces implement
 /// [`NixRepresentation`](super::raw::NixRepresentation); raw representation
 /// access requires importing that separate trait explicitly.
 pub trait NixExpression: NixRepresentation + Clone + IntoRusnixValue {
-    /// Share this expression through a lazy lexical parameter of the same type.
-    /// Rust builds the callback once; Nix evaluates the application when demanded.
+    /// Let the callback reuse this expression through one shared Nix parameter.
+    ///
+    /// Rust runs `build` once, immediately, with a symbolic parameter. Nix supplies
+    /// the value later and evaluates it only if the callback's expression needs it.
+    /// Reusing the parameter avoids repeating the original expression in Nix.
+    ///
+    /// ```
+    /// use rusnix_ir::{Expr, interop::NixExpression};
+    ///
+    /// let text = Expr::<String>::from("hello");
+    /// let twice = text.bind(|shared| Expr::concat([shared.clone(), shared]));
+    /// // Like Nix: (text: text + text) "hello".
+    /// ```
     #[track_caller]
     fn bind<R: NixExpression>(self, build: impl FnOnce(Self) -> R) -> R {
         R::from_expression(
@@ -27,7 +41,15 @@ pub trait NixExpression: NixRepresentation + Clone + IntoRusnixValue {
         )
     }
 
-    /// Bind a structured record through this symbolic view, lowering at the boundary.
+    /// Convert a Rust record and give `build` a symbolic view of it to reuse.
+    /// The callback runs once in Rust after conversion succeeds; Nix evaluates the
+    /// resulting expression later. `Self` describes the expected Nix interface.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ValidationError`] if Rust structural conversion fails, such as
+    /// flattening a field that is not a record. Success does not check the eventual
+    /// Nix type or field names; those errors occur during Nix evaluation.
     #[track_caller]
     fn try_bind_record<R: NixExpression>(
         record: impl IntoRusnixValue,
@@ -37,6 +59,15 @@ pub trait NixExpression: NixRepresentation + Clone + IntoRusnixValue {
     }
 
     /// Choose between expressions with the same Rust interface, lazily in Nix.
+    /// Both arguments are constructed in Rust. Nix evaluates the condition and
+    /// only the selected alternative when the result is needed.
+    ///
+    /// ```
+    /// use rusnix_ir::{Expr, interop::NixExpression};
+    ///
+    /// let label = Expr::<String>::choose(true, "enabled".into(), "disabled".into());
+    /// // Like Nix: if true then "enabled" else "disabled".
+    /// ```
     #[track_caller]
     fn choose(condition: impl Into<Expr<bool>>, yes: Self, no: Self) -> Self {
         Self::from_expression(NixValue::if_else(
@@ -46,7 +77,9 @@ pub trait NixExpression: NixRepresentation + Clone + IntoRusnixValue {
         ))
     }
 
-    /// Validate lazily through the supplied library, retaining this interface.
+    /// Return this value if `condition` holds; otherwise fail with `message` in Nix.
+    /// Uses the supplied library's `throwIfNot` helper. Rust constructs the guard;
+    /// Nix checks it when the result is needed and leaves the value unforced on failure.
     #[track_caller]
     fn require(
         self,
@@ -57,7 +90,17 @@ pub trait NixExpression: NixRepresentation + Clone + IntoRusnixValue {
         lib.throw_if_not(condition, message, self)
     }
 
-    /// Require a deferred condition, retaining the expression's Rust interface.
+    /// Return this value if `condition` holds; otherwise raise a Nix assertion error.
+    /// Rust constructs the guard without checking it. Nix checks it before evaluating
+    /// the guarded value, when the result is needed. Use [`Self::require`] to supply
+    /// an explanatory failure message instead.
+    ///
+    /// ```
+    /// use rusnix_ir::{Expr, interop::NixExpression};
+    ///
+    /// let answer = Expr::<i64>::from(42).asserted(true);
+    /// // Like Nix: assert true; 42.
+    /// ```
     #[track_caller]
     fn asserted(self, condition: impl Into<Expr<bool>>) -> Self {
         Self::from_expression(NixValue::assert(condition.into(), self.as_expression()))
@@ -111,7 +154,10 @@ impl From<&str> for Expr<String> {
 }
 
 impl Expr<String> {
-    /// Combine deferred text without losing its string type or Nix string context.
+    /// Join text expressions in order, preserving any dependencies on package outputs.
+    /// Nix strings can carry those dependencies as their *string context*, so a
+    /// pathname inserted into a build recipe still refers to its producing package.
+    /// Rust consumes the iterator now; Nix computes the joined text later.
     #[track_caller]
     pub fn concat(parts: impl IntoIterator<Item = Self>) -> Self {
         NixValue::concat_text(parts.into_iter().map(|part| part.as_expression())).into_expr()
@@ -197,11 +243,14 @@ expression_literal!(&str, Expr<String>);
 
 expression_literal!(PackageRef, Package);
 
-/// An expression expected to expose nixpkgs' argument override interface.
-/// This capability applies to instantiated packages and overridable callables.
+/// A value whose original Nix function can be called again with different arguments.
+/// nixpkgs exposes this as `.override`, commonly for replacing dependencies or
+/// feature options. This capability applies to packages and overridable callables.
 /// External values are checked by Nix only when the override is demanded.
 pub trait NixOverridable: NixExpression {
-    /// Call the value's real override method, retaining its original interface.
+    /// Replace arguments to the original Nix function through its `.override` method.
+    /// Unspecified arguments keep their previous values. Rust describes the override;
+    /// Nix calls the function again when its result is needed.
     #[track_caller]
     fn override_arguments(&self, arguments: impl ConfigValue) -> Self {
         Self::from_expression(
@@ -211,8 +260,15 @@ pub trait NixOverridable: NixExpression {
     }
 }
 
-/// An instantiated package expression, independent of its authoring language.
-/// External values are expectations; this handle does not prove buildability or ABI.
+/// A deferred software build recipe and its named outputs.
+///
+/// In Nix, a build recipe (a *derivation*) describes inputs, build commands and
+/// output locations. Use this handle to select outputs, inspect package fields,
+/// or modify a recipe without building the software.
+/// [`PackageRef`] identifies an existing package to look up; `Package` also
+/// represents the result of a builder, function call, or override.
+/// Rust construction does not check that an external value is a derivation or
+/// that the recipe will build successfully. Nix checks operations when evaluated.
 #[derive(Clone, Debug)]
 pub struct Package {
     value: NixValue,
@@ -229,25 +285,54 @@ impl From<PackageRef> for Package {
 impl NixOverridable for Package {}
 
 impl Package {
-    /// Select a named output as a package value; Nix checks whether it exists.
+    /// Select a named build output, such as `out`, `dev`, or `bin`.
+    /// Packages can split files across outputs: `dev` commonly holds headers and
+    /// `bin` executables, while `out` commonly names the default output. These names
+    /// are package conventions; not every package provides them.
+    /// `name` is one literal attribute name. Nix reports a missing output when the
+    /// selection is evaluated; use [`NixLibrary::get_dev`] for its fallback behavior.
     #[track_caller]
     pub fn output(&self, name: &str) -> Self {
         Self::from_expression(self.value.clone().select_segments([name]))
     }
 
-    /// Select a package-specific field with an explicit expected expression type.
+    /// Read a package field or nested path, such as `version` or `meta.description`.
+    /// Dots in `name` separate path components, unlike [`NixAttrs::get`], which
+    /// treats dots as part of a literal name. `T` is the expected expression type,
+    /// not a Rust-time check; Nix reports missing fields or incompatible operations
+    /// when evaluated.
     #[track_caller]
     pub fn field<T: NixExpression>(&self, name: &str) -> T {
         T::from_expression(self.value.clone().select(name))
     }
 
-    /// Use real nixpkgs argument overrides, preserving this package interface.
+    /// Call the original package function again with replacement inputs via `.override`.
+    /// Use this for dependency or feature arguments; unspecified inputs stay unchanged.
+    /// To change the build recipe's fields instead, use [`Self::override_attrs`].
+    /// Rust constructs the call; Nix performs the override when needed.
+    ///
+    /// ```
+    /// use rusnix_ir::interop::{NixAttrs, Nixpkgs, Package, raw::NixValue};
+    ///
+    /// let curl: Package = Nixpkgs::new().get("curl").into();
+    /// let without_http2 = curl.override_arguments(NixAttrs::new([
+    ///     ("http2Support", NixValue::from(false)),
+    /// ]));
+    /// // Like Nix: pkgs.curl.override { http2Support = false; }.
+    /// ```
     #[track_caller]
     pub fn override_arguments(&self, arguments: impl ConfigValue) -> Self {
         NixOverridable::override_arguments(self, arguments)
     }
 
-    /// Lower a structured partial override only at its call boundary.
+    /// Replace package-function inputs supplied as a structured Rust value.
+    /// Like [`Self::override_arguments`], this describes a later Nix `.override` call.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ValidationError`] for invalid Rust structural conversion,
+    /// such as flattening a non-record field. Success does not check the Nix
+    /// function's accepted arguments or evaluate the resulting package.
     #[track_caller]
     pub fn try_override_arguments(
         &self,
@@ -256,7 +341,21 @@ impl Package {
         Ok(self.override_arguments(arguments.try_into_nix_value()?))
     }
 
-    /// Use real overrideAttrs with a lazy typed view of the previous attributes.
+    /// Change build-recipe fields through the package's `.overrideAttrs` method.
+    /// `update` receives the previous builder attributes and returns replacements;
+    /// unspecified attributes stay unchanged. Rust runs `update` once immediately
+    /// with a symbolic view; Nix applies the generated function when needed.
+    ///
+    /// ```
+    /// use rusnix_ir::interop::{NixAttrs, Nixpkgs, Package, raw::NixValue};
+    ///
+    /// let curl: Package = Nixpkgs::new().get("curl").into();
+    /// let renamed = curl.override_attrs(|previous| NixAttrs::new([
+    ///     ("pname", NixValue::from("my-curl")),
+    ///     ("version", previous.get("version")),
+    /// ]));
+    /// // Like Nix: pkgs.curl.overrideAttrs (old: { pname = "my-curl"; inherit (old) version; }).
+    /// ```
     #[track_caller]
     pub fn override_attrs(&self, update: impl FnOnce(NixAttrs) -> NixAttrs) -> Self {
         Self::from_expression(
@@ -266,9 +365,19 @@ impl Package {
         )
     }
 
-    /// Extend top-level package fields using ordinary shallow Nix attribute union.
-    /// This retains existing override methods; the fields are not derivation overrides
-    /// and do not automatically propagate to other outputs or later overrides.
+    /// Add or replace fields on the returned package without changing its build recipe.
+    /// This is a shallow Nix attribute-set union: values on the right win, including
+    /// whole nested sets. It retains existing override methods; these field changes
+    /// do not automatically propagate to other outputs or later overrides.
+    /// Use this to attach data such as labels or annotations to a package.
+    ///
+    /// ```
+    /// use rusnix_ir::interop::{NixAttrs, Nixpkgs, Package, raw::NixValue};
+    ///
+    /// let curl: Package = Nixpkgs::new().get("curl").into();
+    /// let annotated = curl.extend(NixAttrs::new([("label", NixValue::from("local"))]));
+    /// // Like Nix: pkgs.curl // { label = "local"; }.
+    /// ```
     #[track_caller]
     pub fn extend(&self, attributes: NixAttrs) -> Self {
         Self::from_expression(self.value.clone().merge_attrs(attributes))
@@ -314,17 +423,26 @@ impl<R: NixExpression, A: NixExpression> Overridable<NixCallable<R, A>> {
 }
 
 impl<R: NixExpression> Overridable<NixCallable<R>> {
-    /// Lower a structured argument only at this call boundary.
+    /// Describe a call with a structured Rust argument, retaining the result interface.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ValidationError`] if Rust structural conversion fails. Success
+    /// does not evaluate the call or validate the function's Nix argument type.
     #[track_caller]
     pub fn try_call(&self, argument: impl IntoRusnixValue) -> Result<R, ValidationError> {
         self.inner().try_call(argument)
     }
 }
 
-/// A deferred callable with result and parameter interfaces.
-/// `A = NixValue` explicitly retains dynamic inputs for flexible external schemas.
-/// Constructed callbacks retain their parameter type, including through binding.
-/// Unlike NixFunction, this can represent constructed callbacks and lexical parameters.
+/// A Nix function that takes an argument described by `A` and returns a value described by `R`.
+///
+/// Use this to construct functions in Rust or call existing Nix functions while
+/// keeping a useful Rust interface for their results. The default [`NixValue`]
+/// parameter accepts values with different shapes. These types describe expected
+/// interfaces; they do not validate the Nix function or run it in Rust.
+/// Unlike [`super::NixFunction`], which refers to an existing function, this also
+/// represents functions built by callbacks and symbolic function parameters.
 #[derive(Clone, Debug)]
 pub struct NixCallable<R: NixExpression = NixValue, A: NixExpression = NixValue> {
     value: NixValue,
@@ -334,7 +452,21 @@ pub struct NixCallable<R: NixExpression = NixValue, A: NixExpression = NixValue>
 expression_handle!(NixCallable<R, A>);
 
 impl<R: NixExpression, A: NixExpression> NixCallable<R, A> {
-    /// Construct a callback whose parameter and result preserve their interfaces.
+    /// Construct a Nix function by running `build` once, immediately in Rust.
+    /// The callback receives a symbolic parameter of type `A`, not a concrete Nix
+    /// value. Its result describes the function body; Nix supplies the argument and
+    /// evaluates that body when a later call's result is needed. Rust side effects
+    /// in `build` happen during construction, never during those Nix calls.
+    ///
+    /// ```
+    /// use rusnix_ir::{Expr, interop::NixCallable};
+    ///
+    /// let greet = NixCallable::<Expr<String>, Expr<String>>::from_function(|name| {
+    ///     name.with_prefix("hello ")
+    /// });
+    /// let greeting = greet.call("world");
+    /// // Like Nix: (name: "hello " + name) "world".
+    /// ```
     #[track_caller]
     pub fn from_function(build: impl FnOnce(A) -> R) -> Self {
         Self::from_expression(NixValue::function(|parameter| {
@@ -342,9 +474,16 @@ impl<R: NixExpression, A: NixExpression> NixCallable<R, A> {
         }))
     }
 
-    /// Construct a callback returning a structured Rust value.
-    /// Conversion happens inside this boundary; an invalid flatten returns an error.
-    /// R is the expected symbolic result interface, not a check of external Nix types.
+    /// Construct a Nix function whose body is a structured Rust value.
+    /// Runs `build` once immediately with a symbolic parameter, then converts its
+    /// result. `R` describes the expected result interface; Nix checks the actual
+    /// function behavior when a later call is evaluated.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ValidationError`] if the body cannot be structurally converted,
+    /// such as when a flattened field is not a record. Success does not evaluate
+    /// the body, check its eventual Nix type, or validate external references.
     #[track_caller]
     pub fn try_from_function<V: IntoRusnixValue>(
         build: impl FnOnce(A) -> V,
@@ -365,7 +504,9 @@ impl<R: NixExpression, A: NixExpression> NixCallable<R, A> {
         }
     }
 
-    /// Describe a call; lowering happens inside this operation.
+    /// Describe a Nix call with one argument, retaining the expected result type `R`.
+    /// Rust converts the argument to its expression interface; Nix runs the function
+    /// only when the result is needed.
     #[track_caller]
     pub fn call(&self, argument: impl Into<A>) -> R {
         R::from_expression(self.value.clone().call(argument.into().as_expression()))
@@ -373,16 +514,27 @@ impl<R: NixExpression, A: NixExpression> NixCallable<R, A> {
 }
 
 impl<R: NixExpression> NixCallable<R> {
-    /// Accept a user-defined record without requiring caller-side type erasure.
-    /// Invalid structural flattening is returned as a Rust validation error.
+    /// Describe a call with a user-defined Rust record as its argument.
+    /// Converts the argument now and describes a Nix call to evaluate later.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ValidationError`] if Rust structural conversion fails, such as
+    /// flattening a non-record field. Success does not check the Nix function's
+    /// accepted arguments or evaluate its result.
     #[track_caller]
     pub fn try_call(&self, argument: impl IntoRusnixValue) -> Result<R, ValidationError> {
         Ok(self.call(argument.try_into_nix_value()?))
     }
 }
 
-/// A deferred attribute set with a known member expression interface.
-/// NixValue members permit heterogeneous records; Package members express families.
+/// A deferred Nix collection of named fields, called an *attribute set*.
+///
+/// Attribute sets serve as records or maps in Nix. Use this handle to select fields
+/// or combine sets without computing their values in Rust. `T` describes each
+/// member's expression interface: [`NixValue`] allows mixed types, while
+/// `NixAttrs<Package>` can represent a family of packages. External values are
+/// checked by Nix when these operations are evaluated.
 #[derive(Clone, Debug)]
 pub struct NixAttrs<T: NixExpression = NixValue> {
     value: NixValue,
@@ -393,6 +545,7 @@ expression_handle!(NixAttrs<T>);
 
 impl<T: NixExpression> NixAttrs<T> {
     /// Construct a record without evaluating its members.
+    /// Rust consumes the iterator immediately; the field values remain Nix expressions.
     #[track_caller]
     pub fn new(fields: impl IntoIterator<Item = (impl Into<String>, T)>) -> Self {
         Self::from_expression(NixValue::record(
@@ -403,18 +556,23 @@ impl<T: NixExpression> NixAttrs<T> {
     }
 
     /// Select one literal member name, retaining its expression type.
+    /// `get("meta.description")` reads a field literally named `meta.description`,
+    /// rather than traversing a nested record. Nix reports an absent field when needed.
     #[track_caller]
     pub fn get(&self, name: &str) -> T {
         T::from_expression(self.value.clone().select_segments([name]))
     }
 
     /// Test attribute presence, including an attribute whose value is null.
+    /// `name` is literal. Nix checks existence without evaluating the member's value.
     #[track_caller]
     pub fn has(&self, name: &str) -> Expr<bool> {
         self.value.clone().has_attr(name).into_expr()
     }
 
     /// Use the fallback only when the attribute is absent, not when it is null.
+    /// `name` is literal. Rust constructs the fallback now; Nix evaluates it only
+    /// when the field is missing and the result is needed.
     #[track_caller]
     pub fn get_or(&self, name: &str, fallback: impl Into<T>) -> T {
         T::from_expression(
@@ -425,13 +583,26 @@ impl<T: NixExpression> NixAttrs<T> {
     }
 
     /// Return null for an absent attribute, retaining the member interface otherwise.
-    /// Use has to distinguish an absent attribute from a present null value.
+    /// `name` is literal. Use [`Self::has`] to distinguish an absent attribute
+    /// from a present null value. Neither case is determined during Rust construction.
     #[track_caller]
     pub fn get_optional(&self, name: &str) -> NixNullable<T> {
         NixNullable::from_expression(self.value.clone().attr_or(name, NixValue::null()))
     }
 
-    /// Shallow union; values on the right take precedence and remain lazy.
+    /// Combine named fields, using the right-hand value when both sets have a name.
+    /// This is Nix's shallow attribute-set union (`//`); member values remain lazy.
+    /// Nested sets are replaced as whole values, rather than merged recursively.
+    ///
+    /// ```
+    /// use rusnix_ir::interop::{NixAttrs, raw::NixValue};
+    ///
+    /// let left = NixAttrs::new([("nested", NixValue::record([("a", 1.into())]))]);
+    /// let right = NixAttrs::new([("nested", NixValue::record([("b", 2.into())]))]);
+    /// let merged = left.merge(right);
+    /// // Like Nix: { nested = { a = 1; }; } // { nested = { b = 2; }; }
+    /// // The result has nested.b, but no nested.a.
+    /// ```
     #[track_caller]
     pub fn merge(self, right: Self) -> Self {
         Self::from_expression(self.value.merge_attrs(right))
@@ -441,19 +612,29 @@ impl<T: NixExpression> NixAttrs<T> {
 impl NixAttrs {
     /// Convert a structured Rust record at an attribute-set operation boundary.
     /// This checks Rust structural conversion, not the eventual Nix value type.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ValidationError`] for invalid conversion, such as flattening a
+    /// non-record field. Success does not ensure the result is a Nix attribute set;
+    /// Nix checks that expectation when an attribute-set operation is evaluated.
     #[track_caller]
     pub fn try_from_record(record: impl IntoRusnixValue) -> Result<Self, ValidationError> {
         Ok(Self::from_expression(record.try_into_nix_value()?))
     }
 
     /// Access a heterogeneous member through an explicit expected interface.
+    /// `name` is literal, as in [`Self::get`]. The expected type `T` does not inspect
+    /// or validate the member in Rust; Nix checks operations on the selected value.
     #[track_caller]
     pub fn field<T: NixExpression>(&self, name: &str) -> T {
         T::from_expression(self.get(name))
     }
 }
 
-/// A lazy Nix list with a known element expression interface, not a Rust Vec.
+/// A deferred, ordered Nix list whose elements use the expression interface `T`.
+/// Use it to assemble or conditionally include values that Nix computes later.
+/// Rust builds the list description; Nix evaluates its elements only when needed.
 #[derive(Clone, Debug)]
 pub struct NixList<T: NixExpression> {
     value: NixValue,
@@ -463,7 +644,9 @@ pub struct NixList<T: NixExpression> {
 expression_handle!(NixList<T>);
 
 impl<T: NixExpression> NixList<T> {
-    /// Construct a list, retaining each element's expression and provenance.
+    /// Construct a list by consuming the Rust iterator immediately.
+    /// Each element keeps its expression and Rust source location; Nix evaluates
+    /// those elements only when needed.
     #[track_caller]
     pub fn new(items: impl IntoIterator<Item = T>) -> Self {
         Self::from_expression(NixValue::list(
@@ -471,7 +654,8 @@ impl<T: NixExpression> NixList<T> {
         ))
     }
 
-    /// Builtin concatenation, preserving element order and lazy values.
+    /// Join lists in iterator order, preserving element order and lazy values.
+    /// Uses Nix's builtin `concatLists` rather than a nixpkgs library function.
     #[track_caller]
     pub fn concat(lists: impl IntoIterator<Item = Self>) -> Self {
         Self::from_expression(NixValue::concat_lists(
@@ -485,13 +669,17 @@ impl<T: NixExpression> NixList<T> {
         lib.concat_lists(lists)
     }
 
-    /// Call the supplied library's optional helper without erasing the element type.
+    /// Describe `[value]` when `condition` is true, or an empty list when false.
+    /// Calls the supplied library's `optional` helper. Rust constructs the value
+    /// regardless of the condition; Nix leaves an excluded value unevaluated.
     #[track_caller]
     pub fn optional(lib: &NixLibrary, condition: impl Into<Expr<bool>>, value: T) -> Self {
         lib.optional(condition, value)
     }
 
-    /// Call the supplied library's optionals helper; excluded elements stay unforced.
+    /// Keep this list when `condition` is true, or use an empty list when false.
+    /// Calls the supplied library's `optionals` helper without adding a list layer.
+    /// Rust constructs the condition now; Nix leaves excluded elements unevaluated.
     #[track_caller]
     pub fn when(self, lib: &NixLibrary, condition: impl Into<Expr<bool>>) -> Self {
         lib.optionals(condition, self)
@@ -531,7 +719,9 @@ impl<T: NixExpression> NixNullable<T> {
         Self::from_expression(NixValue::null())
     }
 
-    /// Retain a value's expression and provenance as the present alternative.
+    /// Use this expression as the present alternative, preserving its Rust location.
+    /// No Nix evaluation occurs; an externally supplied expression can still evaluate
+    /// to null, in which case [`Self::is_null`] will report true.
     #[track_caller]
     pub fn some(value: impl Into<T>) -> Self {
         Self::from_expression(value.into().as_expression())
@@ -544,6 +734,8 @@ impl<T: NixExpression> NixNullable<T> {
     }
 
     /// Select a fallback only for null; the unused branch remains unforced.
+    /// Rust constructs the fallback immediately. Nix checks for null and evaluates
+    /// only the selected expression when the result is needed.
     #[track_caller]
     pub fn unwrap_or(self, fallback: impl Into<T>) -> T {
         self.bind(|value| {
@@ -555,7 +747,20 @@ impl<T: NixExpression> NixNullable<T> {
         })
     }
 
-    /// Transform only the non-null alternative, preserving null lazily.
+    /// Describe a transformation that Nix evaluates only for a non-null value.
+    ///
+    /// Rust runs `transform` once immediately with a symbolic parameter, even if
+    /// this expression is literal null. Its result becomes the non-null branch of
+    /// a Nix conditional. Rust side effects in the callback always happen during
+    /// construction; only evaluation of the generated expression is conditional.
+    ///
+    /// ```
+    /// use rusnix_ir::{Expr, interop::NixNullable};
+    ///
+    /// let name = NixNullable::<Expr<String>>::some("world");
+    /// let greeting = name.map(|name| name.with_prefix("hello ")).unwrap_or("anonymous");
+    /// // Like Nix: if name == null then "anonymous" else "hello " + name.
+    /// ```
     #[track_caller]
     pub fn map<U: NixExpression>(self, transform: impl FnOnce(T) -> U) -> NixNullable<U> {
         self.bind(|value| {
@@ -568,8 +773,11 @@ impl<T: NixExpression> NixNullable<T> {
     }
 }
 
-/// The supplied standard build environment, retaining real nixpkgs builders.
-/// Platform schemas remain finite caller-defined views or explicit interop.
+/// nixpkgs' standard build environment: build tools, platform information and a recipe builder.
+///
+/// Use [`Self::mk_derivation`] to describe a software build and the platform views
+/// to choose platform-specific inputs or commands. This handle uses the supplied
+/// Nix `stdenv`; Rust does not recreate its builders or build the software.
 #[derive(Clone, Debug)]
 pub struct Stdenv {
     value: NixValue,
@@ -578,13 +786,22 @@ pub struct Stdenv {
 expression_handle!(Stdenv);
 
 impl Stdenv {
-    /// Describe mkDerivation, accepting existing supported expression values.
+    /// Describe a build recipe through the supplied `stdenv.mkDerivation`.
+    /// Attributes specify fields such as the package name, source and build inputs.
+    /// Rust constructs the call; Nix evaluates the recipe later without building it.
     #[track_caller]
     pub fn mk_derivation(&self, attributes: impl ConfigValue) -> Package {
         self.builder().call(NixValue::literal(attributes))
     }
 
-    /// Accept a structured recipe directly, lowering it inside the builder call.
+    /// Describe a build recipe from a structured Rust value via `stdenv.mkDerivation`.
+    /// Converts the recipe now and leaves the builder call for Nix evaluation.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`ValidationError`] if Rust structural conversion fails, such as
+    /// flattening a non-record field. Success does not check required builder
+    /// fields, evaluate external inputs, or prove the package will build.
     #[track_caller]
     pub fn try_mk_derivation(
         &self,
@@ -593,25 +810,34 @@ impl Stdenv {
         self.builder().try_call(attributes)
     }
 
-    /// Obtain the actual supplied builder, including its finalAttrs support.
+    /// Obtain the supplied `mkDerivation` function for deferred calls.
+    /// It accepts a recipe attribute set or a function from [`super::FinalAttrs`]
+    /// to that set, allowing recipe fields to refer to the final overridden values.
     #[track_caller]
     pub fn builder(&self) -> NixCallable<Package> {
         NixCallable::from_expression(self.value.clone().select("mkDerivation"))
     }
 
-    /// Retain a finite view of the complete caller-supplied host platform.
+    /// Describe the platform where the package's built programs will run.
+    /// This is the *host* platform; during cross-compilation it differs from the
+    /// build machine. Fields refer to the supplied `stdenv.hostPlatform` record.
     #[track_caller]
     pub fn host_platform(&self) -> super::Platform {
         super::Platform::from_expression(self.value.clone().select("hostPlatform"))
     }
 
-    /// Retain the caller-supplied build platform without projecting an identity.
+    /// Describe the platform where the package's build commands execute.
+    /// This is the *build* platform, which supplies tools runnable during the build.
+    /// Fields refer to the supplied `stdenv.buildPlatform` record.
     #[track_caller]
     pub fn build_platform(&self) -> super::Platform {
         super::Platform::from_expression(self.value.clone().select("buildPlatform"))
     }
 
-    /// Retain the caller-supplied target platform for compiler/toolchain policy.
+    /// Describe the platform for which a built compiler will generate code.
+    /// This is the *target* platform, relevant when the package being built is a
+    /// compiler or similar tool. It usually matches the host platform for ordinary
+    /// packages. Fields refer to the supplied `stdenv.targetPlatform` record.
     #[track_caller]
     pub fn target_platform(&self) -> super::Platform {
         super::Platform::from_expression(self.value.clone().select("targetPlatform"))

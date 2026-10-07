@@ -175,13 +175,22 @@ impl NixLibrary {
         .into_expr()
     }
 
-    /// Select the development output using the caller's normal getDev fallback.
+    /// Select a package's development output, commonly containing headers, via `lib.getDev`.
+    /// The standard nixpkgs helper preserves an explicitly selected output. Otherwise
+    /// it tries `dev`, then `out`, then the package itself if neither field exists.
+    /// Unlike [`super::Package::output`], a missing `dev` is not an error.
+    /// Rust constructs the call; the exact supplied library performs it in Nix,
+    /// so an overridden `getDev` can provide different behavior.
     #[track_caller]
     pub fn get_dev(&self, package: super::Package) -> super::Package {
         super::Package::from_expression(self.apply("getDev", [package.into()]))
     }
 
-    /// Select the library output using the caller's normal getLib fallback.
+    /// Select a package's library output via `lib.getLib`.
+    /// The standard nixpkgs helper preserves an explicitly selected output. Otherwise
+    /// it tries `lib`, then `out`, then the package itself if neither field exists.
+    /// Rust constructs the call; the exact supplied library performs it in Nix,
+    /// so an overridden `getLib` can provide different behavior.
     #[track_caller]
     pub fn get_lib(&self, package: super::Package) -> super::Package {
         super::Package::from_expression(self.apply("getLib", [package.into()]))
