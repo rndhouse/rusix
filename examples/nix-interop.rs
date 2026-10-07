@@ -130,25 +130,29 @@ pub fn module(local: InputRef) -> NixosModule {
 }
 
 fn main() {
-    // An ordinary Rust enum describes our own model.
+    // Our Rust-owned model becomes a Nix record: demo = { tls = false; }.
+    // This first output is ordinary configuration data, without external Nix inputs.
     let owned = OwnedContribution {
         demo: Transport::Plain,
     };
     println!("{}", rusnix_nix::compile(owned).unwrap().source);
 
-    // The input file is needed when Nix evaluates the output, not when Rust lowers it.
+    // Describe imports and package references from an existing Nix file and nixpkgs.
+    // Nix loads input.nix and merges module settings when the generated module is evaluated.
     let local = InputRef::local("example", "input.nix");
     let module = module(local);
     let artifact = rusnix_nix::nixos::compile_module(&module).unwrap();
     println!("{}", artifact.module.source);
 
-    // Nix checks this opaque function's arguments and result when it evaluates the call.
+    // Describe the Nix call toUpper "rusnix"; the Rust call records that expression.
+    // Nix computes "RUSNIX" later, when the generated result is evaluated.
     let uppercase: NixFunction = Nixpkgs::new().function("toUpper");
     let value: NixValue = uppercase.call("rusnix");
     let generated = rusnix_nix::compile(FunctionResult { result: value }).unwrap();
     println!("{}", generated.source);
 
-    // Mixed records cross the same opaque boundary; Nix owns the builder's schema.
+    // writeTextFile takes a Nix attribute set describing a file to produce.
+    // Its passthru field attaches extra metadata, here a reference to the hello package.
     let pkgs = Nixpkgs::new();
     let args = nix_record! {
         "name": "example.conf",
@@ -156,6 +160,9 @@ fn main() {
         "executable": false,
         "passthru": nix_record! { "package": pkgs.get("hello") },
     };
+
+    // Record the file recipe and print its Nix expression. Creating the file requires
+    // building that recipe separately; this Rust program does not write example.conf.
     let file = pkgs.pkgs_function("writeTextFile").call(args);
     let generated = rusnix_nix::compile(FunctionResult { result: file }).unwrap();
     println!("{}", generated.source);

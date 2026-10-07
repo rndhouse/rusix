@@ -9,10 +9,14 @@ mod options;
 pub(crate) mod schema;
 
 fn main() {
-    // Inputs and implementation remain independent contributions for NixOS merging.
+    // Declare PostgreSQL's options and combine their implementation with our settings.
+    // NixOS merges these contributions and resolves defaults when it evaluates the module.
     let module = schema::module()
         .module(lowering::implementation())
         .add(model::model());
+
+    // Generate a NixOS module, which provides settings for a larger configuration.
+    // Printing it does not evaluate that configuration or start PostgreSQL.
     let artifact = rusnix_nix::nixos::compile_module(&module).unwrap();
     println!("{}", artifact.module.source);
 }

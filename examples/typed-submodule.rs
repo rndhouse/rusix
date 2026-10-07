@@ -65,7 +65,10 @@ mod config {
 pub use config::model;
 
 fn main() {
-    // Prints source only; evaluating it as NixOS needs declarations for the fictional demo options.
+    // The parent structs place the endpoint at demo.endpoint in the Nix attribute set.
+    // Hostname and Port become a string and an integer, rather than nested wrappers.
     let generated = rusnix_nix::compile(model()).unwrap();
+
+    // Emit configuration data; using it with NixOS needs declarations for the demo options.
     println!("{}", generated.source);
 }

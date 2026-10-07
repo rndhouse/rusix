@@ -20,10 +20,18 @@ struct Output {
 }
 
 fn main() {
+    // Describe a reusable Nix function for curl, including its dependency inputs.
+    // Constructing the function in Rust does not run its Nix body.
     let factory: PackageFunction<Package> = lowering::factory();
+
+    // callPackage supplies matching dependencies from nixpkgs by parameter name.
+    // The Rust model supplies feature choices for this particular curl recipe.
     let curl = Nixpkgs::new()
         .try_call_package(&factory, model::model().arguments())
         .expect("fixed authoring arguments");
+
+    // Export the reusable function and the selected recipe as Nix attributes.
+    // This prints source; evaluating or building curl happens separately.
     let artifact = rusnix_nix::compile(Output { factory, curl })
         .expect("the example has valid structural values");
     println!("{}", artifact.source);

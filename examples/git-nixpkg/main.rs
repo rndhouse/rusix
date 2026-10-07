@@ -25,10 +25,18 @@ mod output {
 }
 
 fn main() {
+    // Describe a reusable Nix function that takes Git's dependencies and features.
+    // Rust constructs its body now; Nix applies the function when needed later.
     let factory: PackageFunction<PackageValue> = lowering::factory();
+
+    // callPackage supplies matching dependencies from nixpkgs by parameter name.
+    // Our Rust model supplies explicit choices; the result describes a Git build.
     let git = Nixpkgs::new()
         .try_call_package(&factory, inputs::arguments(model::model()))
         .expect("fixed authoring arguments");
+
+    // Export both the function and the chosen package as Nix attributes.
+    // Generating this source does not evaluate the recipe or build Git.
     let artifact = rusnix_nix::compile(output::Package { factory, git }).unwrap();
     println!("{}", artifact.source);
 }

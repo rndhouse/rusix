@@ -108,7 +108,10 @@ impl IntoRusnixValue for Transport {
 }
 
 fn main() {
-    // Lower the valid Rust model to Nix; backend schemas and credential files remain unchecked here.
+    // Rust requires both credentials for TLS; conversion emits them beside tls = true.
+    // The credential paths become Nix strings without reading the files.
     let generated = rusnix_nix::compile(model()).unwrap();
+
+    // Emit configuration data. Whether the referenced files exist is a separate check.
     println!("{}", generated.source);
 }

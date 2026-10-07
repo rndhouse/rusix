@@ -15,9 +15,13 @@ struct Output {
 }
 
 fn main() {
+    // Connect package recipes: our OpenSSL feeds curl and Git, and curl feeds MariaDB.
+    // Rust records these dependencies; Nix resolves their recipes when needed.
     let generated = rusnix_nix::compile(Output {
         packages: composition::packages(),
     })
     .unwrap();
+
+    // The output is Nix source for the connected package set, not built packages.
     println!("{}", generated.source);
 }

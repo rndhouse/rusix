@@ -80,20 +80,23 @@ mod config {
 pub use config::service;
 
 fn main() {
-    // Concrete values are fixed before lowering.
+    // This command is computed entirely in Rust, so its port is already fixed.
     let concrete_port = 5432_i64;
     println!("Concrete Rust command: example --port={concrete_port}");
 
-    // OptionRef does not read a value in Rust; NixOS resolves config.* after merging.
-    // i64 is our expected type; NixOS still owns the actual option declaration.
+    // This command refers to config.services.example.port in Nix.
+    // NixOS resolves the port after merging all definitions, including later overrides.
+    // i64 declares our expected type; the actual NixOS option still needs a declaration.
     let port = OptionRef::<i64>::new("services.example.port");
     let command = port.into_expr().to_text().with_prefix("example --port=");
     let service = service(command);
 
-    // Each add preserves an independent contribution for normal NixOS merging and priorities.
+    // Add the service's settings as one contribution to a larger NixOS configuration.
+    // Other modules can provide the port or override it using NixOS priority rules.
     let module = NixosModule::empty().add(service);
 
-    // This Nix module follows later overrides of config.services.example.port.
+    // Generate a module whose command follows the final port when NixOS evaluates it.
+    // Printing the source does not start the service or evaluate the port.
     let artifact = rusnix_nix::nixos::compile_module(&module).unwrap();
     println!("{}", artifact.module.source);
 }

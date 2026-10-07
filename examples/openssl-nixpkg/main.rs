@@ -23,8 +23,16 @@ struct Output {
 }
 
 fn main() {
+    // Describe the Nix recipe function for our chosen OpenSSL release.
+    // Rust constructs a function expression; Nix will apply it later.
     let factory = lowering::factory(model::Release::Preview);
+
+    // With no explicit arguments, callPackage takes matching dependencies from
+    // nixpkgs and leaves the function's own defaults in effect for other inputs.
     let openssl = Nixpkgs::new().call_package(&factory, nix_record! {});
+
+    // Export a reusable function for the release family alongside our selection.
+    // Generating this Nix source neither fetches sources nor builds OpenSSL.
     let generated = rusnix_nix::compile(Output {
         family: lowering::family_factory(),
         openssl,

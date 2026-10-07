@@ -92,7 +92,10 @@ mod config {
 pub use config::{Mode, firewall_policy, model, service_policy};
 
 fn main() {
-    // Rust checks that both matches are exhaustive; lowering emits their chosen values.
+    // Rust computes both policies from the same mode before generating Nix.
+    // Nix receives their resulting fields, not the Rust enum or its match expressions.
     let generated = rusnix_nix::compile(model()).unwrap();
+
+    // Emit configuration data; printing firewall settings does not apply them.
     println!("{}", generated.source);
 }

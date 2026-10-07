@@ -123,7 +123,11 @@ impl IntoRusnixValue for Transport {
 }
 
 fn main() {
-    // Compilation emits the typed function's result; NixOS schema checks happen during evaluation.
+    // The service function runs in Rust; its result becomes nested Nix attribute sets.
+    // Hostnames and ports become strings and integers, keeping the chosen field layout.
     let generated = rusnix_nix::compile(model()).unwrap();
+
+    // This is configuration data. Using it as NixOS settings also needs declarations
+    // for the fictional demo options, which NixOS checks during evaluation.
     println!("{}", generated.source);
 }

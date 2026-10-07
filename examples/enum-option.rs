@@ -58,7 +58,10 @@ mod config {
 pub use config::{Mode, accepts_connections, model};
 
 fn main() {
-    // IntoConfig lowers the tree; compilation emits Nix without evaluating it.
+    // Rust chooses the mode and connection policy before Nix is involved.
+    // Conversion turns the enum into "server" and the nested structs into Nix fields.
     let generated = rusnix_nix::compile(model()).unwrap();
+
+    // Emit configuration data; generating source does not configure a service.
     println!("{}", generated.source);
 }

@@ -90,7 +90,10 @@ mod config {
 pub use config::model;
 
 fn main() {
-    // Nix receives primitive values; their semantic separation was enforced in Rust before lowering.
+    // Rust keeps ports, user IDs and names distinct; Nix receives integers and strings.
+    // Conversion flattens the ownership fields into demo beside the listener fields.
     let generated = rusnix_nix::compile(model()).unwrap();
+
+    // Emit configuration data; generating this source does not create a user or listener.
     println!("{}", generated.source);
 }

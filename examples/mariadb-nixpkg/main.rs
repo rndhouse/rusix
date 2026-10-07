@@ -24,10 +24,18 @@ struct Output {
 }
 
 fn main() {
+    // Describe one Nix function shared by the supported MariaDB releases.
+    // Each application supplies the release, dependencies and feature choices.
     let factory = lowering::factory();
+
+    // Select release 10.11 and let callPackage supply matching nixpkgs dependencies.
+    // The result is a deferred recipe with both client and server members.
     let mariadb = Nixpkgs::new()
         .try_call_package(&factory, model::Release::V1011.arguments())
         .expect("fixed authoring arguments");
+
+    // Export the function, release family and selected package as Nix attributes.
+    // These are build descriptions; printing them does not build MariaDB.
     let generated = rusnix_nix::compile(Output {
         factory,
         family: lowering::family(),

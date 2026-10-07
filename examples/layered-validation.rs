@@ -55,8 +55,12 @@ mod config {
 pub use config::{Services, SshContribution, module};
 
 fn main() {
+    // Describe SSH settings and import the upstream module that declares their options.
+    // NixOS will use those declarations to check the settings during evaluation.
     let module = module();
-    // Compiling validates the bindings; evaluating the output checks NixOS types.
+
+    // Compilation checks the Rust description and emits a NixOS module.
+    // It does not run the NixOS option checks or change the system's SSH service.
     let artifact = rusnix_nix::nixos::compile_module(&module).unwrap();
     println!("{}", artifact.module.source);
 }
