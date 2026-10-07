@@ -447,3 +447,32 @@ fn shared_library_operations_preserve_literal_and_expression_interfaces() {
     let text: Expr<String> = lib.replace_text("a.b", [(".", "_")]);
     assert_eq!(evaluate(text), "a_b");
 }
+
+#[test]
+fn text_templates_return_strings_and_coerce_typed_packages_at_interpolation() {
+    use rusnix_ir::{interop::ToNixText, nix_text};
+
+    let package: Package = Nixpkgs::new().get("openssl").into();
+    let text: Expr<String> = nix_text!("prefix:{package}/bin/openssl", package = package.clone());
+    let changed: Expr<String> = text.clone().replace_text([("prefix", "changed")]);
+    let contexts = NixValue::builtin("getContext");
+    assert_eq!(
+        evaluate(
+            contexts
+                .clone()
+                .call(text)
+                .equals(contexts.call(package.to_nix_text()))
+        ),
+        true
+    );
+    let literal: Expr<String> = nix_text!("left ", "right");
+    assert_eq!(evaluate(literal), "left right");
+    assert_eq!(
+        evaluate(NixValue::builtin("substring").apply([
+            0_i64.into(),
+            8_i64.into(),
+            changed.into()
+        ])),
+        "changed:"
+    );
+}

@@ -7,7 +7,6 @@ pub fn pre_patch() -> Expr<String> {
             sed -i 's,[^"]*/var/log,/var/log,g' storage/mroonga/vendor/groonga/CMakeLists.txt
         "#,
     )
-    .into_expr()
 }
 
 pub fn post_install_common() -> Expr<String> {
@@ -20,7 +19,7 @@ pub fn post_install_common() -> Expr<String> {
             rm -r $out/include
             rm -r $out/lib/pkgconfig
         "#,
-    ).into_expr()
+    )
 }
 
 pub fn post_fixup(bin_path: Expr<String>) -> Expr<String> {
@@ -30,7 +29,6 @@ pub fn post_fixup(bin_path: Expr<String>) -> Expr<String> {
         "#,
         bin_path = bin_path,
     )
-    .into_expr()
 }
 
 pub fn post_install_client(lib_ext: Expr<String>) -> Expr<String> {
@@ -44,7 +42,6 @@ pub fn post_install_client(lib_ext: Expr<String>) -> Expr<String> {
         "#,
         lib_ext = lib_ext,
     )
-    .into_expr()
 }
 
 pub fn post_patch_server() -> Expr<String> {
@@ -54,7 +51,6 @@ pub fn post_patch_server() -> Expr<String> {
               --replace ":-mariadb" ":-mysql"
         "#,
     )
-    .into_expr()
 }
 
 pub fn pre_configure() -> Expr<String> {
@@ -63,7 +59,6 @@ pub fn pre_configure() -> Expr<String> {
             patchShebangs scripts/mytop.sh
         "#,
     )
-    .into_expr()
 }
 
 pub fn post_install_server() -> Expr<String> {
@@ -74,7 +69,6 @@ pub fn post_install_server() -> Expr<String> {
             rm -f "$out"/bin/{{mariadb-client-test,mariadb-test,mysql_client_test,mysqltest}}
         "#,
     )
-    .into_expr()
 }
 
 pub fn install_mroonga() -> Expr<String> {
@@ -83,7 +77,6 @@ pub fn install_mroonga() -> Expr<String> {
             mv "$out"/share/{{groonga,groonga-normalizer-mysql}} "$out"/share/doc/mysql
         "#,
     )
-    .into_expr()
 }
 
 pub fn install_pam() -> Expr<String> {
@@ -94,5 +87,4 @@ pub fn install_pam() -> Expr<String> {
             rm -r "$out"/OFF
         "#,
     )
-    .into_expr()
 }

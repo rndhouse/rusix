@@ -676,5 +676,15 @@
       "Expr<bool>",
       "Expr<i64>"
     ]
+  },
+  {
+    "file": "text-attribute-set.rs",
+    "code": "E0277",
+    "count": 1,
+    "source": "attrs = attrs",
+    "reason_tokens": [
+      "NixAttrs",
+      "ToNixText"
+    ]
   }
 ]

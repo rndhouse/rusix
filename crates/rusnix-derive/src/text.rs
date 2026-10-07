@@ -5,14 +5,14 @@ use std::collections::{BTreeMap, BTreeSet};
 use syn::{Expr, Ident, LitStr, Path, Token, parse::Parse, spanned::Spanned};
 
 pub(super) struct Input {
-    value_type: Path,
+    crate_path: Path,
     template: LitStr,
     arguments: Vec<(Ident, Expr)>,
 }
 
 impl Parse for Input {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let value_type = input.parse()?;
+        let crate_path = input.parse()?;
         input.parse::<Token![;]>()?;
         let template = input.parse()?;
 
@@ -29,7 +29,7 @@ impl Parse for Input {
         }
 
         Ok(Self {
-            value_type,
+            crate_path,
             template,
             arguments,
         })
@@ -88,7 +88,7 @@ fn dedent(text: &str) -> String {
 
 pub(super) fn expand(input: Input) -> syn::Result<TokenStream> {
     let Input {
-        value_type,
+        crate_path,
         template,
         arguments,
     } = input;
@@ -168,12 +168,12 @@ pub(super) fn expand(input: Input) -> syn::Result<TokenStream> {
         .map(|index| format_ident!("__rusnix_text_arg_{index}", span = Span::mixed_site()))
         .collect();
     let declarations = arguments.iter().zip(&bindings).map(|((_, expr), binding)| {
-        quote_spanned! {expr.span()=> let #binding = #value_type::from(#expr).to_text(); }
+        quote_spanned! {expr.span()=> let #binding = #crate_path::interop::ToNixText::to_nix_text(#expr); }
     });
     let values = parts.into_iter().map(|part| match part {
         Part::Literal(text) => {
             let text = LitStr::new(&text, template.span());
-            quote! { #value_type::from(#text) }
+            quote! { #crate_path::Expr::<String>::from(#text) }
         }
         Part::Argument(index) => {
             let binding = &bindings[index];
@@ -183,7 +183,7 @@ pub(super) fn expand(input: Input) -> syn::Result<TokenStream> {
 
     Ok(quote! {{
         #(#declarations)*
-        #value_type::concat_text([#(#values),*])
+        #crate_path::Expr::<String>::concat([#(#values),*])
     }})
 }
 

@@ -134,11 +134,11 @@ fn attributes(
                 "https://github.com/openssl/openssl/releases/download/OpenSSL_{fixed}/openssl-{version}.tar.gz",
                 fixed = fixed,
                 version = version.clone(),
-            ).into_expr::<String>(),
+            ),
             nix_text!(
                 "https://github.com/openssl/openssl/releases/download/openssl-{version}/openssl-{version}.tar.gz",
                 version = version.clone(),
-            ).into_expr::<String>(),
+            ),
         ),
         "hash": hash,
     });
@@ -178,8 +178,7 @@ fn attributes(
         (NixList::<Expr<String>>::new([nix_text!(
             "CFLAGS=-march={arch}",
             arch = host(i, "gcc.arch")
-        )
-        .into_expr::<String>()]))
+        )]))
         .when(
             lib,
             (host_bool(i, "isMips")).and(
@@ -279,7 +278,7 @@ fn attributes(
             "changelog": nix_text!(
                 "https://github.com/openssl/openssl/blob/openssl-{version}/CHANGES.md",
                 version = version,
-            ).into_expr::<String>(),
+            ),
             "description": "Cryptographic library that implements the SSL and TLS protocols",
             "license": i.lib().as_expression().select("licenses.openssl"),
             "mainProgram": "openssl",
@@ -306,9 +305,8 @@ fn configure_script(i: &Inputs, lib: &NixLibrary, version: &Expr<String>) -> Exp
             nix_text!(
                 "./Configure BSD-x86{elf}",
                 elf = lib.optional_text(host_bool(i, "isElf"), "-elf")
-            )
-            .into_expr::<String>(),
-            nix_text!("./Configure BSD-generic{bits}", bits = bits.clone()).into_expr::<String>(),
+            ),
+            nix_text!("./Configure BSD-generic{bits}", bits = bits.clone()),
         ),
     );
     let linux = NixValue::if_else(
@@ -326,8 +324,7 @@ fn configure_script(i: &Inputs, lib: &NixLibrary, version: &Expr<String>) -> Exp
                     NixValue::if_else(
                         host_bool(i, "isMips64n64"),
                         "./Configure linux64-mips64",
-                        nix_text!("./Configure linux-generic{bits}", bits = bits.clone())
-                            .into_expr::<String>(),
+                        nix_text!("./Configure linux-generic{bits}", bits = bits.clone()),
                     ),
                 ),
             ),
@@ -347,21 +344,17 @@ fn configure_script(i: &Inputs, lib: &NixLibrary, version: &Expr<String>) -> Exp
                         !bits.clone().equals(32_i64).into_expr::<bool>(),
                         bits.clone().to_text().into_expr::<String>()
                     )
-                )
-                .into_expr::<String>(),
+                ),
                 NixValue::if_else(
                     host_bool(i, "isLinux"),
                     linux,
                     NixValue::if_else(
                         host_bool(i, "isiOS"),
-                        nix_text!("./Configure ios{bits}-cross", bits = bits).into_expr::<String>(),
-                        NixValue::builtin("throw").call(
-                            nix_text!(
-                                "Not sure what configuration to use for {config}",
-                                config = host(i, "config")
-                            )
-                            .into_expr::<String>(),
-                        ),
+                        nix_text!("./Configure ios{bits}-cross", bits = bits),
+                        NixValue::builtin("throw").call(nix_text!(
+                            "Not sure what configuration to use for {config}",
+                            config = host(i, "config")
+                        )),
                     ),
                 ),
             ),

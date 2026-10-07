@@ -157,12 +157,12 @@ fn attributes(i: &Inputs, final_attrs: NixAttrs) -> Derivation {
             nix_text!(
                 "https://curl.haxx.se/download/curl-{version}.tar.xz",
                 version = version.clone(),
-            ).into_expr::<String>(),
+            ),
             nix_text!(
                 "https://github.com/curl/curl/releases/download/curl-{tag}/curl-{version}.tar.xz",
                 tag = release_tag,
                 version = version.clone(),
-            ).into_expr::<String>(),
+            ),
         ]),
         "hash": "sha256-21nPDWccpuf1wsXsF3CEozp54EyX5xzxg6XN6iNQVOs=",
     });
@@ -176,8 +176,7 @@ fn attributes(i: &Inputs, final_attrs: NixAttrs) -> Derivation {
                 substituteInPlace ./config.guess --replace-fail /usr/bin/uname uname
                 patchShebangs scripts
             "#,
-        )
-        .into_expr::<String>(),
+        ),
         outputs: vec!["bin", "dev", "out", "man", "devdoc"],
         separate_debug_info: i.stdenv.host_platform.is_linux(),
         enable_parallel_building: true,
@@ -198,8 +197,7 @@ fn attributes(i: &Inputs, final_attrs: NixAttrs) -> Derivation {
                     sed -e 's|/usr/bin|/no-such-path|g' -i.bak configure
                     rm src/tool_hugehelp.c
                 "#,
-            )
-            .into_expr::<String>(),
+            ),
             lib.optional_text(
                 i.psl_support().and(i.stdenv.host_platform.is_static()),
                 nix_text!(
@@ -209,21 +207,18 @@ fn attributes(i: &Inputs, final_attrs: NixAttrs) -> Derivation {
                         # https://github.com/curl/curl/pull/12919
                         configureFlagsArray+=("LIBS=-lidn2 -lunistring")
                     "#,
-                )
-                .into_expr::<String>(),
+                ),
             ),
         ]),
         configure_flags: configure_flags(i, &lib),
-        cxx: nix_text!("{prefix}c++", prefix = i.stdenv.cc.target_prefix()).into_expr::<String>(),
-        cxxcpp: nix_text!("{prefix}c++ -E", prefix = i.stdenv.cc.target_prefix())
-            .into_expr::<String>(),
+        cxx: nix_text!("{prefix}c++", prefix = i.stdenv.cc.target_prefix()),
+        cxxcpp: nix_text!("{prefix}c++ -E", prefix = i.stdenv.cc.target_prefix()),
         do_check: false,
         pre_check: pre_check(i, &lib),
         post_install: post_install(i, &lib),
         passthru: passthru(i, final_attrs),
         meta: Metadata {
-            changelog: nix_text!("https://curl.se/ch/{version}.html", version = version)
-                .into_expr::<String>(),
+            changelog: nix_text!("https://curl.se/ch/{version}.html", version = version),
             description: "Command line tool for transferring files with URL syntax",
             homepage: "https://curl.se/",
             license: i.lib.licenses.curl(),
@@ -331,8 +326,7 @@ fn configure_flags(i: &Inputs, lib: &NixLibrary) -> NixList<Expr<String>> {
         NixList::optional(
             lib,
             i.gss_support(),
-            nix_text!("--with-gssapi={krb5}", krb5 = lib.get_dev(i.libkrb5()),)
-                .into_expr::<String>(),
+            nix_text!("--with-gssapi={krb5}", krb5 = lib.get_dev(i.libkrb5()),),
         ),
         NixList::optional(
             lib,
@@ -366,8 +360,7 @@ fn pre_check(i: &Inputs, lib: &NixLibrary) -> Expr<String> {
             r#"
                 patchShebangs tests/
             "#,
-        )
-        .into_expr::<String>(),
+        ),
         lib.optional_text(
             i.stdenv.host_platform.is_darwin(),
             nix_text!(
@@ -376,8 +369,7 @@ fn pre_check(i: &Inputs, lib: &NixLibrary) -> Expr<String> {
                 rm tests/data/test1453
                 rm tests/data/test1086
             "#,
-            )
-            .into_expr::<String>(),
+            ),
         ),
         lib.optional_text(
             i.stdenv.host_platform.is_musl(),
@@ -386,8 +378,7 @@ fn pre_check(i: &Inputs, lib: &NixLibrary) -> Expr<String> {
                 # different resolving behaviour?
                 rm tests/data/test1592
             "#,
-            )
-            .into_expr::<String>(),
+            ),
         ),
     ])
 }
@@ -402,8 +393,7 @@ fn post_install(i: &Inputs, lib: &NixLibrary) -> Expr<String> {
                 # Install completions
                 make -C scripts install
             "#,
-        )
-        .into_expr::<String>(),
+        ),
         lib.optional_text(
             i.scp_support(),
             nix_text!(
@@ -412,8 +402,7 @@ fn post_install(i: &Inputs, lib: &NixLibrary) -> Expr<String> {
             "#,
                 dev = lib.get_dev(i.libssh2()),
                 lib = lib.get_lib(i.libssh2()),
-            )
-            .into_expr::<String>(),
+            ),
         ),
         lib.optional_text(
             i.gnutls_support(),
@@ -424,8 +413,7 @@ fn post_install(i: &Inputs, lib: &NixLibrary) -> Expr<String> {
                 ln $out/lib/libcurl{ext} $out/lib/libcurl-gnutls{ext}.4.4.0
             "#,
                 ext = i.stdenv.host_platform.extensions.shared_library(),
-            )
-            .into_expr::<String>(),
+            ),
         ),
     ])
 }

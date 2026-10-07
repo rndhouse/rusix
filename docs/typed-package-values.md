@@ -121,3 +121,10 @@ literals with their natural symbolic interfaces while symbolic values keep their
 existing interfaces. Thus `lib.optional(true, 42_i64)` returns
 `NixList<Expr<i64>>`; `throw_if_not` preserves the guarded interface. External
 values still require explicit expectation boundaries.
+
+`nix_text!` returns `Expr<String>` directly. Named interpolation uses `ToNixText`
+for demonstrated Nix-coercible interfaces, retaining dependency contexts and
+child origins. Packages remain packages until interpolation; attribute sets and
+callables have no implicit text capability. `NixValue` remains an explicit
+dynamic escape hatch. Fragment concatenation accepts string expressions, and
+`Expr<String>::replace_text` retains that interface through native replacement.

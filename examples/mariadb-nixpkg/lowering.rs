@@ -143,8 +143,7 @@ fn common(i: &Inputs, lib: &NixLibrary) -> Common {
             nix_text!(
                 "-DCURSES_LIBRARY={ncurses}/lib/libncurses.dylib",
                 ncurses = i.ncurses().output("out")
-            )
-            .into_expr::<String>(),
+            ),
         ]))
         .when(lib, host_bool(i, "isDarwin")),
         (NixList::<Expr<String>>::new(["-Dhave_C__Wl___as_needed=".into()])).when(
@@ -156,8 +155,7 @@ fn common(i: &Inputs, lib: &NixLibrary) -> Common {
             nix_text!(
                 "-DCMAKE_CROSSCOMPILING_EMULATOR={emulator}",
                 emulator = host(i, "emulator").call(i.build_packages())
-            )
-            .into_expr::<String>(),
+            ),
         ]))
         .when(lib, !i.stdenv().build_host_equal()),
     ]);
@@ -169,8 +167,7 @@ fn common(i: &Inputs, lib: &NixLibrary) -> Common {
             .select("versions.majorMinor")
             .call(i.version())
             .replace_text([(".", "")])
-    )
-    .into_expr::<String>();
+    );
     let tests = NixValue::function(|version| {
         NixValue::record(
             [
@@ -201,7 +198,7 @@ fn common(i: &Inputs, lib: &NixLibrary) -> Common {
             "url": nix_text!(
                 "https://archive.mariadb.org/mariadb-{version}/source/mariadb-{version}.tar.gz",
                 version = i.version()
-            ).into_expr::<String>(),
+            ),
             "hash": i.hash(),
         }),
         outputs: vec!["out", "man"],
@@ -315,8 +312,7 @@ fn server(i: &Inputs, lib: &NixLibrary, common: &common_view::Common) -> Package
             nix_text!(
                 "-DWITH_EMBEDDED_SERVER={enabled}",
                 enabled = NixValue::if_else(i.with_embedded(), "ON", "OFF")
-            )
-            .into_expr::<String>(),
+            ),
             "-DWITH_UNIT_TESTS=OFF".into(),
             "-DWITH_WSREP=ON".into(),
             "-DWITH_INNODB_DISALLOW_WRITES=ON".into(),

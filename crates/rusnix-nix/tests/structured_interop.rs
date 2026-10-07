@@ -728,7 +728,7 @@ fn curried_apply_preserves_argument_order_and_the_authoring_call_origin() {
         pkgs.pkgs_function("writeText")
             .apply([
                 "curried.conf".into(),
-                rusnix_ir::nix_text!("workers={count}", count = 4),
+                rusnix_ir::nix_text!("workers={count}", count = 4).into(),
             ])
             .select("text"),
     );
@@ -794,7 +794,11 @@ fn mixed_record_and_text_macros_preserve_opaque_values_and_literal_keys() {
 fn joined_text_retains_store_dependencies_and_deferred_list_operations() {
     let pkgs = Nixpkgs::new();
     let dependency = pkgs.get("hello").as_value().to_text();
-    let text = rusnix_ir::nix_text!("prefix ", dependency.clone(), " suffix");
+    let text = rusnix_ir::nix_text!(
+        "prefix ",
+        dependency.clone().into_expr::<String>(),
+        " suffix"
+    );
 
     let contexts_equal = InputRef::local(
         "context",

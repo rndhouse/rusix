@@ -226,15 +226,14 @@ fn attributes(i: &Inputs, final_attrs: NixAttrs) -> Derivation {
             NixList::optional(
                 &lib,
                 package::build_host_equal(i.stdenv.as_value()),
-                nix_text!("SHELL_PATH={shell}", shell = i.stdenv.shell()).into_expr::<String>(),
+                nix_text!("SHELL_PATH={shell}", shell = i.stdenv.shell()),
             ),
             NixList::choose(
                 i.perl_support(),
                 NixList::<Expr<String>>::new([nix_text!(
                     "PERL_PATH={perl}/bin/perl",
                     perl = perl.clone()
-                )
-                .into_expr::<String>()]),
+                )]),
                 NixList::<Expr<String>>::new(["NO_PERL=1".into()]),
             ),
             NixList::choose(
@@ -242,8 +241,7 @@ fn attributes(i: &Inputs, final_attrs: NixAttrs) -> Derivation {
                 NixList::<Expr<String>>::new([nix_text!(
                     "PYTHON_PATH={python}/bin/python",
                     python = i.python3()
-                )
-                .into_expr::<String>()]),
+                )]),
                 NixList::<Expr<String>>::new(["NO_PYTHON=1".into()]),
             ),
             (NixList::<Expr<String>>::new(
@@ -322,8 +320,7 @@ fn attributes(i: &Inputs, final_attrs: NixAttrs) -> Derivation {
                 NixList::<Expr<String>>::new([nix_text!(
                     "ac_cv_prog_CURL_CONFIG={curl}/bin/curl-config",
                     curl = lib.get_dev(i.curl())
-                )
-                .into_expr::<String>()]),
+                )]),
                 (NixList::<Expr<String>>::new(
                     [
                         "ac_cv_fread_reads_directories=yes",
@@ -351,8 +348,7 @@ fn attributes(i: &Inputs, final_attrs: NixAttrs) -> Derivation {
         install_check_target: "test",
         install_check_flags: NixList::<Expr<String>>::new([
             "DEFAULT_TEST_TARGET=prove".into(),
-            nix_text!("PERL_PATH={perl}/bin/perl", perl = i.build_packages.perl())
-                .into_expr::<String>(),
+            nix_text!("PERL_PATH={perl}/bin/perl", perl = i.build_packages.perl()),
         ]),
         native_install_check_inputs: NixList::optional(
             &lib,
@@ -410,7 +406,6 @@ fn gettext_patch(i: &Inputs) -> Expr<String> {
         "#,
         gettext = i.gettext()
     )
-    .into_expr::<String>()
 }
 
 /// Patch-phase substitutions that make Git use the selected OpenSSH executable.
@@ -424,7 +419,6 @@ fn ssh_patch(i: &Inputs) -> Expr<String> {
         "#,
         openssh = i.openssh()
     )
-    .into_expr::<String>()
 }
 
 /// Build-phase setup that derives the installed Perl library directory from Perl itself.
@@ -433,7 +427,7 @@ fn pre_build() -> Expr<String> {
         r#"
             makeFlagsArray+=( perllibdir=$out/$(perl -MConfig -wle 'print substr $Config{{installsitelib}}, 1 + length $Config{{siteprefixexp}}') )
         "#
-    ).into_expr::<String>()
+    )
 }
 
 /// Commands to build git-subtree in addition to Git's main programs.
@@ -443,7 +437,6 @@ fn subtree_build() -> Expr<String> {
             make -C contrib/subtree
         "#
     )
-    .into_expr::<String>()
 }
 
 /// Commands to build the Perl-based diff-highlight helper when Perl support is enabled.
@@ -453,7 +446,6 @@ fn diff_highlight_build() -> Expr<String> {
             make -C contrib/diff-highlight
         "#
     )
-    .into_expr::<String>()
 }
 
 /// Commands to build the optional macOS Keychain credential helper.
@@ -463,7 +455,6 @@ fn keychain_build() -> Expr<String> {
             make -C contrib/credential/osxkeychain
         "#
     )
-    .into_expr::<String>()
 }
 
 /// Commands to build the optional libsecret credential helper.
@@ -473,7 +464,6 @@ fn secret_build() -> Expr<String> {
             make -C contrib/credential/libsecret
         "#
     )
-    .into_expr::<String>()
 }
 
 /// Prepare the Keychain helper's executable symlink and remove its intermediate object.
@@ -485,7 +475,6 @@ fn keychain_install() -> Expr<String> {
             rm -f $PWD/contrib/credential/osxkeychain/git-credential-osxkeychain.o
         "#
     )
-    .into_expr::<String>()
 }
 
 /// Prepare the libsecret helper's executable symlink and remove its intermediate object.
@@ -497,7 +486,6 @@ fn secret_install() -> Expr<String> {
             rm -f $PWD/contrib/credential/libsecret/git-credential-libsecret.o
         "#
     )
-    .into_expr::<String>()
 }
 
 /// Common installation commands for contrib tools, completions and embedded runtime-tool paths.
@@ -569,9 +557,9 @@ fn base_install(i: &Inputs) -> Expr<String> {
             nix_text!(
                 ", '{perl}/bin/perl'",
                 perl = i.perl_packages.perl.as_value()
-            ).into_expr::<String>()
+            )
         )
-    ).into_expr::<String>()
+    )
 }
 
 /// Wrap Perl helpers with their library paths and patch gitweb's gzip and CGI dependencies.
@@ -614,9 +602,10 @@ fn perl_install(i: &Inputs) -> Expr<String> {
                 i.perl_packages.fcgi(),
                 i.perl_packages.fcgi_proc_manager(),
                 i.perl_packages.html_tag_cloud(),
-            ]).into()
+            ])
+            .into()
         ])
-    ).into_expr::<String>()
+    )
 }
 
 /// Wrap git-svn with the selected Subversion package and its Perl libraries.
@@ -637,7 +626,6 @@ fn svn_install(i: &Inputs, svn: Package) -> Expr<String> {
         )),
         svn = svn.output("out")
     )
-    .into_expr::<String>()
 }
 
 /// Remove git-svn from the installed output when SVN support is disabled.
@@ -648,7 +636,6 @@ fn no_svn_install() -> Expr<String> {
             notSupported $out/libexec/git-core/git-svn
         "#
     )
-    .into_expr::<String>()
 }
 
 /// Wrap git-send-email with the SMTP libraries supplied by the Nix caller.
@@ -662,7 +649,6 @@ fn email_install(i: &Inputs) -> Expr<String> {
         perl_prefix = i.perl_packages.perl.lib_prefix(),
         smtp_path = i.perl_packages.make_perl_path().call(i.smtp_perl_libs())
     )
-    .into_expr::<String>()
 }
 
 /// Remove git-send-email from the installed output when email support is disabled.
@@ -673,7 +659,6 @@ fn no_email_install() -> Expr<String> {
             notSupported $out/libexec/git-core/git-send-email
         "#
     )
-    .into_expr::<String>()
 }
 
 /// Install documentation using the build-platform Perl, including in cross builds.
@@ -685,7 +670,7 @@ fn manual_install(i: &Inputs) -> Expr<String> {
               -C Documentation
         "#,
         perl = i.build_packages.perl()
-    ).into_expr::<String>()
+    )
 }
 
 /// Point Tcl/Tk launchers at nixpkgs' wish interpreter and install gitk completion.
@@ -701,7 +686,7 @@ fn gui_install(i: &Inputs) -> Expr<String> {
             ln -s $out/share/git/contrib/completion/git-completion.bash $out/share/bash-completion/completions/gitk
         "#,
         tk = i.tk()
-    ).into_expr::<String>()
+    )
 }
 
 /// Remove the GUI entry points when Tcl/Tk support is disabled.
@@ -714,7 +699,6 @@ fn no_gui_install() -> Expr<String> {
             done
         "#
     )
-    .into_expr::<String>()
 }
 
 /// Generate the system Git configuration selecting the macOS Keychain credential helper.
@@ -729,7 +713,6 @@ fn keychain_config() -> Expr<String> {
             EOF
         "#
     )
-    .into_expr::<String>()
 }
 
 /// Prepare installed tests and exclude sandbox-incompatible tests exactly as upstream does.
@@ -772,7 +755,7 @@ fn base_check(i: &Inputs) -> Expr<String> {
             disable_test t0201-gettext-fallbacks
         "#,
         no_svn = lib.optional_text(!i.svn_support(), "NO_SVN_TESTS=y")
-    ).into_expr::<String>()
+    )
 }
 
 /// Exclude send-email tests when their corresponding feature is disabled.
@@ -783,7 +766,6 @@ fn no_email_check() -> Expr<String> {
             disable_test t9001-send-email
         "#
     )
-    .into_expr::<String>()
 }
 
 /// Exclude the pinned recipe's known flaky and filesystem-sensitive tests on all platforms.
@@ -798,7 +780,6 @@ fn common_check() -> Expr<String> {
             disable_test t3910-mac-os-precompose
         "#
     )
-    .into_expr::<String>()
 }
 
 /// Apply the pinned recipe's additional macOS test exclusions.
@@ -814,7 +795,7 @@ fn darwin_check() -> Expr<String> {
             # not ok 1 - populate workdir (with 2.33.1 on x86_64-darwin)
             disable_test t5003-archive-zip
         "#
-    ).into_expr::<String>()
+    )
 }
 
 /// Exclude the upstream fsmonitor test on Apple Silicon.
@@ -824,7 +805,6 @@ fn darwin_arm_check() -> Expr<String> {
             disable_test t7527-builtin-fsmonitor
         "#
     )
-    .into_expr::<String>()
 }
 
 /// Exclude the upstream locale and encoding tests that fail with musl.
@@ -838,7 +818,6 @@ fn musl_check() -> Expr<String> {
             disable_test t0028-working-tree-encoding
         "#
     )
-    .into_expr::<String>()
 }
 
 /// Compose the patch phase, including SSH substitutions only when requested.

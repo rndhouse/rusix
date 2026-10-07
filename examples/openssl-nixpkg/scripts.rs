@@ -11,7 +11,6 @@ pub fn patch_configure() -> Expr<String> {
             patchShebangs Configure
         "#,
     )
-    .into_expr()
 }
 
 pub fn patch_old_tests() -> Expr<String> {
@@ -24,7 +23,6 @@ pub fn patch_old_tests() -> Expr<String> {
             done
         "#,
     )
-    .into_expr()
 }
 
 pub fn patch_env(coreutils: Package) -> Expr<String> {
@@ -34,7 +32,6 @@ pub fn patch_env(coreutils: Package) -> Expr<String> {
         "#,
         coreutils = coreutils,
     )
-    .into_expr()
 }
 
 pub fn patch_musl() -> Expr<String> {
@@ -45,7 +42,6 @@ pub fn patch_musl() -> Expr<String> {
                         '!defined(__ANDROID__) && !defined(__OpenBSD__) && 0'
         "#,
     )
-    .into_expr()
 }
 
 pub fn patch_static_engines() -> Expr<String> {
@@ -56,7 +52,6 @@ pub fn patch_static_engines() -> Expr<String> {
                         'ENGINESDIR=$(OPENSSLDIR)/engines-{{- $sover_dirname -}}'
         "#,
     )
-    .into_expr()
 }
 
 pub fn install_static() -> Expr<String> {
@@ -66,7 +61,6 @@ pub fn install_static() -> Expr<String> {
             remove-references-to -t $out $out/lib/*.a
         "#,
     )
-    .into_expr()
 }
 
 pub fn install_shared() -> Expr<String> {
@@ -82,7 +76,6 @@ pub fn install_shared() -> Expr<String> {
             etc=$out
         "#,
     )
-    .into_expr()
 }
 
 pub fn install_bin() -> Expr<String> {
@@ -93,7 +86,6 @@ pub fn install_bin() -> Expr<String> {
 
         "#,
     )
-    .into_expr()
 }
 
 pub fn install_rehash() -> Expr<String> {
@@ -107,7 +99,6 @@ pub fn install_rehash() -> Expr<String> {
               --add-flags "rehash"
         "#,
     )
-    .into_expr()
 }
 
 pub fn install_dev() -> Expr<String> {
@@ -123,7 +114,6 @@ pub fn install_dev() -> Expr<String> {
             rmdir $etc/etc/ssl/{{certs,private}}
         "#,
     )
-    .into_expr()
 }
 
 pub fn install_conf(conf: NixValue) -> Expr<String> {
@@ -133,7 +123,6 @@ pub fn install_conf(conf: NixValue) -> Expr<String> {
         "#,
         conf = conf,
     )
-    .into_expr()
 }
 
 pub fn fixup_perl(perl: Package) -> Expr<String> {
@@ -148,7 +137,6 @@ pub fn fixup_perl(perl: Package) -> Expr<String> {
         "#,
         perl = perl,
     )
-    .into_expr()
 }
 
 pub fn fixup_cmake() -> Expr<String> {
@@ -159,5 +147,4 @@ pub fn fixup_cmake() -> Expr<String> {
             rm -rf $dev/lib/cmake
         "#,
     )
-    .into_expr()
 }

@@ -199,7 +199,7 @@ fn settings_text() -> NixValue {
                     ),
                 );
 
-                nix_text!("{name} = {rendered}", name = name, rendered = rendered)
+                nix_text!("{name} = {rendered}", name = name, rendered = rendered).into()
             })
         }),
         printable,
@@ -230,7 +230,8 @@ fn pre_start() -> NixValue {
                 .pkgs_function("writeText")
                 .apply(["recovery.conf".into(), pg.recovery_config()]),
             data = data.clone(),
-        ),
+        )
+        .into(),
     );
 
     // Leading-newline blocks dedent the shell text; holes remain deferred Nix values.
@@ -258,6 +259,7 @@ fn pre_start() -> NixValue {
         config_file = configuration_file(),
         recovery = recovery,
     )
+    .into()
 }
 
 fn post_start() -> NixValue {
@@ -271,7 +273,8 @@ fn post_start() -> NixValue {
                 $PSQL -f "{script}" -d postgres
             "#,
             script = pg.initial_script(),
-        ),
+        )
+        .into(),
     );
 
     let databases = Nixpkgs::new().function("concatMapStrings").apply([
@@ -281,7 +284,7 @@ fn post_start() -> NixValue {
                     $PSQL -tAc "SELECT 1 FROM pg_database WHERE datname = '{database}'" | grep -q 1 || $PSQL -tAc 'CREATE DATABASE "{database}"'
                 "#,
                 database = database,
-            )
+            ).into()
         }),
         pg.ensure_databases(),
     ]);
@@ -332,7 +335,7 @@ fn post_start() -> NixValue {
                 // Preserve the upstream command's trailing space explicitly.
                 trailing_space = " ",
                 ownership = ownership,
-            )
+            ).into()
         }),
         pg.ensure_users(),
     ]);
@@ -362,6 +365,7 @@ fn post_start() -> NixValue {
         ),
         users = users,
     )
+    .into()
 }
 
 // Maps the service's lifecycle and hardening policy to systemd property names.
@@ -583,11 +587,12 @@ fn service_config() -> NixValue {
             "notify",
             "simple",
         ),
-        exec_start: nix_text!("{package}/bin/postgres", package = package),
+        exec_start: nix_text!("{package}/bin/postgres", package = package).into(),
         exec_reload: nix_text!(
             "{coreutils}/bin/kill -HUP $MAINPID",
             coreutils = Nixpkgs::from_module().get("coreutils"),
-        ),
+        )
+        .into(),
         kill_signal: "SIGINT",
         kill_mode: "mixed",
         timeout_sec: 120,
@@ -696,7 +701,8 @@ fn checks() -> NixValue {
                 "#,
             package = pg.package(),
             config_file = configuration_file(),
-        ),
+        )
+        .into(),
     ]);
 
     let pkgs = Nixpkgs::from_module();
@@ -829,10 +835,10 @@ mod config {
                 postgresql: guarded(opaque(PostgresqlDefaults {
                     settings: settings(),
                     package: default_package().priority(DefinitionPriority::Default),
-                    data_dir: nix_text!(
+                    data_dir: NixValue::from(nix_text!(
                         "/var/lib/postgresql/{schema}",
                         schema = pg.package().select("psqlSchema"),
-                    )
+                    ))
                     .priority(DefinitionPriority::Default),
                     authentication,
                 })),

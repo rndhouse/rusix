@@ -29,13 +29,16 @@ fn literals_braces_and_multiline_whitespace_are_preserved_verbatim() {
 "#,
         word = "café",
     );
-    let result = NixValue::record([
-        ("template", template),
-        ("empty", nix_text!("")),
-        ("braces", nix_text!("{{}}")),
-        ("fragments", nix_text!("literal {", "}", " remains")),
-        ("emptyFragments", nix_text!()),
-    ]);
+    let result = NixValue::record(
+        [
+            ("template", template),
+            ("empty", nix_text!("")),
+            ("braces", nix_text!("{{}}")),
+            ("fragments", nix_text!("literal {", "}", " remains")),
+            ("emptyFragments", nix_text!()),
+        ]
+        .map(|(key, text)| (key, NixValue::from(text))),
+    );
     assert_eq!(
         NixSession::new()
             .unwrap()
@@ -64,16 +67,19 @@ fn indented_blocks_preserve_text_and_interpolate_without_reindenting_values() {
         word = "café",
         multiline = "first\n  second",
     );
-    let result = NixValue::record([
-        ("block", text),
-        ("noNewline", nix_text!("\n    end")),
-        ("newline", nix_text!("\n    end\n    ")),
-        ("empty", nix_text!("\n    ")),
-        ("escapedBraces", nix_text!("\n    ${{PATH}}\n    ")),
-        ("tabs", nix_text!("\n\tfirst\n\t\tnested\n\t")),
-        ("mixed", nix_text!("\n\tfirst\n    second\n    ")),
-        ("shortIndent", nix_text!("\n    first\n  second\n    ")),
-    ]);
+    let result = NixValue::record(
+        [
+            ("block", text),
+            ("noNewline", nix_text!("\n    end")),
+            ("newline", nix_text!("\n    end\n    ")),
+            ("empty", nix_text!("\n    ")),
+            ("escapedBraces", nix_text!("\n    ${{PATH}}\n    ")),
+            ("tabs", nix_text!("\n\tfirst\n\t\tnested\n\t")),
+            ("mixed", nix_text!("\n\tfirst\n    second\n    ")),
+            ("shortIndent", nix_text!("\n    first\n  second\n    ")),
+        ]
+        .map(|(key, text)| (key, NixValue::from(text))),
+    );
 
     let value = NixSession::new()
         .unwrap()
@@ -113,7 +119,7 @@ fn repeated_named_arguments_are_constructed_once_and_use_nix_coercion() {
     assert_eq!(
         NixSession::new()
             .unwrap()
-            .evaluate_interop(&generated(text))
+            .evaluate_interop(&generated(text.into()))
             .unwrap()
             .value["result"],
         "value:42:value:1::22"
@@ -147,7 +153,10 @@ fn package_and_derivation_interpolation_preserves_exact_string_contexts() {
     )
     .function("getContext");
     let result = NixValue::record([
-        ("textEqual", formatted.clone().equals(fragments.clone())),
+        (
+            "textEqual",
+            NixValue::from(formatted.clone()).equals(fragments.clone()),
+        ),
         ("newContext", context.call(formatted)),
         ("oldContext", context.call(fragments)),
     ]);
@@ -167,11 +176,12 @@ fn same_artifact_interpolation_follows_ordinary_and_force_overrides() {
     let scratch = tempfile::tempdir().unwrap();
     let downstream = scratch.path().join("downstream.nix");
     fs::write(&downstream, "{ module = {}; }").unwrap();
-    let text = nix_text!(
+    let text: NixValue = nix_text!(
         r#"
             postgres --port={port}"#,
         port = OptionRef::<i64>::new("services.example.port").into_expr(),
-    );
+    )
+    .into();
 
     let artifact = compile_module(
         &NixosModule::empty()
@@ -224,7 +234,8 @@ fn unused_interpolated_failure_stays_lazy_and_selected_failure_keeps_child_origi
                 r#"
                     answer={failure}"#,
                 failure = failure,
-            ),
+            )
+            .into(),
         ),
     ]);
 
@@ -261,20 +272,23 @@ fn unused_interpolation_does_not_force_a_throwing_final_option() {
         &NixosModule::empty()
             .import_ref(fixture.module("schema"))
             .import_ref(fixture.module("failing"))
-            .add(Config::new().set(
-                "environment.result",
-                NixValue::record([
-                    ("safe", true.into()),
-                    (
-                        "command",
-                        nix_text!(
-                            r#"
+            .add(
+                Config::new().set(
+                    "environment.result",
+                    NixValue::record([
+                        ("safe", true.into()),
+                        (
+                            "command",
+                            nix_text!(
+                                r#"
                                 port={port}"#,
-                            port = port,
+                                port = port,
+                            )
+                            .into(),
                         ),
-                    ),
-                ]),
-            )),
+                    ]),
+                ),
+            ),
     )
     .unwrap();
 

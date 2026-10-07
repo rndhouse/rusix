@@ -16,6 +16,10 @@ mod library;
 
 mod typed;
 
+mod text;
+
+pub use text::ToNixText;
+
 pub use library::NixLibrary;
 
 pub use typed::{
@@ -976,10 +980,10 @@ impl NixFunction {
 #[macro_export]
 macro_rules! nix_text {
     ($template:literal $(, $name:ident = $value:expr)* $(,)?) => {
-        $crate::__symbolic_text!($crate::interop::NixValue; $template $(, $name = $value)*)
+        $crate::__symbolic_text!($crate; $template $(, $name = $value)*)
     };
     ($($part:expr),* $(,)?) => {
-        $crate::interop::NixValue::concat_text([$($crate::interop::NixValue::from($part)),*])
+        $crate::Expr::<String>::concat([$($part.into()),*])
     };
 }
 

@@ -228,7 +228,7 @@ fn diagnostic_matrix_preserves_operations_paths_and_raw_errors() {
         },
         Case {
             name: "interpolation child",
-            value: nix_text!("port={port}", port = division.clone()),
+            value: nix_text!("port={port}", port = division.clone()).into(),
             expected: origin(division.clone()),
             provenance: Provenance::SourceMap,
         },

@@ -867,8 +867,8 @@ fn optional_text_keeps_exact_bytes_and_store_dependency_context() {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/structured-interop.nix"),
     )
     .function("getContext");
-    let selected = lib.optional_text(Expr::boolean(true), text.clone().into_expr::<String>());
-    let excluded = lib.optional_text(Expr::boolean(false), text.clone().into_expr::<String>());
+    let selected = lib.optional_text(Expr::boolean(true), text.clone());
+    let excluded = lib.optional_text(Expr::boolean(false), text.clone());
 
     assert_eq!(
         evaluate(NixValue::record([
@@ -885,12 +885,7 @@ fn optional_text_keeps_exact_bytes_and_store_dependency_context() {
             (
                 "libraryReplacementContextEqual",
                 context
-                    .call(
-                        lib.replace_text(
-                            text.clone().into_expr::<String>(),
-                            [("prefix", "changed")]
-                        )
-                    )
+                    .call(lib.replace_text(text.clone(), [("prefix", "changed")]))
                     .equals(context.call(text.clone())),
             ),
             (
