@@ -292,10 +292,17 @@ fn discarded_definitions_and_lazy_guard_branches_remain_unforced_in_both_modes()
     let guarded = lib.throw_if_not(
         false,
         "first failure",
-        lib.throw_if_not(failure.clone(), failure.clone(), failure.clone()),
+        lib.throw_if_not(
+            failure.clone().into_expr::<bool>(),
+            failure.clone().into_expr::<String>(),
+            failure.clone(),
+        ),
     );
     let config = Config::new()
-        .set("good", lib.throw_if_not(true, failure, 42_i64))
+        .set(
+            "good",
+            lib.throw_if_not(true, failure.into_expr::<String>(), 42_i64),
+        )
         .set("bad", guarded);
     let normal = compile(&config).unwrap();
     let debug = compile_with_options(&config, INSPECT).unwrap();

@@ -213,7 +213,8 @@ fn common(i: &Inputs, lib: &NixLibrary) -> Common {
             lib.optional(
                 (!host_bool(i, "isLinux")).and(lib.version_at_least(i.version(), "10.6")),
                 file("macos-MDEV-26769-regression-fix.patch"),
-            ),
+            )
+            .into(),
         ]),
         cmake_flags,
         post_install: lib.optional_text(!i.with_embedded(), scripts::post_install_common()),

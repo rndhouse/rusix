@@ -1,7 +1,7 @@
 //! Call common functions from nixpkgs’ utility library without evaluating them in Rust.
 // Promote named helpers from demonstrated real-world usage; keep arbitrary lib
 // access on the existing NixValue escape hatch rather than mirroring nixpkgs.
-use super::{NixExpression, NixValue, replacement_lists};
+use super::{IntoNixExpression, NixExpression, NixList, NixValue, replacement_lists};
 use crate::Expr;
 
 /// A Rust handle for nixpkgs’ utility library, `lib`.
@@ -78,24 +78,38 @@ impl NixLibrary {
     /// This validates an expression when it is evaluated. It does not contribute
     /// to NixOS’s assertion collection; use [`crate::nixos::assertion`] for that.
     #[track_caller]
-    pub fn throw_if_not(
+    pub fn throw_if_not<T: IntoNixExpression>(
         &self,
-        condition: impl Into<NixValue>,
-        message: impl Into<NixValue>,
-        value: impl Into<NixValue>,
-    ) -> NixValue {
-        self.apply(
+        condition: impl Into<Expr<bool>>,
+        message: impl Into<Expr<String>>,
+        value: T,
+    ) -> T::Expression {
+        T::Expression::from_expression(self.apply(
             "throwIfNot",
-            [condition.into(), message.into(), value.into()],
-        )
+            [
+                condition.into().into(),
+                message.into().into(),
+                value.into_expression().as_expression(),
+            ],
+        ))
     }
 
     /// Return a Nix expression for a one-element list when `condition` is true,
     /// or an empty list when false: `lib.optional condition value`.
     /// The standard nixpkgs function does not evaluate `value` in the false branch.
     #[track_caller]
-    pub fn optional(&self, condition: impl Into<NixValue>, value: impl Into<NixValue>) -> NixValue {
-        self.apply("optional", [condition.into(), value.into()])
+    pub fn optional<T: IntoNixExpression>(
+        &self,
+        condition: impl Into<Expr<bool>>,
+        value: T,
+    ) -> NixList<T::Expression> {
+        NixList::from_expression(self.apply(
+            "optional",
+            [
+                condition.into().into(),
+                value.into_expression().as_expression(),
+            ],
+        ))
     }
 
     /// Return the supplied Nix list when `condition` is true, or an empty list
@@ -103,12 +117,12 @@ impl NixLibrary {
     /// This keeps the list’s elements rather than adding a nesting level. The
     /// standard function leaves the false branch unevaluated; Nix checks the types.
     #[track_caller]
-    pub fn optionals(
+    pub fn optionals<T: NixExpression>(
         &self,
-        condition: impl Into<NixValue>,
-        values: impl Into<NixValue>,
-    ) -> NixValue {
-        self.apply("optionals", [condition.into(), values.into()])
+        condition: impl Into<Expr<bool>>,
+        values: NixList<T>,
+    ) -> NixList<T> {
+        NixList::from_expression(self.apply("optionals", [condition.into().into(), values.into()]))
     }
 
     /// Return the supplied text when `condition` is true, or empty text when
@@ -118,11 +132,14 @@ impl NixLibrary {
     #[track_caller]
     pub fn optional_text(
         &self,
-        condition: impl Into<NixValue>,
-        text: impl Into<NixValue>,
+        condition: impl Into<Expr<bool>>,
+        text: impl Into<Expr<String>>,
     ) -> Expr<String> {
-        self.apply("optionalString", [condition.into(), text.into()])
-            .into_expr()
+        self.apply(
+            "optionalString",
+            [condition.into().into(), text.into().into()],
+        )
+        .into_expr()
     }
 
     /// Construct a Nix expression that tests whether every condition is true.
@@ -130,12 +147,16 @@ impl NixLibrary {
     /// The standard function returns true for an empty list and stops at the first
     /// false condition. Rust builds the expression; Nix checks boolean values.
     #[track_caller]
-    pub fn all(&self, conditions: impl IntoIterator<Item = impl Into<NixValue>>) -> Expr<bool> {
+    pub fn all(&self, conditions: impl IntoIterator<Item = impl Into<Expr<bool>>>) -> Expr<bool> {
         self.apply(
             "all",
             [
                 NixValue::function(|value| value),
-                NixValue::list(conditions.into_iter().map(Into::into)),
+                NixValue::list(
+                    conditions
+                        .into_iter()
+                        .map(|condition| condition.into().into()),
+                ),
             ],
         )
         .into_expr()
@@ -146,8 +167,14 @@ impl NixLibrary {
     /// The standard function returns an empty list for no inputs and evaluates
     /// element values only when they are needed.
     #[track_caller]
-    pub fn concat_lists(&self, lists: impl IntoIterator<Item = NixValue>) -> NixValue {
-        self.apply("concatLists", [NixValue::list(lists)])
+    pub fn concat_lists<T: NixExpression>(
+        &self,
+        lists: impl IntoIterator<Item = NixList<T>>,
+    ) -> NixList<T> {
+        NixList::from_expression(self.apply(
+            "concatLists",
+            [NixValue::list(lists.into_iter().map(Into::into))],
+        ))
     }
 
     /// Compare deferred version strings using this exact caller-supplied library.
@@ -181,10 +208,10 @@ impl NixLibrary {
     #[track_caller]
     pub fn version_older(
         &self,
-        version: impl Into<NixValue>,
-        other: impl Into<NixValue>,
+        version: impl Into<Expr<String>>,
+        other: impl Into<Expr<String>>,
     ) -> Expr<bool> {
-        self.apply("versionOlder", [version.into(), other.into()])
+        self.apply("versionOlder", [version.into().into(), other.into().into()])
             .into_expr()
     }
 
@@ -194,10 +221,15 @@ impl NixLibrary {
     #[track_caller]
     pub fn replace_text(
         &self,
-        text: impl Into<NixValue>,
-        replacements: impl IntoIterator<Item = (impl Into<NixValue>, impl Into<NixValue>)>,
-    ) -> NixValue {
-        let [from, to] = replacement_lists(replacements);
-        self.apply("replaceStrings", [from, to, text.into()])
+        text: impl Into<Expr<String>>,
+        replacements: impl IntoIterator<Item = (impl Into<Expr<String>>, impl Into<Expr<String>>)>,
+    ) -> Expr<String> {
+        let [from, to] = replacement_lists(
+            replacements
+                .into_iter()
+                .map(|(from, to)| (NixValue::from(from.into()), NixValue::from(to.into()))),
+        );
+        self.apply("replaceStrings", [from, to, text.into().into()])
+            .into_expr()
     }
 }

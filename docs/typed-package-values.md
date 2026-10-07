@@ -113,3 +113,11 @@ complete fixture workflow and every example passed. Generated graph checks retai
 one definition for each shared rewritten dependency and prohibit broad `deepSeq`
 forcing. All Nix evaluation uses fresh disposable isolated stores against the
 unchanged repository nixpkgs pin; no packages were built or fetched.
+
+Shared library operations retain their contracts throughout calls: boolean
+conditions, string messages and version inputs, typed optional lists and
+concatenation, and string replacement results. `IntoNixExpression` associates
+literals with their natural symbolic interfaces while symbolic values keep their
+existing interfaces. Thus `lib.optional(true, 42_i64)` returns
+`NixList<Expr<i64>>`; `throw_if_not` preserves the guarded interface. External
+values still require explicit expectation boundaries.

@@ -666,5 +666,15 @@
       "NixCallable",
       "try_call"
     ]
+  },
+  {
+    "file": "library-condition.rs",
+    "code": "E0277",
+    "count": 1,
+    "source": "Expr::int(3)",
+    "reason_tokens": [
+      "Expr<bool>",
+      "Expr<i64>"
+    ]
   }
 ]

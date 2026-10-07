@@ -181,7 +181,7 @@ fn settings_text() -> NixValue {
                     "'{value}'",
                     value = Nixpkgs::new()
                         .library()
-                        .replace_text(value.clone(), [("'", "''")]),
+                        .replace_text(value.clone().into_expr::<String>(), [("'", "''")]),
                 );
 
                 // Match upstream boolean spelling and PostgreSQL single-quote escaping.
@@ -704,7 +704,10 @@ fn checks() -> NixValue {
     let build_host_equal = package::build_host_equal(pkgs.value("stdenv"));
     let enabled = NixValue::if_else(pg.check_config(), build_host_equal, false);
 
-    Nixpkgs::new().library().optional(enabled, check)
+    Nixpkgs::new()
+        .library()
+        .optional(enabled.into_expr::<bool>(), check)
+        .into()
 }
 
 #[rusnix::config]

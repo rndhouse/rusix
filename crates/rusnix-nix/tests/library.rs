@@ -1,7 +1,7 @@
 //! Generic library helpers preserve the caller's functions and deferred value semantics.
 use rusnix_ir::{
     self as rusnix, Config, Expr,
-    interop::{InputRef, NixExpression, NixLibrary, NixValue, Nixpkgs, Package},
+    interop::{InputRef, NixExpression, NixLibrary, NixList, NixValue, Nixpkgs, Package},
     nix_text,
 };
 use rusnix_nix::{NixSession, compile};
@@ -36,10 +36,18 @@ fn standard_helpers_handle_concrete_values_empty_lists_and_false_conditions() {
 
     assert_eq!(
         evaluate(NixValue::record([
-            ("optional", lib.optional(true, 42_i64)),
-            ("absent", lib.optional(false, 42_i64)),
-            ("optionals", lib.optionals(true, values.clone())),
-            ("noOptionals", lib.optionals(false, values.clone())),
+            ("optional", lib.optional(true, 42_i64).into()),
+            ("absent", lib.optional(false, 42_i64).into()),
+            (
+                "optionals",
+                lib.optionals(true, NixList::<NixValue>::from_expression(values.clone()))
+                    .into()
+            ),
+            (
+                "noOptionals",
+                lib.optionals(false, NixList::<NixValue>::from_expression(values.clone()))
+                    .into()
+            ),
             ("text", lib.optional_text(true, "exact\n text").into()),
             ("noText", lib.optional_text(false, "unused").into()),
             ("all", lib.all([true, true]).into()),
@@ -47,9 +55,13 @@ fn standard_helpers_handle_concrete_values_empty_lists_and_false_conditions() {
             ("emptyAll", lib.all([] as [bool; 0]).into()),
             (
                 "lists",
-                lib.concat_lists([values, NixValue::list([3_i64.into()])])
+                lib.concat_lists(
+                    [values, NixValue::list([3_i64.into()])]
+                        .map(NixList::<NixValue>::from_expression)
+                )
+                .into()
             ),
-            ("emptyLists", lib.concat_lists([])),
+            ("emptyLists", lib.concat_lists::<NixValue>([]).into()),
             (
                 "nativeLists",
                 NixValue::concat_lists([
@@ -70,7 +82,7 @@ fn standard_helpers_handle_concrete_values_empty_lists_and_false_conditions() {
             ),
             (
                 "replacedText",
-                lib.replace_text("ab a", [("ab", "a"), ("a", "b")])
+                lib.replace_text("ab a", [("ab", "a"), ("a", "b")]).into()
             ),
             ("not", !NixValue::from(true)),
             ("typedNot", (!Expr::boolean(false)).into()),
@@ -107,18 +119,35 @@ fn library_helpers_accept_typed_symbolic_argument_values() {
         (
             Vec::<(&str, NixValue)>::new(),
             NixValue::record([
-                ("optional", lib.optional(args.enabled(), args.number())),
-                ("optionals", lib.optionals(args.enabled(), items.clone())),
+                (
+                    "optional",
+                    lib.optional(args.enabled(), args.number()).into(),
+                ),
+                (
+                    "optionals",
+                    lib.optionals(
+                        args.enabled(),
+                        NixList::<NixValue>::from_expression(items.clone()),
+                    )
+                    .into(),
+                ),
                 (
                     "text",
                     lib.optional_text(args.enabled(), args.text()).into(),
                 ),
                 (
                     "validated",
-                    lib.throw_if_not(args.enabled(), "disabled", args.number()),
+                    lib.throw_if_not(args.enabled(), "disabled", args.number())
+                        .into(),
                 ),
                 ("all", lib.all([args.enabled(), args.enabled()]).into()),
-                ("lists", lib.concat_lists([items.clone(), items])),
+                (
+                    "lists",
+                    lib.concat_lists(
+                        [items.clone(), items].map(NixList::<NixValue>::from_expression),
+                    )
+                    .into(),
+                ),
                 ("not", (!args.enabled()).into()),
                 ("and", conjunction.into()),
             ]),
@@ -146,25 +175,39 @@ fn standard_conditionals_and_all_leave_excluded_or_short_circuited_values_lazy()
 
     assert_eq!(
         evaluate(NixValue::record([
-            ("optional", lib.optional(false, failure.clone())),
-            ("optionals", lib.optionals(false, failure.clone())),
-            ("text", lib.optional_text(false, failure.clone()).into()),
-            ("not", lib.optional(false, !failure.clone())),
+            ("optional", lib.optional(false, failure.clone()).into()),
+            (
+                "optionals",
+                lib.optionals(false, NixList::<NixValue>::from_expression(failure.clone()))
+                    .into()
+            ),
+            (
+                "text",
+                lib.optional_text(false, failure.clone().into_expr::<String>())
+                    .into()
+            ),
+            ("not", lib.optional(false, !failure.clone()).into()),
             (
                 "typedNot",
                 lib.optional(false, !failure.clone().into_expr::<bool>())
+                    .into()
             ),
-            ("all", lib.all([false.into(), failure.clone()]).into()),
+            (
+                "all",
+                lib.all([false.into(), failure.clone().into_expr::<bool>()])
+                    .into()
+            ),
             (
                 "lists",
                 lib.concat_lists([lib.optional(false, failure.clone())])
+                    .into()
             ),
             (
                 "headOnly",
                 lib.as_value()
                     .clone()
                     .select("length")
-                    .apply([lib.optional(true, failure.clone())])
+                    .apply([lib.optional(true, failure.clone()).into()])
             ),
             (
                 "nativeHeadOnly",
@@ -181,10 +224,9 @@ fn standard_conditionals_and_all_leave_excluded_or_short_circuited_values_lazy()
     // concatLists must not force individual elements merely to construct the list.
     assert_eq!(
         evaluate(
-            lib.as_value()
-                .clone()
-                .select("length")
-                .apply([lib.concat_lists([NixValue::list([failure])])])
+            lib.as_value().clone().select("length").apply([lib
+                .concat_lists([NixValue::list([failure])].map(NixList::<NixValue>::from_expression))
+                .into()])
         ),
         1,
     );
@@ -267,11 +309,19 @@ fn every_library_helper_uses_the_supplied_record_including_overridden_functions(
 
     assert_eq!(
         evaluate(NixValue::record([
-            ("optional", lib.optional(false, 42_i64)),
-            ("optionals", lib.optionals(false, values.clone())),
+            ("optional", lib.optional(false, 42_i64).into()),
+            (
+                "optionals",
+                lib.optionals(false, NixList::<NixValue>::from_expression(values.clone()))
+                    .into()
+            ),
             ("text", lib.optional_text(false, "caller text").into()),
             ("all", lib.all([false]).into()),
-            ("lists", lib.concat_lists([values.clone()])),
+            (
+                "lists",
+                lib.concat_lists([values.clone()].map(NixList::<NixValue>::from_expression))
+                    .into()
+            ),
             ("nativeLists", NixValue::concat_lists([values])),
             ("nativeAnd", NixValue::from(true).and(false)),
             ("version", lib.version_at_least("10.9", "10.10").into()),
@@ -286,14 +336,14 @@ fn every_library_helper_uses_the_supplied_record_including_overridden_functions(
                 lib.get_lib(Package::from_expression(NixValue::from(42_i64)))
                     .into()
             ),
-            ("replaced", lib.replace_text("a.b", [(".", "_")])),
+            ("replaced", lib.replace_text("a.b", [(".", "_")]).into()),
             (
                 "nativeReplacement",
                 NixValue::from("a.b").replace_text([(".", "_")])
             ),
             (
                 "validated",
-                lib.throw_if_not(false, "caller message", 7_i64)
+                lib.throw_if_not(false, "caller message", 7_i64).into()
             ),
             (
                 "custom",
@@ -327,19 +377,20 @@ fn helper_failures_capture_the_public_call_site_and_keep_the_nix_trace() {
     let lookup_line = line!() + 1;
     let missing = lib.as_value().clone().select("missing").call(true);
     let supplied = Package::from_expression(NixValue::from(42_i64));
+    let empty = NixList::<NixValue>::new([]);
     let cases = [
         (missing, lookup_line),
-        (lib.optional(true, "value"), line!()),
-        (lib.optionals(true, NixValue::list([])), line!()),
+        (lib.optional(true, "value").into(), line!()),
+        (lib.optionals(true, empty).into(), line!()),
         (lib.optional_text(true, "text").into(), line!()),
         (lib.all([true]).into(), line!()),
-        (lib.concat_lists([]), line!()),
+        (lib.concat_lists::<NixValue>([]).into(), line!()),
         (lib.version_at_least("10.9", "10.10").into(), line!()),
         (lib.version_older("10.9", "10.10").into(), line!()),
         (lib.get_dev(supplied.clone()).into(), line!()),
         (lib.get_lib(supplied).into(), line!()),
-        (lib.replace_text("a", [("a", "b")]), line!()),
-        (lib.throw_if_not(true, "unused", 42_i64), line!()),
+        (lib.replace_text("a", [("a", "b")]).into(), line!()),
+        (lib.throw_if_not(true, "unused", 42_i64).into(), line!()),
     ];
 
     for (value, line) in cases {
@@ -361,28 +412,37 @@ fn child_expression_failures_remain_more_precise_than_helper_boundaries() {
     let line = line!() + 1;
     let failure: NixValue = Expr::int(1).divide(Expr::int(0)).into();
     let values = [
-        lib.optional(true, failure.clone()),
-        lib.optionals(true, failure.clone()),
-        lib.optional_text(true, failure.clone()).into(),
-        lib.all([failure.clone()]).into(),
-        lib.concat_lists([NixValue::list([failure.clone()])]),
+        lib.optional(true, failure.clone()).into(),
+        lib.optionals(true, NixList::<NixValue>::from_expression(failure.clone()))
+            .into(),
+        lib.optional_text(true, failure.clone().into_expr::<String>())
+            .into(),
+        lib.all([failure.clone().into_expr::<bool>()]).into(),
+        lib.concat_lists(
+            [NixValue::list([failure.clone()])].map(NixList::<NixValue>::from_expression),
+        )
+        .into(),
         NixValue::concat_lists([NixValue::list([failure.clone()])]),
         lib.version_at_least(failure.clone().into_expr::<String>(), "10.10")
             .into(),
         lib.version_at_least("10.9", failure.clone().into_expr::<String>())
             .into(),
-        lib.version_older(failure.clone(), "10.10").into(),
-        lib.version_older("10.9", failure.clone()).into(),
+        lib.version_older(failure.clone().into_expr::<String>(), "10.10")
+            .into(),
+        lib.version_older("10.9", failure.clone().into_expr::<String>())
+            .into(),
         lib.get_dev(Package::from_expression(failure.clone()))
             .into(),
         lib.get_lib(Package::from_expression(failure.clone()))
             .into(),
-        lib.replace_text(failure.clone(), [("a", "b")]),
+        lib.replace_text(failure.clone().into_expr::<String>(), [("a", "b")])
+            .into(),
         NixValue::from(true).and(failure.clone()),
         NixValue::from(false).or(failure.clone()),
         NixValue::from(true).implies(failure.clone()),
         lib.throw_if_not(true, "unused", failure.clone()),
-        lib.throw_if_not(failure.clone(), "unused", 42_i64),
+        lib.throw_if_not(failure.clone().into_expr::<bool>(), "unused", 42_i64)
+            .into(),
         !failure.clone(),
         (!failure.into_expr::<bool>()).into(),
     ];
@@ -406,7 +466,10 @@ fn throw_if_not_preserves_lazy_branches_and_reports_the_validation_call() {
 
     // A successful check does not evaluate the failure message.
     assert_eq!(
-        evaluate(lib.throw_if_not(true, failure.clone(), 42_i64)),
+        evaluate(
+            lib.throw_if_not(true, failure.clone().into_expr::<String>(), 42_i64)
+                .into()
+        ),
         42
     );
     let line = line!() + 1;
@@ -441,7 +504,11 @@ fn ordered_guards(
         .into_iter()
         .rev()
         .fold(value, |body, (condition, message)| {
-            lib.throw_if_not(condition, message, body)
+            lib.throw_if_not(
+                condition.into_expr::<bool>(),
+                message.into_expr::<String>(),
+                body,
+            )
         })
 }
 
@@ -800,8 +867,8 @@ fn optional_text_keeps_exact_bytes_and_store_dependency_context() {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/structured-interop.nix"),
     )
     .function("getContext");
-    let selected = lib.optional_text(Expr::boolean(true), text.clone());
-    let excluded = lib.optional_text(Expr::boolean(false), text.clone());
+    let selected = lib.optional_text(Expr::boolean(true), text.clone().into_expr::<String>());
+    let excluded = lib.optional_text(Expr::boolean(false), text.clone().into_expr::<String>());
 
     assert_eq!(
         evaluate(NixValue::record([
@@ -818,7 +885,12 @@ fn optional_text_keeps_exact_bytes_and_store_dependency_context() {
             (
                 "libraryReplacementContextEqual",
                 context
-                    .call(lib.replace_text(text.clone(), [("prefix", "changed")]))
+                    .call(
+                        lib.replace_text(
+                            text.clone().into_expr::<String>(),
+                            [("prefix", "changed")]
+                        )
+                    )
                     .equals(context.call(text.clone())),
             ),
             (

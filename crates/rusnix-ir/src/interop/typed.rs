@@ -54,11 +54,7 @@ pub trait NixExpression: Clone + IntoRusnixValue {
         condition: impl Into<Expr<bool>>,
         message: impl Into<Expr<String>>,
     ) -> Self {
-        Self::from_expression(lib.throw_if_not(
-            condition.into(),
-            message.into(),
-            self.as_expression(),
-        ))
+        lib.throw_if_not(condition, message, self)
     }
 
     /// Require a deferred condition, retaining the expression's Rust interface.
@@ -154,6 +150,48 @@ macro_rules! expression_handle {
         }
     };
 }
+
+/// Convert a literal or symbolic value to its natural deferred interface.
+/// Unlike IntoRusnixValue, this conversion retains its expression category.
+pub trait IntoNixExpression {
+    /// Symbolic interface associated with this value.
+    type Expression: NixExpression;
+
+    /// Construct the expression without evaluating Nix.
+    #[track_caller]
+    fn into_expression(self) -> Self::Expression;
+}
+
+impl<T: NixExpression> IntoNixExpression for T {
+    type Expression = T;
+
+    fn into_expression(self) -> T {
+        self
+    }
+}
+
+macro_rules! expression_literal {
+    ($ty:ty, $expression:ty) => {
+        impl IntoNixExpression for $ty {
+            type Expression = $expression;
+
+            #[track_caller]
+            fn into_expression(self) -> Self::Expression {
+                self.into()
+            }
+        }
+    };
+}
+
+expression_literal!(bool, Expr<bool>);
+
+expression_literal!(i64, Expr<i64>);
+
+expression_literal!(String, Expr<String>);
+
+expression_literal!(&str, Expr<String>);
+
+expression_literal!(PackageRef, Package);
 
 /// An expression expected to expose nixpkgs' argument override interface.
 /// This capability applies to instantiated packages and overridable callables.
@@ -417,19 +455,19 @@ impl<T: NixExpression> NixList<T> {
     /// Concatenate through the exact supplied library while retaining element types.
     #[track_caller]
     pub fn concat_with(lib: &NixLibrary, lists: impl IntoIterator<Item = Self>) -> Self {
-        Self::from_expression(lib.concat_lists(lists.into_iter().map(|list| list.as_expression())))
+        lib.concat_lists(lists)
     }
 
     /// Call the supplied library's optional helper without erasing the element type.
     #[track_caller]
     pub fn optional(lib: &NixLibrary, condition: impl Into<Expr<bool>>, value: T) -> Self {
-        Self::from_expression(lib.optional(condition.into(), value.as_expression()))
+        lib.optional(condition, value)
     }
 
     /// Call the supplied library's optionals helper; excluded elements stay unforced.
     #[track_caller]
     pub fn when(self, lib: &NixLibrary, condition: impl Into<Expr<bool>>) -> Self {
-        Self::from_expression(lib.optionals(condition.into(), self))
+        lib.optionals(condition, self)
     }
 }
 

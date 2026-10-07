@@ -161,7 +161,7 @@ fn attributes(i: &Inputs, final_attrs: NixAttrs) -> Derivation {
             ]
             .map(|p| i.file(p)),
         ),
-        lib.optional(i.with_ssh(), i.file("ssh-path.patch")),
+        lib.optional(i.with_ssh(), i.file("ssh-path.patch")).into(),
         lib.optional(
             i.gui_support().and(i.stdenv.host_platform.is_darwin()),
             i.fetchpatch().call(nix_record! {
@@ -169,8 +169,8 @@ fn attributes(i: &Inputs, final_attrs: NixAttrs) -> Derivation {
                 "url": "https://github.com/git/git/commit/1db62e44b7ec93b6654271ef34065b31496cd02e.patch",
                 "hash": "sha256-ntvnrYFFsJ1Ebzc6vM9/AMFLHMS1THts73PIOG5DkQo=",
             }),
-        ),
-    ]);
+        ).into(),
+    ].map(NixList::<NixValue>::from_expression));
 
     let native_build_inputs = NixList::concat_with(
         &lib,
@@ -301,7 +301,7 @@ fn attributes(i: &Inputs, final_attrs: NixAttrs) -> Derivation {
         separate_debug_info: true,
         hardening_disable: vec!["format"],
         enable_parallel_building: true,
-        patches,
+        patches: patches.into(),
         post_patch: post_patch(i),
         native_build_inputs,
         build_inputs,

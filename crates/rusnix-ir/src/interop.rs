@@ -19,7 +19,8 @@ mod typed;
 pub use library::NixLibrary;
 
 pub use typed::{
-    NixAttrs, NixCallable, NixExpression, NixList, NixOverridable, Overridable, Package, Stdenv,
+    IntoNixExpression, NixAttrs, NixCallable, NixExpression, NixList, NixOverridable, Overridable,
+    Package, Stdenv,
 };
 
 /// A sequence of field names to look up in Nix attribute sets.

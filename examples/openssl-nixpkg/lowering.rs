@@ -253,7 +253,7 @@ fn attributes(
             lib.optional_text(!host_bool(i, "isWindows"), scripts::install_rehash()),
             scripts::install_dev(),
             lib.optional_text(
-                !i.conf().equals(NixValue::null()),
+                !i.conf().equals(NixValue::null()).into_expr::<bool>(),
                 scripts::install_conf(i.conf()),
             ),
         ]),
@@ -343,7 +343,10 @@ fn configure_script(i: &Inputs, lib: &NixLibrary, version: &Expr<String>) -> Exp
                 host_bool(i, "isMinGW"),
                 nix_text!(
                     "./Configure mingw{bits}",
-                    bits = lib.optional_text(!bits.clone().equals(32_i64), bits.clone().to_text())
+                    bits = lib.optional_text(
+                        !bits.clone().equals(32_i64).into_expr::<bool>(),
+                        bits.clone().to_text().into_expr::<String>()
+                    )
                 )
                 .into_expr::<String>(),
                 NixValue::if_else(

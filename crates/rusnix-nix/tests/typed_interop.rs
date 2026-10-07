@@ -434,3 +434,16 @@ fn callable_parameter_contracts_survive_binding_currying_and_external_references
         .signature::<Expr<String>, Expr<String>>();
     assert_eq!(evaluate(identity.call("external")), "external");
 }
+
+#[test]
+fn shared_library_operations_preserve_literal_and_expression_interfaces() {
+    let lib = Nixpkgs::new().library();
+    let list: NixList<Expr<i64>> = lib.optional(true, 42_i64);
+    let joined: NixList<Expr<i64>> = lib.concat_lists([list.clone(), lib.optionals(false, list)]);
+    let guarded: NixList<Expr<i64>> = lib.throw_if_not(true, "unused", joined);
+    assert_eq!(evaluate(guarded), serde_json::json!([42]));
+    let package: Package = lib.throw_if_not(true, "unused", Nixpkgs::new().get("openssl"));
+    assert_eq!(evaluate(package.field::<Expr<String>>("version")), "3.3.2");
+    let text: Expr<String> = lib.replace_text("a.b", [(".", "_")]);
+    assert_eq!(evaluate(text), "a_b");
+}
