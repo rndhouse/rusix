@@ -488,7 +488,8 @@ fn generated_defaults_are_lexical_and_contexts_remain_selective() {
     let compact: String = generated.source.split_whitespace().collect();
     assert!(!compact.contains("let__rusnix_arg_"));
     assert!(!compact.contains("deepSeq"));
-    assert!(compact.contains("stdenv.hostPlatform.isSunOS"));
+    // The reused view retains the lexical platform expression as its source.
+    assert!(compact.contains("(stdenv.hostPlatform).isSunOS"));
     assert!(compact.contains("stdenv.buildPlatform"));
     for span in &generated.spans {
         if generated.source[span.start..span.end]

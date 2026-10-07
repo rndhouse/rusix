@@ -561,3 +561,55 @@ fn pinned_paths_remain_paths_until_explicit_text_coercion() {
         true
     );
 }
+
+#[rusnix::args]
+mod reused_views {
+    use super::views::Recipe;
+    use rusnix_ir::interop::FinalAttrs;
+
+    #[rusnix(root)]
+    struct Inputs {
+        #[rusnix(expression)]
+        recipe: Recipe,
+        #[rusnix(expression, rename = "platform")]
+        host: rusnix_ir::interop::Platform,
+        #[rusnix(expression)]
+        final_attrs: FinalAttrs,
+    }
+}
+
+#[test]
+fn separately_declared_record_views_retain_lazy_fields_and_complete_platform_values() {
+    let input = reused_views::from_value(rusnix_ir::nix_record! {
+        "recipe": rusnix_ir::nix_record! { "name": "reused", "enabled": true },
+        "platform": rusnix_ir::nix_record! { "system": "synthetic", "isLinux": true, "unknown": 17_i64 },
+        "finalAttrs": rusnix_ir::nix_record! { "version": "1.0", "finalPackage": Nixpkgs::new().get("openssl") },
+    });
+    let text = input.recipe().bind(|recipe| recipe.name());
+    assert_eq!(evaluate(text), "reused");
+    assert_eq!(evaluate(input.host().is_linux()), true);
+    assert_eq!(
+        evaluate(input.host().as_attrs().field::<Expr<i64>>("unknown")),
+        17
+    );
+    assert_eq!(evaluate(input.final_attrs().version()), "1.0");
+    assert_eq!(
+        evaluate(
+            input
+                .final_attrs()
+                .final_package()
+                .field::<Expr<String>>("version")
+        ),
+        "3.3.2"
+    );
+
+    let stdenv = rusnix_ir::interop::Stdenv::from_expression(rusnix_ir::nix_record! {
+        "buildPlatform": rusnix_ir::nix_record! { "system": "same", "extra": 1_i64 },
+        "hostPlatform": rusnix_ir::nix_record! { "system": "same", "extra": 2_i64 },
+        "targetPlatform": rusnix_ir::nix_record! { "config": "target" },
+    });
+    assert_eq!(evaluate(stdenv.build_host_equal()), false);
+    assert_eq!(evaluate(stdenv.build_platform().system()), "same");
+    assert_eq!(evaluate(stdenv.host_platform().system()), "same");
+    assert_eq!(evaluate(stdenv.target_platform().config()), "target");
+}

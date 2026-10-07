@@ -14,6 +14,10 @@ use std::path::{Component, PathBuf};
 
 mod library;
 
+mod records;
+
+pub use records::{FinalAttrs, Platform};
+
 mod typed;
 
 mod text;

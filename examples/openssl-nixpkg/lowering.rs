@@ -7,8 +7,8 @@ use super::{
 use rusnix_ir::{
     Expr, IntoRusnixValue,
     interop::{
-        NixAttrs, NixCallable, NixExpression, NixLibrary, NixList, NixPath, NixValue, Nixpkgs,
-        Package, PackageFunction,
+        FinalAttrs, NixAttrs, NixCallable, NixExpression, NixLibrary, NixList, NixPath, NixValue,
+        Nixpkgs, Package, PackageFunction,
     },
     nix_record, nix_text,
 };
@@ -40,23 +40,10 @@ fn defaults(i: &Inputs) -> Vec<(&'static str, NixValue)> {
         ("enableSSL2", false.into()),
         ("enableSSL3", false.into()),
         ("enableMD2", false.into()),
-        ("enableKTLS", host_bool(i, "isLinux").into()),
-        ("static", host_bool(i, "isStatic").into()),
+        ("enableKTLS", i.stdenv().host_platform().is_linux().into()),
+        ("static", i.stdenv().host_platform().is_static().into()),
         ("conf", NixValue::null()),
     ]
-}
-
-#[track_caller]
-fn host(i: &Inputs, field: &str) -> NixValue {
-    i.stdenv()
-        .as_expression()
-        .select("hostPlatform")
-        .select(field)
-}
-
-#[track_caller]
-fn host_bool(i: &Inputs, field: &str) -> Expr<bool> {
-    host(i, field).into_expr::<bool>()
 }
 
 fn common(i: &Inputs, release: Release) -> Package {
@@ -73,7 +60,7 @@ fn common(i: &Inputs, release: Release) -> Package {
         patches.push(path("3.0/openssl-disable-kernel-detection.patch"));
     }
     patches.push(NixPath::choose(
-        host_bool(i, "isDarwin"),
+        i.stdenv().host_platform().is_darwin(),
         path(if matches!(release, Release::Preview) {
             "3.3/use-etc-ssl-certs-darwin.patch"
         } else {
@@ -95,7 +82,7 @@ fn common(i: &Inputs, release: Release) -> Package {
     };
     // Upstream's version/hash are lexically captured by common, not finalAttrs.
     i.stdenv().mk_derivation(
-        NixCallable::<NixAttrs, NixAttrs>::try_from_function(|final_attrs: NixAttrs| {
+        NixCallable::<NixAttrs, FinalAttrs>::try_from_function(|final_attrs: FinalAttrs| {
             attributes(
                 i,
                 &lib,
@@ -121,7 +108,7 @@ fn attributes(
     patches: NixList<NixPath>,
     with_docs: Expr<bool>,
     extra_meta: NixValue,
-    final_attrs: NixAttrs,
+    final_attrs: FinalAttrs,
 ) -> Recipe {
     let modern = lib.version_at_least(version.clone(), "1.1.1");
     let v3 = lib.version_at_least(version.clone(), "3.0.0");
@@ -163,7 +150,7 @@ fn attributes(
         NixList::optional(lib, (v3.clone()).and(i.enable_ktls()), "enable-ktls".into()),
         NixList::optional(
             lib,
-            (modern.clone()).and(host_bool(i, "isAarch64")),
+            (modern.clone()).and(i.stdenv().host_platform().is_aarch64()),
             "no-afalgeng".into(),
         ),
         NixList::optional(
@@ -174,20 +161,24 @@ fn attributes(
         NixList::optional(lib, (v3).and(i.static_build()), "no-module".into()),
         NixList::optional(lib, i.static_build(), "no-ct".into()),
         NixList::optional(lib, i.with_zlib(), "zlib".into()),
-        NixList::optional(lib, host_bool(i, "isOpenBSD"), "no-devcryptoeng".into()),
+        NixList::optional(
+            lib,
+            i.stdenv().host_platform().is_open_bsd(),
+            "no-devcryptoeng".into(),
+        ),
         (NixList::<Expr<String>>::new([nix_text!(
             "CFLAGS=-march={arch}",
-            arch = host(i, "gcc.arch")
+            arch = i.stdenv().host_platform().gcc.arch()
         )]))
         .when(
             lib,
-            (host_bool(i, "isMips")).and(
+            (i.stdenv().host_platform().is_mips()).and(
                 (i.stdenv()
                     .as_expression()
                     .select("hostPlatform")
                     .has_attr("gcc")
                     .into_expr::<bool>())
-                .and(host(i, "gcc").has_attr("arch").into_expr::<bool>()),
+                .and(i.stdenv().host_platform().gcc.as_attrs().has("arch")),
             ),
         ),
     ]);
@@ -205,7 +196,10 @@ fn attributes(
                     i.build_packages().select("coreutils"),
                 )),
             ),
-            lib.optional_text((modern).and(host_bool(i, "isMusl")), scripts::patch_musl()),
+            lib.optional_text(
+                (modern).and(i.stdenv().host_platform().is_musl()),
+                scripts::patch_musl(),
+            ),
             lib.optional_text(i.static_build(), scripts::patch_static_engines()),
         ]),
         outputs: NixList::concat([
@@ -214,7 +208,7 @@ fn attributes(
             NixList::optional(lib, i.static_build(), "etc".into()),
         ]),
         set_output_flags: false,
-        separate_debug_info: (!host_bool(i, "isDarwin")).and(
+        separate_debug_info: (!i.stdenv().host_platform().is_darwin()).and(
             (!i.stdenv()
                 .as_expression()
                 .select("hostPlatform")
@@ -228,7 +222,11 @@ fn attributes(
             ),
         ),
         native_build_inputs: NixList::concat([
-            NixList::optional(lib, !host_bool(i, "isWindows"), i.make_binary_wrapper()),
+            NixList::optional(
+                lib,
+                !i.stdenv().host_platform().is_windows(),
+                i.make_binary_wrapper(),
+            ),
             NixList::new([i.perl()]),
             (NixList::new([i.remove_references_to()])).when(lib, i.static_build()),
         ]),
@@ -249,7 +247,10 @@ fn attributes(
                 scripts::install_shared(),
             ),
             scripts::install_bin(),
-            lib.optional_text(!host_bool(i, "isWindows"), scripts::install_rehash()),
+            lib.optional_text(
+                !i.stdenv().host_platform().is_windows(),
+                scripts::install_rehash(),
+            ),
             scripts::install_dev(),
             lib.optional_text(
                 !i.conf().is_null(),
@@ -258,7 +259,7 @@ fn attributes(
         ]),
         post_fixup: Expr::concat([
             lib.optional_text(
-                !host_bool(i, "isWindows"),
+                !i.stdenv().host_platform().is_windows(),
                 scripts::fixup_perl(Package::from_expression(i.build_packages().select("perl"))),
             ),
             lib.optional_text(
@@ -270,7 +271,7 @@ fn attributes(
             "tests": nix_record! {
                 "pkg-config": i.testers()
                     .select("testMetaPkgConfig")
-                    .call(final_attrs.field::<Package>("finalPackage")),
+                    .call(final_attrs.final_package()),
             },
         },
         meta: nix_record! {
@@ -296,33 +297,33 @@ fn attributes(
 }
 
 fn configure_script(i: &Inputs, lib: &NixLibrary, version: &Expr<String>) -> Expr<String> {
-    let bits = host(i, "parsed.cpu.bits");
+    let bits = i.stdenv().host_platform().parsed.cpu.bits();
     let bsd = NixValue::if_else(
-        host_bool(i, "isx86_64"),
+        i.stdenv().host_platform().is_x86_64(),
         "./Configure BSD-x86_64",
         NixValue::if_else(
-            host_bool(i, "isx86_32"),
+            i.stdenv().host_platform().is_x86_32(),
             nix_text!(
                 "./Configure BSD-x86{elf}",
-                elf = lib.optional_text(host_bool(i, "isElf"), "-elf")
+                elf = lib.optional_text(i.stdenv().host_platform().is_elf(), "-elf")
             ),
             nix_text!("./Configure BSD-generic{bits}", bits = bits.clone()),
         ),
     );
     let linux = NixValue::if_else(
-        host_bool(i, "isx86_64"),
+        i.stdenv().host_platform().is_x86_64(),
         "./Configure linux-x86_64",
         NixValue::if_else(
-            host_bool(i, "isMicroBlaze"),
+            i.stdenv().host_platform().is_micro_blaze(),
             "./Configure linux-latomic",
             NixValue::if_else(
-                host_bool(i, "isMips32"),
+                i.stdenv().host_platform().is_mips32(),
                 "./Configure linux-mips32",
                 NixValue::if_else(
-                    host_bool(i, "isMips64n32"),
+                    i.stdenv().host_platform().is_mips64n32(),
                     "./Configure linux-mips64",
                     NixValue::if_else(
-                        host_bool(i, "isMips64n64"),
+                        i.stdenv().host_platform().is_mips64n64(),
                         "./Configure linux64-mips64",
                         nix_text!("./Configure linux-generic{bits}", bits = bits.clone()),
                     ),
@@ -334,26 +335,26 @@ fn configure_script(i: &Inputs, lib: &NixLibrary, version: &Expr<String>) -> Exp
         i.stdenv().build_host_equal(),
         "./config",
         NixValue::if_else(
-            host_bool(i, "isBSD"),
+            i.stdenv().host_platform().is_bsd(),
             bsd,
             NixValue::if_else(
-                host_bool(i, "isMinGW"),
+                i.stdenv().host_platform().is_min_gw(),
                 nix_text!(
                     "./Configure mingw{bits}",
                     bits = lib.optional_text(
-                        !bits.clone().equals(32_i64).into_expr::<bool>(),
-                        bits.clone().to_text().into_expr::<String>()
+                        !bits.as_expression().equals(32_i64).into_expr::<bool>(),
+                        bits.clone().to_text()
                     )
                 ),
                 NixValue::if_else(
-                    host_bool(i, "isLinux"),
+                    i.stdenv().host_platform().is_linux(),
                     linux,
                     NixValue::if_else(
-                        host_bool(i, "isiOS"),
+                        i.stdenv().host_platform().is_ios(),
                         nix_text!("./Configure ios{bits}-cross", bits = bits),
                         NixValue::builtin("throw").call(nix_text!(
                             "Not sure what configuration to use for {config}",
-                            config = host(i, "config")
+                            config = i.stdenv().host_platform().config()
                         )),
                     ),
                 ),
@@ -384,7 +385,7 @@ fn configure_script(i: &Inputs, lib: &NixLibrary, version: &Expr<String>) -> Exp
     ));
     // Dynamic attribute lookup/fallback is appropriate NixValue interop; no platform schema.
     NixValue::record(targets)
-        .attr_or(host(i, "system"), fallback)
+        .attr_or(i.stdenv().host_platform().system(), fallback)
         .into_expr::<String>()
 }
 

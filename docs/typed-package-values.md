@@ -141,3 +141,19 @@ paths until combination with fetched derivations requires heterogeneous interop.
 OpenSSL's configuration argument is `NixNullable<NixValue>` because upstream
 accepts different text-coercible file representations. No new filesystem operation
 or eager type validation is introduced.
+
+External finite record views and aliases can be declared with
+`#[rusnix(expression)]` fields in both argument and option views. The declared
+type must implement `NixExpression`; the macro does not inspect its schema.
+This allows shared views to live in separate modules without duplicating their
+fields or falling back to NixValue.
+
+`Platform` and `FinalAttrs` are finite shared views authored with the existing
+argument-view macro. Platform fields are limited to properties used by the four
+real packages. They retain complete platform records, including undeclared
+fields; `build_host_equal` still compares those complete values. Stdenv exposes
+build, host and target views. All four package definitions use the shared platform
+view; OpenSSL, curl and Git use `FinalAttrs` for lazy version/final-package access.
+Ordinary attribute interop remains available for other fields. Nested selections
+may retain parentheses around their lexical source; no renderer optimization is
+needed to preserve sharing, laziness, or derivation recipes.

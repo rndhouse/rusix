@@ -3,8 +3,8 @@ use super::inputs::{Inputs, args};
 use rusnix_ir::{
     Expr, IntoRusnixValue,
     interop::{
-        NixAttrs, NixCallable, NixExpression, NixLibrary, NixList, NixOverridable, NixValue,
-        Package, PackageFunction,
+        FinalAttrs, NixAttrs, NixCallable, NixExpression, NixLibrary, NixList, NixOverridable,
+        NixValue, Package, PackageFunction,
     },
     nix_record, nix_text, package,
 };
@@ -13,7 +13,7 @@ use rusnix_ir::{
 pub fn factory() -> PackageFunction<Package> {
     PackageFunction::from_function_attrs(args::argument_names().iter().copied(), |arguments| {
         let i = args::from_value(arguments);
-        let host = &i.stdenv.host_platform;
+        let host = &i.stdenv.host_platform();
         let defaults = vec![
             ("brotliSupport", false.into()),
             ("c-aresSupport", false.into()),
@@ -64,7 +64,7 @@ pub fn factory() -> PackageFunction<Package> {
         ]);
         let valid = !NixValue::builtin("lessThan").apply([1_i64.into(), count]);
         let derivation = i.stdenv.mk_derivation().call(
-            NixCallable::<NixAttrs, NixAttrs>::try_from_function(|final_attrs: NixAttrs| {
+            NixCallable::<NixAttrs, FinalAttrs>::try_from_function(|final_attrs: FinalAttrs| {
                 attributes(&i, final_attrs)
             })
             .expect("fixed curl recipe"),
@@ -145,9 +145,9 @@ struct Metadata {
 }
 
 /// Construct recipe attributes inside mkDerivation's recursive finalAttrs callback.
-fn attributes(i: &Inputs, final_attrs: NixAttrs) -> Derivation {
+fn attributes(i: &Inputs, final_attrs: FinalAttrs) -> Derivation {
     let lib = NixLibrary::from_value(i.lib.as_value());
-    let version = final_attrs.get("version");
+    let version = final_attrs.version();
     let release_tag = version.clone().replace_text([(".", "_")]);
 
     // curl bootstraps fetchurl. Source/patch handling must not introduce fetchpatch;
@@ -178,14 +178,14 @@ fn attributes(i: &Inputs, final_attrs: NixAttrs) -> Derivation {
             "#,
         ),
         outputs: vec!["bin", "dev", "out", "man", "devdoc"],
-        separate_debug_info: i.stdenv.host_platform.is_linux(),
+        separate_debug_info: i.stdenv.host_platform().is_linux(),
         enable_parallel_building: true,
         strict_deps: true,
         env: lib.as_value().clone().select("optionalAttrs").apply([
             i.stdenv
-                .host_platform
+                .host_platform()
                 .is_darwin()
-                .and(i.stdenv.host_platform.is_static())
+                .and(i.stdenv.host_platform().is_static())
                 .into(),
             nix_record! { "NIX_LDFLAGS": "-liconv" },
         ]),
@@ -199,7 +199,7 @@ fn attributes(i: &Inputs, final_attrs: NixAttrs) -> Derivation {
                 "#,
             ),
             lib.optional_text(
-                i.psl_support().and(i.stdenv.host_platform.is_static()),
+                i.psl_support().and(i.stdenv.host_platform().is_static()),
                 nix_text!(
                     r#"
                         # curl doesn't understand that libpsl2 has deps because it doesn't use
@@ -226,7 +226,7 @@ fn attributes(i: &Inputs, final_attrs: NixAttrs) -> Derivation {
             platforms: i.lib.platforms.all(),
             broken: i
                 .stdenv
-                .host_platform
+                .host_platform()
                 .is_static()
                 .and(i.brotli_support().or(i.gss_support())),
             pkg_config_modules: vec!["libcurl"],
@@ -261,7 +261,7 @@ fn dependencies(i: &Inputs, lib: &NixLibrary) -> NixList<Package> {
             i.darwin.apple_sdk.frameworks.core_services(),
             i.darwin.apple_sdk.frameworks.system_configuration(),
         ]))
-        .when(lib, i.stdenv.host_platform.is_darwin()),
+        .when(lib, i.stdenv.host_platform().is_darwin()),
     ])
 }
 
@@ -334,7 +334,7 @@ fn configure_flags(i: &Inputs, lib: &NixLibrary) -> NixList<Expr<String>> {
             "--with-random=/dev/urandom".into(),
         ),
         (NixList::new(["--without-ca-bundle".into(), "--without-ca-path".into()]))
-            .when(lib, i.stdenv.host_platform.is_darwin()),
+            .when(lib, i.stdenv.host_platform().is_darwin()),
         (NixList::new(["--without-ssl".into()])).when(
             lib,
             (!i.gnutls_support())
@@ -344,11 +344,13 @@ fn configure_flags(i: &Inputs, lib: &NixLibrary) -> NixList<Expr<String>> {
         ),
         (NixList::new(["--with-ca-bundle=/etc/ssl/certs/ca-certificates.crt".into()])).when(
             lib,
-            i.rustls_support().and(!i.stdenv.host_platform.is_darwin()),
+            i.rustls_support()
+                .and(!i.stdenv.host_platform().is_darwin()),
         ),
         (NixList::new(["--with-ca-path=/etc/ssl/certs".into()])).when(
             lib,
-            i.gnutls_support().and(!i.stdenv.host_platform.is_darwin()),
+            i.gnutls_support()
+                .and(!i.stdenv.host_platform().is_darwin()),
         ),
     ])
 }
@@ -362,7 +364,7 @@ fn pre_check(i: &Inputs, lib: &NixLibrary) -> Expr<String> {
             "#,
         ),
         lib.optional_text(
-            i.stdenv.host_platform.is_darwin(),
+            i.stdenv.host_platform().is_darwin(),
             nix_text!(
                 r#"
                 # bad interaction with sandbox if enabled?
@@ -372,7 +374,7 @@ fn pre_check(i: &Inputs, lib: &NixLibrary) -> Expr<String> {
             ),
         ),
         lib.optional_text(
-            i.stdenv.host_platform.is_musl(),
+            i.stdenv.host_platform().is_musl(),
             nix_text!(
                 r#"
                 # different resolving behaviour?
@@ -412,7 +414,7 @@ fn post_install(i: &Inputs, lib: &NixLibrary) -> Expr<String> {
                 ln $out/lib/libcurl{ext} $out/lib/libcurl-gnutls{ext}.4
                 ln $out/lib/libcurl{ext} $out/lib/libcurl-gnutls{ext}.4.4.0
             "#,
-                ext = i.stdenv.host_platform.extensions.shared_library(),
+                ext = i.stdenv.host_platform().extensions.shared_library(),
             ),
         ),
     ])
@@ -425,8 +427,8 @@ fn use_this_curl<T: NixOverridable>(package: T, curl: &Package) -> T {
 }
 
 /// Preserve the recursive test graph; requesting these values constructs recipes only.
-fn passthru(i: &Inputs, final_attrs: NixAttrs) -> NixValue {
-    let curl = final_attrs.field::<Package>("finalPackage");
+fn passthru(i: &Inputs, final_attrs: FinalAttrs) -> NixValue {
+    let curl = final_attrs.final_package();
     let with_check = curl.override_attrs(|_| NixAttrs::new([("doCheck", true.into())]));
     let fetchpatch = i
         .fetchpatch()

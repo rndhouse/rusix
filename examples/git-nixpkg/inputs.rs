@@ -144,32 +144,14 @@ pub(super) mod args {
         /// Existing mkDerivation function; Rusnix does not reimplement the builder.
         mk_derivation: NixCallable<Package>,
         /// Platform where Git will run.
-        host_platform: Platform,
+        #[rusnix(expression)]
+        host_platform: rusnix_ir::interop::Platform,
         /// Compiler metadata needed for the glibc linker workaround.
         cc: Compiler,
         /// Shell executable selected by stdenv.
         shell: String,
         /// Shell package excluded from cross-built runtime references.
         shell_package: Package,
-    }
-
-    /// Finite platform properties, plus whole-record equality for the native-build test.
-    #[rusnix(value)]
-    struct Platform {
-        /// Selects macOS-specific dependencies, scripts and test exclusions.
-        is_darwin: bool,
-        /// Selects FreeBSD threading flags and iconv dependency.
-        #[rusnix(rename = "isFreeBSD")]
-        is_free_bsd: bool,
-        /// Selects the SunOS make flags.
-        #[rusnix(rename = "isSunOS")]
-        is_sun_os: bool,
-        /// Selects musl compatibility flags and test exclusions.
-        is_musl: bool,
-        /// Selects the Apple Silicon test exclusion together with isDarwin.
-        is_aarch64: bool,
-        /// Names the host C library for the GNU/glibc linker workaround.
-        libc: String,
     }
 
     /// The compiler property used by the pinned Git recipe.

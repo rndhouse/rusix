@@ -595,6 +595,24 @@ impl Stdenv {
         NixCallable::from_expression(self.value.clone().select("mkDerivation"))
     }
 
+    /// Retain a finite view of the complete caller-supplied host platform.
+    #[track_caller]
+    pub fn host_platform(&self) -> super::Platform {
+        super::Platform::from_expression(self.value.clone().select("hostPlatform"))
+    }
+
+    /// Retain the caller-supplied build platform without projecting an identity.
+    #[track_caller]
+    pub fn build_platform(&self) -> super::Platform {
+        super::Platform::from_expression(self.value.clone().select("buildPlatform"))
+    }
+
+    /// Retain the caller-supplied target platform for compiler/toolchain policy.
+    #[track_caller]
+    pub fn target_platform(&self) -> super::Platform {
+        super::Platform::from_expression(self.value.clone().select("targetPlatform"))
+    }
+
     /// Compare complete build/host values without reconstructing platform records.
     #[track_caller]
     pub fn build_host_equal(&self) -> Expr<bool> {

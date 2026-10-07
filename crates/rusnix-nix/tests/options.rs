@@ -291,3 +291,72 @@ fn unused_accessors_and_deferred_values_do_not_force_referenced_options() {
             .contains("unused option view was evaluated")
     );
 }
+
+#[rusnix::args]
+mod reusable_settings {
+    #[rusnix(root)]
+    struct Inputs {
+        settings: Settings,
+    }
+
+    #[rusnix(value)]
+    struct Settings {
+        port: i64,
+        jit: String,
+    }
+}
+
+#[rusnix::options]
+mod shared_options {
+    use rusnix_ir::{Expr, interop::NixNullable};
+
+    #[rusnix(root)]
+    struct Root {
+        services: Services,
+    }
+
+    struct Services {
+        example: Example,
+    }
+
+    struct Example {
+        #[rusnix(expression)]
+        settings: super::reusable_settings::Settings,
+        optional: NixNullable<Expr<String>>,
+    }
+}
+
+#[test]
+fn reusable_record_and_nullable_option_views_follow_final_nixos_overrides() {
+    use rusnix_ir::interop::NixExpression;
+
+    let example = shared_options::root().services.example;
+    let result = example.settings().bind(|settings| {
+        rusnix_ir::nix_record! {
+            "port": settings.port(),
+            "jit": settings.jit(),
+            "optional": example.optional().unwrap_or("null fallback"),
+        }
+    });
+    let artifact = compile_module(&module(result)).unwrap();
+    let session = NixSession::new().unwrap();
+    assert_eq!(
+        session
+            .evaluate_nixos(&artifact, &["environment", "result"], false)
+            .unwrap()
+            .value,
+        serde_json::json!({"port": 1234, "jit": "off", "optional": "null fallback"})
+    );
+    let changed = compile_module(
+        &module(example.settings().port())
+            .add(Config::new().set("services.example.settings.port", 4321_i64)),
+    )
+    .unwrap();
+    assert_eq!(
+        session
+            .evaluate_nixos(&changed, &["environment", "result"], false)
+            .unwrap()
+            .value,
+        4321
+    );
+}

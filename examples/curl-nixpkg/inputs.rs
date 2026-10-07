@@ -128,37 +128,10 @@ pub(super) mod args {
         /// Real mkDerivation function, including recursive finalAttrs and overrides.
         mk_derivation: NixCallable<Package>,
         /// Platform where the resulting curl runs.
-        host_platform: Platform,
+        #[rusnix(expression)]
+        host_platform: rusnix_ir::interop::Platform,
         /// Compiler metadata for the explicit C++ command names.
         cc: Compiler,
-    }
-
-    /// Known platform predicates; this is not a generated global nixpkgs platform schema.
-    #[rusnix(value)]
-    struct Platform {
-        /// Adds Darwin frameworks and platform-specific scripts/configure flags.
-        is_darwin: bool,
-        /// Enables stdenv's separate debug output.
-        is_linux: bool,
-        /// Disables the default GSS feature on Windows targets.
-        is_windows: bool,
-        /// Controls static linker workarounds and broken-package metadata.
-        is_static: bool,
-        /// Disables the default SCP feature on SunOS.
-        #[rusnix(rename = "isSunOS")]
-        is_sun_os: bool,
-        /// Disables the default SCP feature on Cygwin.
-        is_cygwin: bool,
-        /// Excludes an upstream test with different resolver behavior.
-        is_musl: bool,
-        /// Target-specific filename suffixes supplied by nixpkgs.
-        extensions: Extensions,
-    }
-
-    /// Only the shared-library suffix is required by the GnuTLS compatibility links.
-    struct Extensions {
-        /// Includes the target's leading dot, such as .so or .dylib.
-        shared_library: String,
     }
 
     /// Compiler command naming remains controlled by stdenv.

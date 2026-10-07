@@ -1328,3 +1328,9 @@ The [Git package example](examples/git-nixpkg/README.md) rewrites the pinned Git
 package expression using the real nixpkgs `callPackage`/`mkDerivation` backend.
 Its tests compare exact derivation recipes, feature/platform choices and ordinary
 Nix overrides without fetching sources or building Git.
+
+Typed deferred authoring also retains callable parameter contracts, typed library
+operations, string template results and explicit text-coercion capabilities,
+nullable values, Nix paths, and reusable finite record views. See
+[typed package authoring](docs/typed-package-values.md) for the interfaces and
+their lazy Nix expectation boundaries.

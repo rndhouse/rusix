@@ -61,19 +61,6 @@ fn defaults() -> Vec<(&'static str, NixValue)> {
     ]
 }
 
-#[track_caller]
-fn host(i: &Inputs, field: &str) -> NixValue {
-    i.stdenv()
-        .as_expression()
-        .select("hostPlatform")
-        .select(field)
-}
-
-#[track_caller]
-fn host_bool(i: &Inputs, field: &str) -> Expr<bool> {
-    host(i, field).into_expr::<bool>()
-}
-
 fn file(name: &str) -> NixPath {
     Nixpkgs::new().source_path(&format!("pkgs/servers/sql/mariadb/patch/{name}"))
 }
@@ -81,8 +68,16 @@ fn file(name: &str) -> NixPath {
 fn common(i: &Inputs, lib: &NixLibrary) -> Common {
     let native = NixList::concat([
         NixList::new([i.cmake(), i.pkg_config()]),
-        NixList::optional(lib, host_bool(i, "isDarwin"), i.fix_darwin_dylib_names()),
-        NixList::optional(lib, !host_bool(i, "isDarwin"), i.make_wrapper()),
+        NixList::optional(
+            lib,
+            i.stdenv().host_platform().is_darwin(),
+            i.fix_darwin_dylib_names(),
+        ),
+        NixList::optional(
+            lib,
+            !i.stdenv().host_platform().is_darwin(),
+            i.make_wrapper(),
+        ),
     ]);
     let inputs = NixList::concat([
         NixList::new([
@@ -101,10 +96,10 @@ fn common(i: &Inputs, lib: &NixLibrary) -> Common {
                 NixList::new([i.liburing()]),
             ),
         ]))
-        .when(lib, host_bool(i, "isLinux")),
+        .when(lib, i.stdenv().host_platform().is_linux()),
         (NixList::new([i.core_services(), i.cctools(), i.perl(), i.libedit()]))
-            .when(lib, host_bool(i, "isDarwin")),
-        (NixList::new([i.jemalloc()])).when(lib, !host_bool(i, "isDarwin")),
+            .when(lib, i.stdenv().host_platform().is_darwin()),
+        (NixList::new([i.jemalloc()])).when(lib, !i.stdenv().host_platform().is_darwin()),
     ]);
     let cmake_flags = NixList::concat([
         NixList::<Expr<String>>::new(
@@ -146,16 +141,20 @@ fn common(i: &Inputs, lib: &NixLibrary) -> Common {
                 ncurses = i.ncurses().output("out")
             ),
         ]))
-        .when(lib, host_bool(i, "isDarwin")),
+        .when(lib, i.stdenv().host_platform().is_darwin()),
         (NixList::<Expr<String>>::new(["-Dhave_C__Wl___as_needed=".into()])).when(
             lib,
-            (host_bool(i, "isDarwin")).and(lib.version_at_least(i.version(), "10.6")),
+            (i.stdenv().host_platform().is_darwin()).and(lib.version_at_least(i.version(), "10.6")),
         ),
         (NixList::<Expr<String>>::new([
             "-DSTACK_DIRECTION=-1".into(),
             nix_text!(
                 "-DCMAKE_CROSSCOMPILING_EMULATOR={emulator}",
-                emulator = host(i, "emulator").call(i.build_packages())
+                emulator = i
+                    .stdenv()
+                    .host_platform()
+                    .emulator()
+                    .call(i.build_packages())
             ),
         ]))
         .when(lib, !i.stdenv().build_host_equal()),
@@ -209,14 +208,15 @@ fn common(i: &Inputs, lib: &NixLibrary) -> Common {
         patches: NixList::concat([
             NixList::new([file("cmake-includedir.patch")]),
             lib.optional(
-                (!host_bool(i, "isLinux")).and(lib.version_at_least(i.version(), "10.6")),
+                (!i.stdenv().host_platform().is_linux())
+                    .and(lib.version_at_least(i.version(), "10.6")),
                 file("macos-MDEV-26769-regression-fix.patch"),
             ),
         ]),
         cmake_flags,
         post_install: lib.optional_text(!i.with_embedded(), scripts::post_install_common()),
         post_fixup: lib.optional_text(
-            !host_bool(i, "isDarwin"),
+            !i.stdenv().host_platform().is_darwin(),
             scripts::post_fixup(
                 i.lib()
                     .as_expression()
@@ -264,7 +264,7 @@ fn client(i: &Inputs, lib: &NixLibrary, common: &common_view::Common) -> Package
                 ]),
                 "postInstall": Expr::concat([
                     common.post_install(),
-                    scripts::post_install_client(host(i, "extensions.sharedLibrary").into_expr()),
+                    scripts::post_install_client(i.stdenv().host_platform().extensions.shared_library()),
                 ]),
             })),
     )
@@ -296,8 +296,8 @@ fn server(i: &Inputs, lib: &NixLibrary, common: &common_view::Common) -> Package
             i.libxml2(),
         ]),
         NixList::optional(lib, i.with_numa(), i.numactl()),
-        (NixList::new([i.linux_pam()])).when(lib, host_bool(i, "isLinux")),
-        NixList::optional(lib, !host_bool(i, "isDarwin"), mytop),
+        (NixList::new([i.linux_pam()])).when(lib, i.stdenv().host_platform().is_linux()),
+        NixList::optional(lib, !i.stdenv().host_platform().is_darwin(), mytop),
         (NixList::new([i.kytea(), i.libsodium(), i.msgpack(), i.zeromq()]))
             .when(lib, i.with_storage_mroonga()),
         (NixList::new([i.fmt_8()])).when(lib, lib.version_at_least(common.version(), "10.7")),
@@ -325,17 +325,19 @@ fn server(i: &Inputs, lib: &NixLibrary, common: &common_view::Common) -> Package
             .when(lib, !i.with_storage_mroonga()),
         (NixList::<Expr<String>>::new(["-DWITHOUT_ROCKSDB=1".into()]))
             .when(lib, !i.with_storage_rocks()),
-        (NixList::<Expr<String>>::new(["-DWITH_ROCKSDB_JEMALLOC=ON".into()]))
-            .when(lib, (!host_bool(i, "isDarwin")).and(i.with_storage_rocks())),
+        (NixList::<Expr<String>>::new(["-DWITH_ROCKSDB_JEMALLOC=ON".into()])).when(
+            lib,
+            (!i.stdenv().host_platform().is_darwin()).and(i.with_storage_rocks()),
+        ),
         (NixList::<Expr<String>>::new(["-DWITH_JEMALLOC=yes".into()]))
-            .when(lib, !host_bool(i, "isDarwin")),
+            .when(lib, !i.stdenv().host_platform().is_darwin()),
         (NixList::<Expr<String>>::new([
             "-DPLUGIN_AUTH_PAM=NO".into(),
             "-DPLUGIN_AUTH_PAM_V1=NO".into(),
             "-DWITHOUT_OQGRAPH=1".into(),
             "-DWITHOUT_PLUGIN_S3=1".into(),
         ]))
-        .when(lib, host_bool(i, "isDarwin")),
+        .when(lib, i.stdenv().host_platform().is_darwin()),
     ]);
     i.stdenv().mk_derivation(
         common
@@ -351,17 +353,17 @@ fn server(i: &Inputs, lib: &NixLibrary, common: &common_view::Common) -> Package
                 "postPatch": scripts::post_patch_server(),
                 "cmakeFlags": flags,
                 "preConfigure":
-                    lib.optional_text(!host_bool(i, "isDarwin"), scripts::pre_configure()),
+                    lib.optional_text(!i.stdenv().host_platform().is_darwin(), scripts::pre_configure()),
                 "postInstall": Expr::concat([
                     common.post_install(),
                     scripts::post_install_server(),
                     lib.optional_text(i.with_storage_mroonga(), scripts::install_mroonga()),
                     lib.optional_text(
-                        (!host_bool(i, "isDarwin")).and(lib.version_at_least(common.version(), "10.4")),
+                        (!i.stdenv().host_platform().is_darwin()).and(lib.version_at_least(common.version(), "10.4")),
                         scripts::install_pam(),
                     ),
                 ]),
-                "CXXFLAGS": lib.optional_text(host_bool(i, "isi686"), "-fpermissive"),
+                "CXXFLAGS": lib.optional_text(i.stdenv().host_platform().is_i686(), "-fpermissive"),
             })),
     )
 }

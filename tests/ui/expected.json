@@ -706,5 +706,15 @@
       "Expr<std::string::String>",
       "Expr<i64>"
     ]
+  },
+  {
+    "file": "view-expression-contract.rs",
+    "code": "E0277",
+    "count": 1,
+    "source": "value: std::time::Duration",
+    "reason_tokens": [
+      "Duration",
+      "NixExpression"
+    ]
   }
 ]

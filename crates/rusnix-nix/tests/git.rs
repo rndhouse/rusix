@@ -140,7 +140,7 @@ fn generated_git_factory_does_not_reconstruct_native_argument_records() {
     ] {
         assert!(!compact.contains(&format!("\"{name}\"={name};")));
     }
-    assert!(compact.contains(".hostPlatform.isDarwin"));
+    assert!(compact.contains(".hostPlatform).isDarwin"));
     assert!(compact.contains(".buildPlatform"));
     assert!(compact.contains(".perl.libPrefix"));
 }

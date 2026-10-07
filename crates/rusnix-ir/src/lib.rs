@@ -11,6 +11,8 @@
 //! modules and checks configurable fields, called *options*, during evaluation.
 #![warn(missing_docs)]
 
+extern crate self as rusnix_ir;
+
 use serde::{Deserialize, Serialize};
 use std::{marker::PhantomData, panic::Location};
 
@@ -112,7 +114,8 @@ pub use rusnix_derive::config;
 ///
 /// Naming follows [`config`]. Mark a nested struct `#[rusnix(value)]` to expose
 /// `as_value()` for its entire Nix subtree. Roots have no whole-value accessor
-/// or arbitrary field traversal.
+/// or arbitrary field traversal. External symbolic interfaces can be reused with
+/// `#[rusnix(expression)]`; the declared type must implement [`interop::NixExpression`].
 pub use rusnix_derive::options;
 
 /// Generate typed accessors for values in a Nix function’s named arguments.
@@ -148,7 +151,10 @@ pub use rusnix_derive::options;
 /// Use one root in an inline module. Leaf types, naming and optional subtree
 /// `as_value()` access follow [`options`]. Views can be cloned without evaluating
 /// them. Accessor calls record their own Rust locations. External aliases and
-/// view types are not inspected; retain the raw NixValue for dynamic selections.
+/// view types are not inspected. Mark a field `#[rusnix(expression)]` to retain
+/// an external type or alias implementing [`interop::NixExpression`]. Rust checks
+/// that trait contract; Nix checks the actual external value when demanded.
+/// Retain raw NixValue for dynamic selections.
 /// Roots do not expose whole-value access or arbitrary field traversal.
 /// Generated `argument_names()` returns the mapped names of the root's direct
 /// fields in declaration order. When the view declares the complete public

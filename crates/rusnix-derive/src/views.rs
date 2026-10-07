@@ -94,8 +94,36 @@ fn classify(ty: &Type, locals: &BTreeSet<String>) -> syn::Result<Leaf> {
 
     Err(syn::Error::new_spanned(
         ty,
-        "unsupported symbolic-view type; use bool, String, i64, NixValue, Option<T>, Vec<T>, BTreeMap<K, V>, HashMap<K, V>, or a local named view; external aliases require explicit OptionRef or NixValue selections",
+        "unsupported symbolic-view type; use bool, String, i64, NixValue, Option<T>, Vec<T>, BTreeMap<K, V>, HashMap<K, V>, or a local named view; external aliases require #[rusnix(expression)] or explicit OptionRef or NixValue selections",
     ))
+}
+
+fn classify_field(field: &syn::Field, locals: &BTreeSet<String>) -> syn::Result<Leaf> {
+    let mut expression = false;
+
+    for attr in &field.attrs {
+        if attr.path().is_ident("rusnix") {
+            attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("expression") {
+                    if expression {
+                        return Err(meta.error("duplicate expression"));
+                    }
+                    expression = true;
+                } else if meta.path.is_ident("rename") {
+                    let _: LitStr = meta.value()?.parse()?;
+                } else {
+                    return Err(meta.error("symbolic-view fields support rename and expression"));
+                }
+                Ok(())
+            })?;
+        }
+    }
+
+    if expression {
+        Ok(Leaf::Expression)
+    } else {
+        classify(&field.ty, locals)
+    }
 }
 
 fn parse_view(mut item: syn::ItemStruct) -> syn::Result<View> {
@@ -191,8 +219,11 @@ fn key(field: &syn::Field, naming: Naming) -> syn::Result<LitStr> {
 
         if attr.path().is_ident("rusnix") {
             attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("expression") {
+                    return Ok(());
+                }
                 if !meta.path.is_ident("rename") {
-                    return Err(meta.error("symbolic-view fields support rename only"));
+                    return Err(meta.error("symbolic-view fields support rename and expression"));
                 }
                 if rename.is_some() {
                     return Err(meta.error("duplicate rename"));
@@ -357,7 +388,7 @@ fn expand_from(mut module: ItemMod, source: Source) -> syn::Result<TokenStream> 
                 ));
             }
 
-            if let Leaf::Branch(child) = classify(&field.ty, &locals)? {
+            if let Leaf::Branch(child) = classify_field(field, &locals)? {
                 if child == root {
                     return Err(syn::Error::new_spanned(
                         &field.ty,
@@ -424,7 +455,7 @@ fn expand_from(mut module: ItemMod, source: Source) -> syn::Result<TokenStream> 
                 .collect();
 
             if docs.is_empty() {
-                let description = match classify(ty, &locals)? {
+                let description = match classify_field(field, &locals)? {
                     Leaf::Branch(_) => {
                         "Access the declared nested fields. Navigation constructs paths without evaluating Nix values."
                     }
@@ -443,7 +474,7 @@ fn expand_from(mut module: ItemMod, source: Source) -> syn::Result<TokenStream> 
                 docs.push(syn::parse_quote!(#[doc = #description]));
             }
 
-            match classify(ty, &locals)? {
+            match classify_field(field, &locals)? {
                 Leaf::Branch(child) => {
                     branches
                         .push(quote_spanned!(field.span()=> #(#docs)* pub #field_name: #child,));
@@ -784,8 +815,25 @@ mod tests {
             rejection(
                 "mod options { #[rusnix(root)] struct Root { #[rusnix(flatten)] value: i64 } }"
             )
-            .contains("rename only")
+            .contains("rename and expression")
         );
+    }
+
+    #[test]
+    fn external_expression_fields_support_mapping_and_reject_duplicate_markers() {
+        let view: syn::ItemMod = syn::parse_quote! {
+            mod options {
+                #[rusnix(root)]
+                struct Root {
+                    #[rusnix(expression, rename = "external-value")]
+                    value: external::Record,
+                }
+            }
+        };
+        assert!(expand(view.clone()).is_ok());
+        assert!(expand_args(view).is_ok());
+        assert!(rejection("mod options { #[rusnix(root)] struct Root { #[rusnix(expression, expression)] value: external::Record } }").contains("duplicate expression"));
+        assert!(rejection("mod options { #[rusnix(root)] struct Root { #[rusnix(expression = true)] value: external::Record } }").contains("expected"));
     }
 
     #[test]

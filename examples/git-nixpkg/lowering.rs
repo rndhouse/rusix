@@ -4,7 +4,7 @@ use super::inputs::{Inputs, args};
 use rusnix_ir::{
     Expr, IntoRusnixValue,
     interop::{
-        NixAttrs, NixCallable, NixExpression, NixLibrary, NixList, NixValue, Package,
+        FinalAttrs, NixAttrs, NixCallable, NixExpression, NixLibrary, NixList, NixValue, Package,
         PackageFunction,
     },
     nix_record, nix_text, package,
@@ -23,7 +23,7 @@ pub fn factory() -> PackageFunction<Package> {
             ("nlsSupport", true.into()),
             (
                 "osxkeychainSupport",
-                inputs.stdenv.host_platform.is_darwin().into(),
+                inputs.stdenv.host_platform().is_darwin().into(),
             ),
             ("guiSupport", false.into()),
             ("withManual", true.into()),
@@ -34,7 +34,7 @@ pub fn factory() -> PackageFunction<Package> {
             ("withSsh", false.into()),
             (
                 "doInstallCheck",
-                (!inputs.stdenv.host_platform.is_darwin()).into(),
+                (!inputs.stdenv.host_platform().is_darwin()).into(),
             ),
         ];
 
@@ -42,7 +42,7 @@ pub fn factory() -> PackageFunction<Package> {
         // already rules out the Perl-dependent invalid combinations. Implication
         // stays native, independent of any caller-supplied library predicates.
         let derivation = inputs.stdenv.mk_derivation().call(
-            NixCallable::<NixAttrs, NixAttrs>::try_from_function(|final_attrs: NixAttrs| {
+            NixCallable::<NixAttrs, FinalAttrs>::try_from_function(|final_attrs: FinalAttrs| {
                 attributes(&inputs, final_attrs)
             })
             .expect("fixed Git recipe"),
@@ -50,7 +50,7 @@ pub fn factory() -> PackageFunction<Package> {
         let checks = [
             inputs
                 .osxkeychain_support()
-                .implies(inputs.stdenv.host_platform.is_darwin()),
+                .implies(inputs.stdenv.host_platform().is_darwin()),
             inputs.send_email_support().implies(inputs.perl_support()),
             inputs.svn_support().implies(inputs.perl_support()),
         ];
@@ -132,7 +132,7 @@ struct Derivation {
 
 /// Assemble the builder attributes from deferred feature and platform inputs.
 /// The finalAttrs parameter preserves the install-check test's dependency on later overrides.
-fn attributes(i: &Inputs, final_attrs: NixAttrs) -> Derivation {
+fn attributes(i: &Inputs, final_attrs: FinalAttrs) -> Derivation {
     let lib = NixLibrary::from_value(i.lib.as_value());
 
     let minimal = [
@@ -163,7 +163,7 @@ fn attributes(i: &Inputs, final_attrs: NixAttrs) -> Derivation {
         ).into(),
         lib.optional(i.with_ssh(), i.file("ssh-path.patch")).into(),
         lib.optional(
-            i.gui_support().and(i.stdenv.host_platform.is_darwin()),
+            i.gui_support().and(i.stdenv.host_platform().is_darwin()),
             i.fetchpatch().call(nix_record! {
                 "name": "gitk_check_main_window_visibility_before_waiting_for_it_to_show.patch",
                 "url": "https://github.com/git/git/commit/1db62e44b7ec93b6654271ef34065b31496cd02e.patch",
@@ -204,7 +204,7 @@ fn attributes(i: &Inputs, final_attrs: NixAttrs) -> Derivation {
                 i.expat(),
                 i.cpio(),
                 Package::choose(
-                    i.stdenv.host_platform.is_free_bsd(),
+                    i.stdenv.host_platform().is_free_bsd(),
                     i.libiconv_real(),
                     i.libiconv(),
                 ),
@@ -214,7 +214,7 @@ fn attributes(i: &Inputs, final_attrs: NixAttrs) -> Derivation {
             (NixList::new([i.tcl(), i.tk()])).when(&lib, i.gui_support()),
             NixList::optional(&lib, i.withpcre2(), i.pcre2()),
             (NixList::new([i.security(), i.core_services()]))
-                .when(&lib, i.stdenv.host_platform.is_darwin()),
+                .when(&lib, i.stdenv.host_platform().is_darwin()),
             (NixList::new([i.glib(), i.libsecret()])).when(&lib, i.with_libsecret()),
         ],
     );
@@ -247,21 +247,21 @@ fn attributes(i: &Inputs, final_attrs: NixAttrs) -> Derivation {
             (NixList::<Expr<String>>::new(
                 ["INSTALL=install", "NO_INET_NTOP=", "NO_INET_PTON="].map(Expr::from),
             ))
-            .when(&lib, i.stdenv.host_platform.is_sun_os()),
+            .when(&lib, i.stdenv.host_platform().is_sun_os()),
             NixList::choose(
-                i.stdenv.host_platform.is_darwin(),
+                i.stdenv.host_platform().is_darwin(),
                 NixList::<Expr<String>>::new(["NO_APPLE_COMMON_CRYPTO=1".into()]),
                 NixList::<Expr<String>>::new(["sysconfdir=/etc".into()]),
             ),
             (NixList::<Expr<String>>::new(
                 ["NO_SYS_POLL_H=1", "NO_GETTEXT=YesPlease"].map(Expr::from),
             ))
-            .when(&lib, i.stdenv.host_platform.is_musl()),
+            .when(&lib, i.stdenv.host_platform().is_musl()),
             NixList::optional(&lib, i.withpcre2(), "USE_LIBPCRE2=1".into()),
             NixList::optional(&lib, !i.nls_support(), "NO_GETTEXT=1".into()),
             NixList::optional(
                 &lib,
-                i.stdenv.host_platform.is_darwin(),
+                i.stdenv.host_platform().is_darwin(),
                 "TKFRAMEWORK=/nonexistent".into(),
             ),
         ],
@@ -270,7 +270,7 @@ fn attributes(i: &Inputs, final_attrs: NixAttrs) -> Derivation {
     // This finite self-reference is evaluated by mkDerivation, not inspected in Rust.
     // overrideAttrs must see the eventual package, including later ordinary Nix overrides.
     let installed_test = final_attrs
-        .field::<Package>("finalPackage")
+        .final_package()
         .override_attrs(|_| NixAttrs::new([("doInstallCheck", true.into())]));
     let passthru_tests = nix_record! {
         "withInstallCheck": installed_test,
@@ -306,13 +306,13 @@ fn attributes(i: &Inputs, final_attrs: NixAttrs) -> Derivation {
         nix_ldflags: Expr::concat([
             lib.optional_text(
                 i.stdenv.cc.is_gnu().and(
-                    NixValue::from(i.stdenv.host_platform.libc())
+                    NixValue::from(i.stdenv.host_platform().libc())
                         .equals("glibc")
                         .into_expr::<bool>(),
                 ),
                 "-lgcc_s",
             ),
-            lib.optional_text(i.stdenv.host_platform.is_free_bsd(), "-lthr"),
+            lib.optional_text(i.stdenv.host_platform().is_free_bsd(), "-lthr"),
         ]),
         configure_flags: NixList::concat_with(
             &lib,
@@ -353,9 +353,9 @@ fn attributes(i: &Inputs, final_attrs: NixAttrs) -> Derivation {
         native_install_check_inputs: NixList::optional(
             &lib,
             i.stdenv
-                .host_platform
+                .host_platform()
                 .is_darwin()
-                .or(i.stdenv.host_platform.is_free_bsd()),
+                .or(i.stdenv.host_platform().is_free_bsd()),
             i.sysctl(),
         ),
         pre_install_check: pre_install_check(i),
@@ -876,14 +876,14 @@ fn pre_install_check(i: &Inputs) -> Expr<String> {
         base_check(i),
         lib.optional_text(!i.send_email_support(), no_email_check()),
         common_check(),
-        lib.optional_text(i.stdenv.host_platform.is_darwin(), darwin_check()),
+        lib.optional_text(i.stdenv.host_platform().is_darwin(), darwin_check()),
         lib.optional_text(
             i.stdenv
-                .host_platform
+                .host_platform()
                 .is_darwin()
-                .and(i.stdenv.host_platform.is_aarch64()),
+                .and(i.stdenv.host_platform().is_aarch64()),
             darwin_arm_check(),
         ),
-        lib.optional_text(i.stdenv.host_platform.is_musl(), musl_check()),
+        lib.optional_text(i.stdenv.host_platform().is_musl(), musl_check()),
     ])
 }
