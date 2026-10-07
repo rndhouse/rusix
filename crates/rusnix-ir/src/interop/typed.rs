@@ -404,6 +404,29 @@ impl<T: NixExpression> NixAttrs<T> {
         T::from_expression(self.value.clone().select_segments([name]))
     }
 
+    /// Test attribute presence, including an attribute whose value is null.
+    #[track_caller]
+    pub fn has(&self, name: &str) -> Expr<bool> {
+        self.value.clone().has_attr(name).into_expr()
+    }
+
+    /// Use the fallback only when the attribute is absent, not when it is null.
+    #[track_caller]
+    pub fn get_or(&self, name: &str, fallback: impl Into<T>) -> T {
+        T::from_expression(
+            self.value
+                .clone()
+                .attr_or(name, fallback.into().as_expression()),
+        )
+    }
+
+    /// Return null for an absent attribute, retaining the member interface otherwise.
+    /// Use has to distinguish an absent attribute from a present null value.
+    #[track_caller]
+    pub fn get_optional(&self, name: &str) -> NixNullable<T> {
+        NixNullable::from_expression(self.value.clone().attr_or(name, NixValue::null()))
+    }
+
     /// Shallow union; values on the right take precedence and remain lazy.
     #[track_caller]
     pub fn merge(self, right: Self) -> Self {
@@ -468,6 +491,76 @@ impl<T: NixExpression> NixList<T> {
     #[track_caller]
     pub fn when(self, lib: &NixLibrary, condition: impl Into<Expr<bool>>) -> Self {
         lib.optionals(condition, self)
+    }
+}
+
+/// A deferred Nix path, distinct from a string spelling a pathname or a package.
+/// External wrapping states a path expectation; it performs no file access.
+#[derive(Clone, Debug)]
+pub struct NixPath {
+    value: NixValue,
+}
+
+expression_handle!(NixPath);
+
+impl super::ToNixText for NixPath {
+    #[track_caller]
+    fn to_nix_text(self) -> Expr<String> {
+        self.value.to_text().into_expr()
+    }
+}
+
+/// A deferred value that Nix may evaluate to null or to T.
+/// Rust Option chooses a variant during authoring; this interface defers that choice.
+#[derive(Clone, Debug)]
+pub struct NixNullable<T: NixExpression> {
+    value: NixValue,
+    _type: PhantomData<(T,)>,
+}
+
+expression_handle!(NixNullable<T>);
+
+impl<T: NixExpression> NixNullable<T> {
+    /// Describe null without evaluating a potential value.
+    #[track_caller]
+    pub fn null() -> Self {
+        Self::from_expression(NixValue::null())
+    }
+
+    /// Retain a value's expression and provenance as the present alternative.
+    #[track_caller]
+    pub fn some(value: impl Into<T>) -> Self {
+        Self::from_expression(value.into().as_expression())
+    }
+
+    /// Test for null in Nix when demanded.
+    #[track_caller]
+    pub fn is_null(&self) -> Expr<bool> {
+        self.value.clone().equals(NixValue::null()).into_expr()
+    }
+
+    /// Select a fallback only for null; the unused branch remains unforced.
+    #[track_caller]
+    pub fn unwrap_or(self, fallback: impl Into<T>) -> T {
+        self.bind(|value| {
+            T::choose(
+                value.is_null(),
+                fallback.into(),
+                T::from_expression(value.value),
+            )
+        })
+    }
+
+    /// Transform only the non-null alternative, preserving null lazily.
+    #[track_caller]
+    pub fn map<U: NixExpression>(self, transform: impl FnOnce(T) -> U) -> NixNullable<U> {
+        self.bind(|value| {
+            NixNullable::choose(
+                value.is_null(),
+                NixNullable::null(),
+                NixNullable::some(transform(T::from_expression(value.value))),
+            )
+        })
     }
 }
 

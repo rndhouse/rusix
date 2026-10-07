@@ -1,7 +1,7 @@
 //! External dependencies stay opaque; the caller supplies the normal nixpkgs scope.
 use rusnix_ir::{
     self as rusnix, IntoRusnixValue, RusnixValue,
-    interop::{NixValue, Nixpkgs, Package},
+    interop::{NixPath, NixValue, Nixpkgs, Package},
 };
 
 /// Finite navigation over the external Nix arguments this package implementation uses.
@@ -272,7 +272,7 @@ impl Inputs {
     /// Refer to an asset in the pinned Git source directory, such as a patch or updater.
     /// Returns a Nix path without reading the file or fetching anything.
     #[track_caller]
-    pub(super) fn file(&self, name: &str) -> NixValue {
+    pub(super) fn file(&self, name: &str) -> NixPath {
         Nixpkgs::new().source_path(&format!("pkgs/applications/version-management/git/{name}"))
     }
 }

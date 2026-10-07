@@ -7,8 +7,8 @@ use super::{
 use rusnix_ir::{
     Expr, IntoRusnixValue,
     interop::{
-        NixAttrs, NixCallable, NixExpression, NixLibrary, NixList, NixValue, Nixpkgs, Package,
-        PackageFunction,
+        NixAttrs, NixCallable, NixExpression, NixLibrary, NixList, NixPath, NixValue, Nixpkgs,
+        Package, PackageFunction,
     },
     nix_record, nix_text,
 };
@@ -72,7 +72,7 @@ fn common(i: &Inputs, release: Release) -> Package {
     if !matches!(release, Release::Legacy) {
         patches.push(path("3.0/openssl-disable-kernel-detection.patch"));
     }
-    patches.push(NixValue::if_else(
+    patches.push(NixPath::choose(
         host_bool(i, "isDarwin"),
         path(if matches!(release, Release::Preview) {
             "3.3/use-etc-ssl-certs-darwin.patch"
@@ -101,7 +101,7 @@ fn common(i: &Inputs, release: Release) -> Package {
                 &lib,
                 version,
                 release.hash().into(),
-                NixValue::list(patches),
+                NixList::new(patches),
                 true.into(),
                 extra_meta,
                 final_attrs,
@@ -118,7 +118,7 @@ fn attributes(
     lib: &NixLibrary,
     version: Expr<String>,
     hash: Expr<String>,
-    patches: NixValue,
+    patches: NixList<NixPath>,
     with_docs: Expr<bool>,
     extra_meta: NixValue,
     final_attrs: NixAttrs,
@@ -252,8 +252,8 @@ fn attributes(
             lib.optional_text(!host_bool(i, "isWindows"), scripts::install_rehash()),
             scripts::install_dev(),
             lib.optional_text(
-                !i.conf().equals(NixValue::null()).into_expr::<bool>(),
-                scripts::install_conf(i.conf()),
+                !i.conf().is_null(),
+                scripts::install_conf(i.conf().as_expression()),
             ),
         ]),
         post_fixup: Expr::concat([
@@ -393,7 +393,7 @@ struct Recipe {
     pname: &'static str,
     version: Expr<String>,
     src: Package,
-    patches: NixValue,
+    patches: NixList<NixPath>,
     post_patch: Expr<String>,
     outputs: NixList<Expr<String>>,
     set_output_flags: bool,

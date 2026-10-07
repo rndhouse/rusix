@@ -2,7 +2,8 @@
 use rusnix_ir::{
     self as rusnix, Config, Expr, IntoRusnixValue,
     interop::{
-        NixAttrs, NixCallable, NixExpression, NixList, NixValue, Nixpkgs, Package, PackageFunction,
+        NixAttrs, NixCallable, NixExpression, NixList, NixNullable, NixPath, NixValue, Nixpkgs,
+        Package, PackageFunction,
     },
 };
 use rusnix_nix::{NixSession, compile};
@@ -474,5 +475,89 @@ fn text_templates_return_strings_and_coerce_typed_packages_at_interpolation() {
             changed.into()
         ])),
         "changed:"
+    );
+}
+
+#[test]
+fn nullable_values_map_and_default_lazily_while_attributes_distinguish_presence() {
+    let bad: Expr<String> = NixValue::builtin("throw")
+        .call("excluded nullable branch")
+        .into_expr();
+    let absent = NixNullable::<Expr<String>>::null();
+    let mapped = absent.map(|_| bad.clone()).unwrap_or("fallback");
+    assert_eq!(evaluate(mapped), "fallback");
+    assert_eq!(
+        evaluate(NixNullable::<Expr<String>>::some("kept").unwrap_or(bad)),
+        "kept"
+    );
+
+    let attrs = NixAttrs::new([
+        ("present", NixNullable::<Expr<String>>::some("value")),
+        ("null", NixNullable::null()),
+    ]);
+    assert_eq!(evaluate(attrs.has("null")), true);
+    assert_eq!(evaluate(attrs.has("missing")), false);
+    assert_eq!(
+        evaluate(
+            attrs
+                .get_or("null", NixNullable::some("missing fallback"))
+                .unwrap_or("null fallback")
+        ),
+        "null fallback"
+    );
+    assert_eq!(
+        evaluate(
+            attrs
+                .get_or("missing", NixNullable::some("missing fallback"))
+                .unwrap_or("null fallback")
+        ),
+        "missing fallback"
+    );
+
+    let strings = NixAttrs::new([("a.b", Expr::<String>::from("literal key"))]);
+    assert_eq!(
+        evaluate(strings.get_optional("a.b").unwrap_or("missing")),
+        "literal key"
+    );
+    assert_eq!(evaluate(strings.get_optional("missing").is_null()), true);
+}
+
+#[test]
+fn nullable_transform_failures_keep_child_provenance_and_original_nix_diagnostics() {
+    let line = line!() + 1;
+    let failure = Expr::int(1).divide(Expr::int(0));
+    let result = NixNullable::<Expr<i64>>::some(42_i64)
+        .map(|_| failure.to_text())
+        .unwrap_or("fallback");
+    let diagnostic = NixSession::new()
+        .unwrap()
+        .evaluate_interop(&compile(&Config::new().set("result", result)).unwrap())
+        .unwrap_err();
+    assert_eq!(diagnostic.primary.as_ref().unwrap().file, file!());
+    assert_eq!(diagnostic.primary.as_ref().unwrap().line, line);
+    assert!(diagnostic.reason.contains("division by zero"));
+    assert!(!diagnostic.raw_nix.is_empty());
+}
+
+#[test]
+fn pinned_paths_remain_paths_until_explicit_text_coercion() {
+    use rusnix_ir::{interop::ToNixText, nix_text};
+
+    let path: NixPath =
+        Nixpkgs::new().source_path("pkgs/applications/version-management/git/ssh-path.patch");
+    assert_eq!(
+        evaluate(NixValue::builtin("isPath").call(path.clone())),
+        true
+    );
+    let text: Expr<String> = nix_text!("patch={path}", path = path.clone());
+    let context = NixValue::builtin("getContext");
+    assert_eq!(
+        evaluate(
+            context
+                .clone()
+                .call(text)
+                .equals(context.call(path.to_nix_text()))
+        ),
+        true
     );
 }

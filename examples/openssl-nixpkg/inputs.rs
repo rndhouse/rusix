@@ -4,7 +4,7 @@ use rusnix_ir as rusnix;
 #[rusnix::args]
 #[allow(dead_code)] // Upstream retains unused coreutils/writeShellScript parameters.
 pub mod args {
-    use rusnix_ir::interop::{NixCallable, NixLibrary, NixValue, Package, Stdenv};
+    use rusnix_ir::interop::{NixCallable, NixLibrary, NixNullable, NixValue, Package, Stdenv};
 
     /// Caller-owned dependencies and lazy policy arguments.
     #[rusnix(root)]
@@ -51,7 +51,7 @@ pub mod args {
         #[rusnix(rename = "static")]
         static_build: bool,
         /// Pinned `conf` argument; resolved by Nix when demanded.
-        conf: NixValue,
+        conf: NixNullable<NixValue>,
         /// Pinned `removeReferencesTo` argument; resolved by Nix when demanded.
         remove_references_to: Package,
         /// Pinned `testers` argument; resolved by Nix when demanded.

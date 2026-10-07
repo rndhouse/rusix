@@ -7,7 +7,8 @@ use super::{
 use rusnix_ir::{
     self as rusnix, Expr, IntoRusnixValue,
     interop::{
-        NixAttrs, NixExpression, NixLibrary, NixList, NixValue, Nixpkgs, Package, PackageFunction,
+        NixAttrs, NixExpression, NixLibrary, NixList, NixPath, NixValue, Nixpkgs, Package,
+        PackageFunction,
     },
     nix_record, nix_text,
 };
@@ -73,7 +74,7 @@ fn host_bool(i: &Inputs, field: &str) -> Expr<bool> {
     host(i, field).into_expr::<bool>()
 }
 
-fn file(name: &str) -> NixValue {
+fn file(name: &str) -> NixPath {
     Nixpkgs::new().source_path(&format!("pkgs/servers/sql/mariadb/patch/{name}"))
 }
 
@@ -205,13 +206,12 @@ fn common(i: &Inputs, lib: &NixLibrary) -> Common {
         native_build_inputs: native,
         build_inputs: inputs,
         pre_patch: scripts::pre_patch(),
-        patches: NixValue::concat_lists([
-            NixValue::list([file("cmake-includedir.patch")]),
+        patches: NixList::concat([
+            NixList::new([file("cmake-includedir.patch")]),
             lib.optional(
                 (!host_bool(i, "isLinux")).and(lib.version_at_least(i.version(), "10.6")),
                 file("macos-MDEV-26769-regression-fix.patch"),
-            )
-            .into(),
+            ),
         ]),
         cmake_flags,
         post_install: lib.optional_text(!i.with_embedded(), scripts::post_install_common()),
@@ -245,9 +245,9 @@ fn client(i: &Inputs, lib: &NixLibrary, common: &common_view::Common) -> Package
             .as_attrs()
             .merge(NixAttrs::from_expression(nix_record! {
                 "pname": "mariadb-client",
-                "patches": NixValue::concat_lists([
+                "patches": NixList::concat([
                     common.patches(),
-                    NixValue::list([file("cmake-plugin-includedir.patch")]),
+                    NixList::new([file("cmake-plugin-includedir.patch")]),
                 ]),
                 "buildInputs": NixList::concat([
                     common.build_inputs(),
@@ -374,7 +374,7 @@ struct Common {
     native_build_inputs: NixList<Package>,
     build_inputs: NixList<Package>,
     pre_patch: Expr<String>,
-    patches: NixValue,
+    patches: NixList<NixPath>,
     cmake_flags: NixList<rusnix_ir::Expr<String>>,
     post_install: Expr<String>,
     post_fixup: Expr<String>,
@@ -385,7 +385,7 @@ struct Common {
 // Finite access to the shared recipe; the full supplied record remains authoritative.
 #[rusnix::args]
 mod common_view {
-    use rusnix_ir::interop::{NixList, NixValue, Package};
+    use rusnix_ir::interop::{NixList, NixPath, Package};
 
     #[rusnix(root)]
     struct Inputs {
@@ -395,7 +395,7 @@ mod common_view {
     #[rusnix(value)]
     struct Common {
         version: String,
-        patches: NixValue,
+        patches: NixList<NixPath>,
         build_inputs: NixList<Package>,
         native_build_inputs: NixList<Package>,
         cmake_flags: NixList<rusnix_ir::Expr<String>>,

@@ -128,3 +128,16 @@ child origins. Packages remain packages until interpolation; attribute sets and
 callables have no implicit text capability. `NixValue` remains an explicit
 dynamic escape hatch. Fragment concatenation accepts string expressions, and
 `Expr<String>::replace_text` retains that interface through native replacement.
+
+`NixNullable<T>` represents a deferred null-or-value choice. Its `map` and
+`unwrap_or` keep excluded branches lazy and retain the contained interface.
+`NixAttrs::has` tests presence even for null values; `get_or` defaults only for
+missing attributes, while `get_optional` produces null for absence. These semantics
+are separate from Rust `Option` and its authoring-time omission policy.
+
+`Nixpkgs::source_path` returns `NixPath`. OpenSSL and MariaDB retain paths and
+`NixList<NixPath>` through their patch policy; Git's local patch helpers retain
+paths until combination with fetched derivations requires heterogeneous interop.
+OpenSSL's configuration argument is `NixNullable<NixValue>` because upstream
+accepts different text-coercible file representations. No new filesystem operation
+or eager type validation is introduced.

@@ -686,5 +686,25 @@
       "NixAttrs",
       "ToNixText"
     ]
+  },
+  {
+    "file": "path-as-string.rs",
+    "code": "E0308",
+    "count": 1,
+    "source": "source_path",
+    "reason_tokens": [
+      "Expr<String>",
+      "NixPath"
+    ]
+  },
+  {
+    "file": "nullable-fallback.rs",
+    "code": "E0277",
+    "count": 1,
+    "source": "Expr::int(3)",
+    "reason_tokens": [
+      "Expr<std::string::String>",
+      "Expr<i64>"
+    ]
   }
 ]

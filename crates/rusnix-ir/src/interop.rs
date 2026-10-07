@@ -23,8 +23,8 @@ pub use text::ToNixText;
 pub use library::NixLibrary;
 
 pub use typed::{
-    IntoNixExpression, NixAttrs, NixCallable, NixExpression, NixList, NixOverridable, Overridable,
-    Package, Stdenv,
+    IntoNixExpression, NixAttrs, NixCallable, NixExpression, NixList, NixNullable, NixOverridable,
+    NixPath, Overridable, Package, Stdenv,
 };
 
 /// A sequence of field names to look up in Nix attribute sets.
@@ -1054,15 +1054,15 @@ impl Nixpkgs {
     /// represents a Nix path; Rust does not read the file, import Nix code or fetch it.
     /// Paths must be relative and cannot traverse to parent directories.
     #[track_caller]
-    pub fn source_path(&self, path: &str) -> NixValue {
-        NixValue(
+    pub fn source_path(&self, path: &str) -> NixPath {
+        NixPath::from_expression(NixValue(
             Reference {
                 source: Source::PinnedPath { path: path.into() },
                 path: None,
                 origin: Origin::caller(format!("nixpkgs source path {path}")),
             }
             .node(),
-        )
+        ))
     }
 
     /// Select the packages supplied to the generated module by NixOS.

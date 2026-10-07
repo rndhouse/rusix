@@ -152,7 +152,7 @@ fn attributes(i: &Inputs, final_attrs: NixAttrs) -> Derivation {
     });
     let perl = Package::from_expression(i.perl_packages.perl.as_expression());
     let patches = lib.concat_lists([
-        NixValue::list(
+        NixList::new(
             [
                 "docbook2texi.patch",
                 "git-sh-i18n.patch",
@@ -160,7 +160,7 @@ fn attributes(i: &Inputs, final_attrs: NixAttrs) -> Derivation {
                 "installCheck-path.patch",
             ]
             .map(|p| i.file(p)),
-        ),
+        ).into(),
         lib.optional(i.with_ssh(), i.file("ssh-path.patch")).into(),
         lib.optional(
             i.gui_support().and(i.stdenv.host_platform.is_darwin()),

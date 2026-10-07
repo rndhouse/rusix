@@ -42,7 +42,9 @@ fn classify(ty: &Type, locals: &BTreeSet<String>) -> syn::Result<Leaf> {
             "bool" | "i64" => "std::primitive",
             "String" => "std::string",
             "NixValue" | "Package" | "NixCallable" | "NixAttrs" | "NixList" | "Stdenv"
-            | "NixLibrary" | "PackageFunction" | "Overridable" => "rusnix_ir::interop",
+            | "NixLibrary" | "PackageFunction" | "Overridable" | "NixPath" | "NixNullable" => {
+                "rusnix_ir::interop"
+            }
             "Option" => "std::option",
             "Vec" => "std::vec",
             "BTreeMap" | "HashMap" => "std::collections",
@@ -58,12 +60,13 @@ fn classify(ty: &Type, locals: &BTreeSet<String>) -> syn::Result<Leaf> {
                 "NixValue" if matches!(last.arguments, PathArguments::None) => {
                     return Ok(Leaf::Opaque);
                 }
-                "Package" | "Stdenv" | "NixLibrary"
+                "Package" | "Stdenv" | "NixLibrary" | "NixPath"
                     if matches!(last.arguments, PathArguments::None) =>
                 {
                     return Ok(Leaf::Expression);
                 }
-                "NixCallable" | "NixAttrs" | "NixList" | "PackageFunction" | "Overridable" => {
+                "NixCallable" | "NixAttrs" | "NixList" | "PackageFunction" | "Overridable"
+                | "NixNullable" => {
                     return Ok(Leaf::Expression);
                 }
                 "Option" | "Vec" | "BTreeMap" | "HashMap" => {
