@@ -56,7 +56,9 @@ pub fn curl_arguments(pkgs: &Nixpkgs, openssl: Package) -> CurlArguments {
 
 /// Typed dependency wiring with a deferred partial record for dynamic interop.
 pub struct CurlArguments {
+    /// Shared OpenSSL package used by curl's build recipe.
     openssl: Package,
+    /// Platform defaults and caller overrides merged into curl's argument record.
     extra: NixAttrs,
 }
 

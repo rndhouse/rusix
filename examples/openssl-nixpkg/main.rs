@@ -15,7 +15,9 @@ use rusnix_ir::{
 
 #[derive(IntoConfig)]
 struct Output {
+    /// Nix function returning all three releases with the caller's dependencies.
     family: PackageFunction<NixAttrs<Package>>,
+    /// Selected OpenSSL package instantiated through nixpkgs' callPackage.
     openssl: Package,
 }
 

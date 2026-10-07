@@ -12,7 +12,9 @@ use rusnix_ir::{
 
 #[derive(IntoConfig)]
 struct Output {
+    /// Reusable Nix function accepting curl's dependencies and feature arguments.
     factory: PackageFunction<Package>,
+    /// Selected curl package instantiated with this example's feature choices.
     curl: Package,
 }
 

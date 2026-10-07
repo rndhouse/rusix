@@ -14,8 +14,11 @@ use rusnix_ir::{
 
 #[derive(IntoConfig)]
 struct Output {
+    /// Reusable Nix function accepting a release, dependencies and feature arguments.
     factory: PackageFunction<Package>,
+    /// All four pinned release packages, each exposing client and server members.
     family: NixAttrs<Package>,
+    /// Selected MariaDB 10.11 package exposing its client and server members.
     mariadb: Package,
 }
 
