@@ -35,7 +35,10 @@ pub fn expect<T: super::NixExpression>(value: NixValue) -> T {
 /// `services.example.port`. Names are data, never executable Nix source.
 /// Use [`Self::segments`] when a field name itself contains a dot.
 #[derive(Clone, Debug)]
-pub struct AttrPath(pub(crate) Vec<String>);
+pub struct AttrPath(
+    /// Ordered literal field names; dots and other punctuation inside a name stay intact.
+    pub(crate) Vec<String>,
+);
 
 impl AttrPath {
     /// Split a convenience dotted path; literal dots require [`Self::segments`].

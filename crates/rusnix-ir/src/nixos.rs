@@ -295,9 +295,15 @@ impl NixosModule {
     /// #[rusnix::config]
     /// mod configuration {
     ///     #[rusnix(root)]
-    ///     pub struct Layer { pub environment: Environment }
+    ///     pub struct Layer {
+    ///         // Settings for files made available in the NixOS system environment.
+    ///         pub environment: Environment,
+    ///     }
     ///
-    ///     pub struct Environment { pub paths_to_link: Vec<String> }
+    ///     pub struct Environment {
+    ///         // Package subdirectories, such as /share, linked into the system environment.
+    ///         pub paths_to_link: Vec<String>,
+    ///     }
     /// }
     /// use configuration::{Environment, Layer};
     /// let module = NixosModule::empty()
@@ -355,7 +361,10 @@ impl NixosModule {
     ///     use rusnix_ir::nixos::OptionDecl;
     ///
     ///     #[rusnix(root)]
-    ///     pub struct Root { pub example: OptionDecl }
+    ///     pub struct Root {
+    ///         // Type, default and documentation for a configurable NixOS option named example.
+    ///         pub example: OptionDecl,
+    ///     }
     /// }
     /// let module = NixosModule::empty().declare(schema::Root {
     ///     example: OptionDecl::new(OptionType::named("bool"))

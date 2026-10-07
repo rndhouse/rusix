@@ -35,7 +35,8 @@ pub trait ReferencedExpression {
 /// change after edits. Reusing an expression can produce several uses of one ID.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Origin {
-    /// Deterministic `rn-` followed by 16 lowercase hexadecimal digits, embedded
+    /// Marker linking generated error traces and text ranges to this Rust operation.
+    /// Spelled `rn-` followed by 16 lowercase hexadecimal digits, embedded
     /// unchanged in generated comments, error contexts and source-map metadata.
     pub id: String,
     /// Rust source path as recorded by the caller; it may be relative to the build.
@@ -190,6 +191,7 @@ pub struct Assignment {
     pub path: String,
     /// Deferred right-hand side of the definition.
     pub value: Node,
+    /// Literal destination field names; a dot within one name is preserved as data.
     pub(crate) segments: Vec<String>,
 }
 

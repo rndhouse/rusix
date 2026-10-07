@@ -77,14 +77,15 @@ pub struct Boundary {
 pub struct NixosArtifact {
     /// Generated module source and Rust source map.
     pub module: Generated,
-    /// Independent definitions, retaining separate origins for multi-definition diagnostics.
+    /// Locations of contributed settings, used to explain rejected or conflicting NixOS values.
     pub definitions: Vec<Boundary>,
-    /// Declaration origins, kept separate so invalid foreign definitions are not blamed on schema Rust.
+    /// Locations that declared option names, types, defaults and documentation.
+    /// Kept separate so invalid values from other modules are not blamed on these declarations.
     #[serde(default)]
     pub declarations: Vec<Boundary>,
-    /// Assertion markers used to recover Rust operations from failed messages.
+    /// Rust assertion locations and source markers carried in NixOS failure messages.
     pub assertions: Vec<Boundary>,
-    /// Boundaries for external module failures that cannot identify an inner Rust expression.
+    /// Rust import locations used when errors originate in external NixOS files.
     pub imports: Vec<Boundary>,
 }
 
@@ -373,7 +374,9 @@ fn lower_module(module: &NixosModule) -> Result<(NixExpr, NixosArtifact), Box<Di
 
 #[derive(Deserialize)]
 pub(crate) struct Pin {
+    /// Git revision required for the offline nixpkgs source checkout.
     pub(crate) revision: String,
+    /// Expected content hashes keyed by relative paths of the minimal evaluator files.
     files: std::collections::BTreeMap<String, String>,
 }
 

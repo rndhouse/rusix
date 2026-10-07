@@ -32,28 +32,43 @@ const DEPENDENCIES: &[&str] = &[
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub(crate) struct Metadata {
+    /// Format version used when reading saved dependency-diagnostic metadata.
     pub(crate) version: u32,
+    /// Pinned nixpkgs revision whose dependency-validation messages this metadata describes.
     pub(crate) revision: String,
+    /// Authored build recipes and dependency lists that can explain failures reported by nixpkgs.
     pub(crate) boundaries: Vec<Boundary>,
+    /// Rust origin IDs for assertion conditions, so failures do not blame an unused assertion body.
     pub(crate) guard_operations: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Boundary {
+    /// Root configuration assignment through which this build recipe is reachable.
     pub(crate) entry: Origin,
+    /// Rust operation that called mkDerivation to describe this package build.
     pub(crate) call: Origin,
+    /// Package name recovered from the recipe, typically pname without its version.
     pub(crate) name: String,
+    /// Build-recipe name, including the version when derived from pname and version.
     pub(crate) full_name: String,
+    /// Names of authored build recipes that use this package in their dependency lists.
     pub(crate) parents: Vec<String>,
+    /// Whether a dependency could not be understood from Rust expressions alone.
     pub(crate) opaque_children: bool,
+    /// Build dependency lists, such as buildInputs, whose authored members can be located.
     pub(crate) fields: Vec<Field>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Field {
+    /// Dependency-list field name in the Nix build recipe, such as nativeBuildInputs.
     pub(crate) name: String,
+    /// Rust expression that supplied this dependency list to the build recipe.
     pub(crate) origin: Origin,
+    /// List members recoverable from authored expressions, with their supplier and consumer locations.
     pub(crate) children: Vec<Child>,
+    /// Whether the full outer list was recovered; false means later member positions may be unknown.
     pub(crate) complete: bool,
 }
 
@@ -61,7 +76,9 @@ pub(crate) struct Field {
 pub(crate) struct Child {
     /// Zero-based, outermost first; backend indexes are normalized by the parser.
     pub(crate) path: Vec<usize>,
+    /// Rust expression that supplied the dependency at this list position.
     pub(crate) origin: Origin,
+    /// Rust operation that selected or passed this member into the consuming dependency list.
     pub(crate) consumer: Origin,
 }
 
@@ -76,7 +93,9 @@ type Env<'a> = Rc<Vec<(u64, Binding<'a>)>>;
 
 #[derive(Clone)]
 struct Expr<'a> {
+    /// Authored value or operation being inspected without evaluating Nix.
     node: &'a Node,
+    /// Known function-argument bindings used to follow shared dependencies through authored expressions.
     env: Env<'a>,
 }
 
@@ -494,7 +513,9 @@ fn supplier<'a>(term: Term<'a>, fuel: usize) -> Option<Origin> {
 }
 
 struct List<'a> {
+    /// Known leading list members in their Nix order; inspection stops when the shape is unknown.
     prefix: Vec<Term<'a>>,
+    /// Whether the prefix covers the entire outer list rather than only its known beginning.
     complete: bool,
 }
 
@@ -681,7 +702,9 @@ fn package_scope_projections(callee: &Term<'_>, args: &[Term<'_>]) -> bool {
 }
 
 struct Collector {
+    /// Authored package recipes discovered while inspecting configuration expressions.
     boundaries: Vec<Boundary>,
+    /// Remaining traversal budget, bounding Rust-side inspection of a large expression tree.
     remaining: usize,
 }
 

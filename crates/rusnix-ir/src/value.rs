@@ -45,7 +45,9 @@ pub trait IntoRusnixValue {
     ///
     /// #[derive(IntoRusnixValue)]
     /// struct FileArguments {
+    ///     // Filename supplied as the Nix function argument named name.
     ///     name: String,
+    ///     // File contents supplied as the Nix function argument named text.
     ///     text: String,
     /// }
     ///

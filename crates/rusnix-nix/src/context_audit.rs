@@ -13,11 +13,14 @@ use std::path::Path;
 mod args {
     #[rusnix(root)]
     struct Inputs {
+        /// Absent boolean argument used to check where a deferred Nix lookup failure is reported.
         missing: bool,
+        /// Nested argument view used to exercise failures inside a supplied platform description.
         platform: Platform,
     }
 
     struct Platform {
+        /// Absent platform string used to check the diagnostic for a nested deferred lookup.
         missing: String,
     }
 }
@@ -86,7 +89,7 @@ struct Case {
     value: NixValue,
     /// The accessor, consumer or interop boundary that should receive Rust blame.
     expected: Origin,
-    /// Whether the new policy needs a runtime marker for this failure.
+    /// Expected way to recover the Rust location, such as an error trace or generated text range.
     provenance: Provenance,
 }
 

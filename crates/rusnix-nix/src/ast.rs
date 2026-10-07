@@ -13,9 +13,11 @@ use rusnix_ir::backend::Origin;
 /// failures whose Nix locations point into external code.
 #[derive(Clone, Debug)]
 pub struct NixExpr {
-    /// Rust origin for source-map entries and optional inspection comments, if available.
+    /// Rust operation linked to this expression's generated text range, when available.
+    /// Optional inspection comments also use this location.
     pub origin: Option<Origin>,
-    /// Runtime marker for intentional failure/interop boundaries, not routine structure.
+    /// Whether generated Nix attaches the Rust location to this operation's error trace.
+    /// Used for fallible operations and calls into external Nix code.
     pub error_context: bool,
     /// Syntax to render; attribution does not alter its semantic operation.
     pub kind: NixKind,

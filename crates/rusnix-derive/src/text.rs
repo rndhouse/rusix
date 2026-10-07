@@ -5,8 +5,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use syn::{Expr, Ident, LitStr, Path, Token, parse::Parse, spanned::Spanned};
 
 pub(super) struct Input {
+    /// Crate path supplied by the public wrapper so expansion resolves Rusnix APIs correctly.
     crate_path: Path,
+    /// Rust string literal containing text and named holes for deferred Nix interpolation.
     template: LitStr,
+    /// Named Rust expressions substituted into template holes without evaluating Nix.
     arguments: Vec<(Ident, Expr)>,
 }
 

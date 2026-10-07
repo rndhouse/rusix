@@ -42,11 +42,20 @@ mod value;
 /// #[rusnix::config]
 /// mod configuration {
 ///     #[rusnix(root)]
-///     pub struct Machine { pub services: Services }
+///     pub struct Machine {
+///         // Service settings emitted under the Nix services namespace.
+///         pub services: Services,
+///     }
 ///
-///     pub struct Services { pub example: Example }
+///     pub struct Services {
+///         // Settings for the fictional service, emitted under services.example.
+///         pub example: Example,
+///     }
 ///
-///     pub struct Example { pub enable: bool }
+///     pub struct Example {
+///         // Whether to enable the fictional service; this becomes services.example.enable.
+///         pub enable: bool,
+///     }
 /// }
 ///
 /// use configuration::{Machine, Services, Example};
@@ -85,7 +94,10 @@ mod value;
 ///     enum Mode { Server, Client { endpoint: String } }
 ///
 ///     #[rusnix(root)]
-///     struct Machine { mode: Mode }
+///     struct Machine {
+///         // Service mode requiring explicit Nix lowering because Mode carries variant data.
+///         mode: Mode,
+///     }
 /// }
 /// ```
 pub use rusnix_derive::config;
@@ -102,11 +114,20 @@ pub use rusnix_derive::config;
 /// #[rusnix::options]
 /// mod options {
 ///     #[rusnix(root)]
-///     struct Root { services: Services }
+///     struct Root {
+///         // Service fields looked up after NixOS combines all configuration modules.
+///         services: Services,
+///     }
 ///
-///     struct Services { example: Example }
+///     struct Services {
+///         // Final settings of the fictional service, selected from services.example.
+///         example: Example,
+///     }
 ///
-///     struct Example { port: i64 }
+///     struct Example {
+///         // Final service port selected from the combined NixOS configuration.
+///         port: i64,
+///     }
 /// }
 /// let port: Expr<i64> = options::root().services.example.port();
 /// // Equivalent to OptionRef::<i64>::new("services.example.port").into_expr().
@@ -135,9 +156,18 @@ pub use rusnix_derive::options;
 /// #[rusnix::args]
 /// mod arguments {
 ///     #[rusnix(root)]
-///     struct Inputs { enabled: bool, platform: Platform }
+///     struct Inputs {
+///         // Feature choice looked up in the supplied Nix function arguments.
+///         // Literal enable flag emitted as the Nix field enabled.
+///         enabled: bool,
+///         // Machine information looked up in the supplied Nix function arguments.
+///         platform: Platform,
+///     }
 ///
-///     struct Platform { system: String }
+///     struct Platform {
+///         // Nix CPU and operating-system identifier, such as x86_64-linux.
+///         system: String,
+///     }
 /// }
 /// let value = NixValue::record([
 ///     ("enabled", true.into()),
@@ -425,6 +455,7 @@ pub struct Config {
     pub origin: Origin,
     /// Ordered bindings belonging to this contribution, before backend merging.
     pub assignments: Vec<Assignment>,
+    /// Rust conversion failure retained for validate or compilation to report later.
     error: Option<ValidationError>,
 }
 

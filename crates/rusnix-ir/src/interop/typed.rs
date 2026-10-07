@@ -17,7 +17,7 @@ use std::marker::PhantomData;
 /// while keeping the Rust type, such as [`Package`] or [`Expr<String>`].
 /// Constructing an expression does not evaluate Nix or validate an external value.
 /// Custom symbolic interfaces implement
-/// [`NixRepresentation`](super::raw::NixRepresentation); raw representation
+/// [`NixRepresentation`]; raw representation
 /// access requires importing that separate trait explicitly.
 pub trait NixExpression: NixRepresentation + Clone + IntoRusnixValue {
     /// Let the callback reuse this expression through one shared Nix parameter.
@@ -271,6 +271,7 @@ pub trait NixOverridable: NixExpression {
 /// that the recipe will build successfully. Nix checks operations when evaluated.
 #[derive(Clone, Debug)]
 pub struct Package {
+    /// Expression for the software build recipe and its outputs; selecting fields stays deferred.
     value: NixValue,
 }
 
@@ -432,6 +433,7 @@ impl Package {
 /// the expression; Nix applies it later without building the described packages.
 #[derive(Clone, Debug)]
 pub struct Overlay {
+    /// Function receiving final and previous package sets and returning additions or replacements.
     value: NixValue,
 }
 
@@ -460,11 +462,17 @@ impl Overlay {
     ///     use rusnix_ir::interop::Package;
     ///
     ///     #[rusnix(root)]
-    ///     struct Packages { curl: Package }
+    ///     struct Packages {
+    ///         // Existing curl package selected from this supplied nixpkgs package set.
+    ///         curl: Package,
+    ///     }
     /// }
     ///
     /// #[derive(IntoRusnixValue)]
-    /// struct Changes { my_curl: Package }
+    /// struct Changes {
+    ///     // Package exported as myCurl by the Nix overlay.
+    ///     my_curl: Package,
+    /// }
     ///
     /// let overlay = Overlay::try_from_function(
     ///     |_final_pkgs: packages::Packages, prev: packages::Packages| {
@@ -516,7 +524,9 @@ impl Overlay {
     ///
     /// #[derive(IntoConfig)]
     /// struct Output {
+    ///     // Function describing additions or replacements to the Nix package set.
     ///     overlay: Overlay,
+    ///     // Existing package selected from the customized Nix package set.
     ///     package: PackageRef,
     /// }
     ///
@@ -542,7 +552,11 @@ impl Overlay {
     }
 }
 
-/// A symbolic interface expected to expose nixpkgs' argument override method.
+/// A Nix value whose original function arguments can be changed with `.override`.
+///
+/// nixpkgs attaches this method to results created through its helpers. Calling
+/// it supplies replacement arguments; Nix reruns the function when the new result
+/// is needed. Use this handle to describe those replacements from Rust.
 ///
 /// Packages already have this contract. Wrap other external expressions explicitly
 /// when they are known to be overridable, such as nixpkgs fetcher callables. Plain
@@ -550,7 +564,9 @@ impl Overlay {
 /// This expectation does not inspect the Nix expression or force its attributes.
 #[derive(Clone, Debug)]
 pub struct Overridable<T: NixExpression> {
+    /// Expression whose Nix result is expected to provide the argument-changing `.override` method.
     value: NixValue,
+    /// Rust interface retained after argument overrides; the Nix value is not inspected here.
     _type: PhantomData<(T,)>,
 }
 
@@ -603,7 +619,9 @@ impl<R: NixExpression> Overridable<NixCallable<R>> {
 /// represents functions built by callbacks and symbolic function parameters.
 #[derive(Clone, Debug)]
 pub struct NixCallable<R: NixExpression = NixValue, A: NixExpression = NixValue> {
+    /// Function expression that Nix will apply when a described call is demanded.
     value: NixValue,
+    /// Expected result and argument interfaces for Rust calls; Nix checks actual values later.
     _type: PhantomData<(R, A)>,
 }
 
@@ -695,7 +713,9 @@ impl<R: NixExpression> NixCallable<R> {
 /// checked by Nix when these operations are evaluated.
 #[derive(Clone, Debug)]
 pub struct NixAttrs<T: NixExpression = NixValue> {
+    /// Expression for the collection of named Nix fields; field values remain lazy.
     value: NixValue,
+    /// Expected Rust interface for each selected field, without evaluating the collection.
     _type: PhantomData<(T,)>,
 }
 
@@ -795,7 +815,9 @@ impl NixAttrs {
 /// Rust builds the list description; Nix evaluates its elements only when needed.
 #[derive(Clone, Debug)]
 pub struct NixList<T: NixExpression> {
+    /// Expression for an ordered Nix list whose elements are evaluated only when needed.
     value: NixValue,
+    /// Expected Rust interface for list elements; it does not contain evaluated elements.
     _type: PhantomData<(T,)>,
 }
 
@@ -844,10 +866,13 @@ impl<T: NixExpression> NixList<T> {
     }
 }
 
-/// A deferred Nix path, distinct from a string spelling a pathname or a package.
-/// External wrapping states a path expectation; it performs no file access.
+/// A file or directory path that Nix will resolve when its value is needed.
+/// Nix paths are a separate value type from strings containing pathnames.
+/// Use this handle for recipe files and directories while preserving that distinction.
+/// Rust construction does not access the filesystem or check an external value's type.
 #[derive(Clone, Debug)]
 pub struct NixPath {
+    /// Expression expected to produce a Nix filesystem path, without accessing the file in Rust.
     value: NixValue,
 }
 
@@ -860,11 +885,14 @@ impl super::ToNixText for NixPath {
     }
 }
 
-/// A deferred value that Nix may evaluate to null or to T.
+/// A Nix expression that may produce an absent value (`null`) or a value described by T.
+/// Use it for optional arguments or results whose presence depends on Nix evaluation.
 /// Rust Option chooses a variant during authoring; this interface defers that choice.
 #[derive(Clone, Debug)]
 pub struct NixNullable<T: NixExpression> {
+    /// Expression that Nix may resolve to null or to a value with interface T.
     value: NixValue,
+    /// Rust interface for the non-null result; the null choice is made during Nix evaluation.
     _type: PhantomData<(T,)>,
 }
 
@@ -938,6 +966,7 @@ impl<T: NixExpression> NixNullable<T> {
 /// Nix `stdenv`; Rust does not recreate its builders or build the software.
 #[derive(Clone, Debug)]
 pub struct Stdenv {
+    /// Expression for nixpkgs' build tools, platform information and mkDerivation function.
     value: NixValue,
 }
 

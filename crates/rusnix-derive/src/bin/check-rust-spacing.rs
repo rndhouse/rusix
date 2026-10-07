@@ -5,7 +5,9 @@ use std::{collections::BTreeSet, fs, path::Path};
 use syn::{Item, Stmt, spanned::Spanned, visit::Visit};
 
 struct Spacing<'a> {
+    /// Rust source being inspected, used to distinguish blank lines from lines inside comments.
     source: &'a str,
+    /// Source line positions where distinct item declarations need a separating blank line.
     missing: BTreeSet<usize>,
 }
 

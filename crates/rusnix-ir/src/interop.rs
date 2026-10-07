@@ -43,7 +43,10 @@ macro_rules! handle {
     ($name:ident, $docs:literal) => {
         #[doc = $docs]
         #[derive(Clone, Debug)]
-        pub struct $name(pub(crate) Reference);
+        pub struct $name(
+            /// Source, literal lookup path and Rust location for the object Nix resolves later.
+            pub(crate) Reference,
+        );
 
         impl crate::backend::ReferencedExpression for $name {
             fn reference(&self) -> &Reference {
@@ -117,7 +120,9 @@ infer that a function returns a package or module."
 /// expression, whereas [`NixFunction`] is a reference to an existing function.
 #[derive(Clone, Debug)]
 pub struct PackageFunction<R: NixExpression = NixValue> {
+    /// Nix function with named dependency arguments, lazy defaults and a package or family body.
     function: NixValue,
+    /// Declared Rust interface for a call result; it does not hold or evaluate that result.
     result: std::marker::PhantomData<R>,
 }
 
@@ -132,7 +137,9 @@ impl<R: NixExpression> PackageFunction<R> {
     ///
     /// #[derive(IntoConfig)]
     /// struct Output {
+    ///     // Reusable package function exported so Nix callers can supply dependencies.
     ///     factory: PackageFunction,
+    ///     // Deferred function result whose actual value and type are checked by Nix.
     ///     result: NixValue,
     /// }
     ///
@@ -401,7 +408,10 @@ impl Nixpkgs {
     ///     use rusnix_ir::interop::Package;
     ///
     ///     #[rusnix(root)]
-    ///     struct Packages { curl: Package }
+    ///     struct Packages {
+    ///         // Existing curl package selected from this supplied nixpkgs package set.
+    ///         curl: Package,
+    ///     }
     /// }
     ///
     /// let pkgs = Nixpkgs::new().view::<packages::Packages>();

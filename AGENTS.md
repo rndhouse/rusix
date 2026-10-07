@@ -3,6 +3,41 @@
 Keep the Rust → semantic IR → Nix AST → Nix → Rust diagnostic loop small.
 Users edit Rust; generated Nix is compiler output.
 
+## Documentation
+
+Core docs explain concepts. Examples teach usage. Both assume Rust knowledge,
+not deep Nix, nixpkgs or NixOS knowledge.
+
+Every library struct field must have a meaningful comment, including private
+fields, tuple fields and fields emitted by macro templates. Public fields use
+Rust doc comments and explain what the field actually represents.
+
+For core/library code:
+
+- Explain the underlying Nix concept in plain language before Rusnix semantics.
+- Public structs, enums, traits and macros explain what they represent and why
+  an author would use them. Avoid leading with unexplained jargon.
+- Method docs describe observable behavior before implementation details.
+- Distinguish Rust-time construction and validation from deferred Nix evaluation.
+- Use small Rust-to-Nix examples when they clarify the mapping.
+- Keep `#![warn(missing_docs)]` on intended public library crates and check docs
+  with `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --locked`.
+- Narrow accidental public visibility rather than documenting internal-only APIs.
+
+For examples:
+
+- Treat examples as executable documentation showing normal user-facing Rust
+  with minimal boilerplate. Prefer ordinary structs and enums where possible.
+- Start with 1–2 sentences of module-level `//!` purpose documentation.
+- Comment important structs and fields to explain Nix concepts and Rusnix
+  behavior; do not narrate obvious Rust syntax.
+- Keep substantial examples' model, inputs, lowering and main separate so the
+  authoring surface is easy to find without reading compatibility plumbing.
+- Separate declarations and conceptual blocks with blank lines. Keep simple
+  concepts simple to use.
+
+## Development checks and constraints
+
 Commit after each reasonable, coherent, verified batch of work. Use the configured
 human Git identity only; never add AI/LLM/assistant/agent/harness/tool/vendor
 co-author or attribution trailers.

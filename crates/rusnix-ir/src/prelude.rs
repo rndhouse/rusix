@@ -9,8 +9,10 @@
 //! let format = NixCallable::from_function(|name: Expr<String>| {
 //!     nix_text!("name={name}", name = name)
 //! });
+//!
 //! #[derive(IntoConfig)]
 //! struct Output {
+//!     // Text produced by the described Nix function when this output is evaluated.
 //!     message: Expr<String>,
 //! }
 //!

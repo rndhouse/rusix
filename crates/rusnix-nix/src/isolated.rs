@@ -28,8 +28,11 @@ use tempfile::TempDir;
 pub struct NixSession {
     /// Temporary directory containing the session’s local store and evaluator files.
     disposable: TempDir,
+    /// Lock keeping staging, parsing and evaluation in this disposable workspace sequential.
     evaluation: Mutex<()>,
+    /// Marker set after the checked minimal nixpkgs files have been staged for this session.
     pub(crate) pinned_staged: OnceLock<()>,
+    /// Retained checked nixpkgs checkout used for full-package interoperability in this session.
     pub(crate) full_source: std::sync::OnceLock<std::sync::Arc<crate::interop::FullSource>>,
 }
 

@@ -639,9 +639,13 @@ fn recover_operation(
 // The dependency index is emitted by the pinned validator, not by arbitrary
 // English error matching. Require its source frame and the ordered owner chain.
 struct BackendFrame {
+    /// Original trace message with terminal color escapes removed, before interpreting dependency clues.
     message: String,
+    /// Nix source filename reported for this trace step, if the evaluator supplied one.
     file: Option<String>,
+    /// One-based Nix source line reported for the trace step, when available.
     line: Option<u64>,
+    /// One-based Nix source column reported for the trace step, when available.
     column: Option<u64>,
 }
 
@@ -755,8 +759,11 @@ fn owner_chain(
 }
 
 struct BackendMatch {
+    /// Authored build recipe matched to nixpkgs' dependency-validation trace.
     boundary: crate::backend::Boundary,
+    /// Dependency list in that recipe containing the rejected member.
     field: crate::backend::Field,
+    /// Matched list member, including the Rust locations that supplied and consumed it.
     child: crate::backend::Child,
 }
 
@@ -852,8 +859,11 @@ fn render_location(out: &mut String, origin: &Origin, source_root: &Path) {
 /// NixOS exposes definition lists only inside raw_msg, not as JSON fields.
 /// Keep the pinned showDefs/mergeEqualOption message adapter at the wire boundary.
 pub(crate) struct ModuleFailure {
+    /// Whether NixOS rejected an unknown option, a value type or conflicting definitions.
     pub(crate) kind: DiagnosticKind,
+    /// Configuration option path named in the original NixOS error message.
     pub(crate) option: String,
+    /// Definition or import filenames NixOS reported as contributors to this failure.
     pub(crate) files: Vec<String>,
 }
 

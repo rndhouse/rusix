@@ -20,6 +20,7 @@
 //!
 //! #[derive(IntoConfig)]
 //! struct Output {
+//!     // Integer computation deferred until Nix evaluates the answer field.
 //!     answer: Expr<i64>,
 //! }
 //!
@@ -118,6 +119,7 @@ pub fn compile(config: impl IntoConfig) -> Result<Generated, Box<Diagnostic>> {
 ///
 /// #[derive(IntoConfig)]
 /// struct Output {
+///     // Literal enable flag emitted as the Nix field enabled.
 ///     enabled: bool,
 /// }
 ///

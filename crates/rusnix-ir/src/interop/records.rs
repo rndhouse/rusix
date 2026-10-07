@@ -7,7 +7,9 @@ mod views {
 
     #[rusnix(root)]
     struct Inputs {
+        /// Supplied machine description used to choose platform-specific build behavior.
         platform: Platform,
+        /// Final build-recipe fields supplied by mkDerivation, including overridden values.
         final_attrs: FinalAttrs,
     }
 

@@ -114,6 +114,7 @@ pub(crate) fn lower_reference_scoped<'a>(
 // Only the checked source checkout is shared; each NixSession still owns its
 // own store/eval-store. Revalidate when no sessions retain the source handle.
 pub(crate) struct FullSource {
+    /// Filesystem root of the verified pinned nixpkgs checkout shared by live sessions.
     pub(crate) path: PathBuf,
 }
 

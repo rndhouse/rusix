@@ -6,9 +6,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use syn::{Fields, Ident, Item, ItemMod, LitStr, PathArguments, Type, spanned::Spanned};
 
 struct View {
+    /// Author-written struct whose fields declare Nix lookups and their expected Rust types.
     item: syn::ItemStruct,
+    /// Whether this struct starts the declared NixOS option tree or supplied argument view.
     root: bool,
+    /// Whether this view exposes its entire deferred Nix value in addition to field accessors.
     value: bool,
+    /// Field-name conversion used to map Rust identifiers to literal Nix attribute names.
     naming: Naming,
 }
 
@@ -428,6 +432,7 @@ fn expand_from(mut module: ItemMod, source: Source) -> syn::Result<TokenStream> 
             .then(|| quote!(#[doc = #description]));
         let source_field = matches!(source, Source::Arguments).then(|| {
             quote!(
+                /// Supplied Nix argument expression on which this view's field lookups operate.
                 __rusnix_source: ::rusnix_ir::interop::raw::NixValue,
             )
         });
@@ -599,6 +604,7 @@ fn expand_from(mut module: ItemMod, source: Source) -> syn::Result<TokenStream> 
             #[derive(Clone)]
             pub struct #name {
                 #source_field
+                /// Literal names leading from the Nix source to the fields exposed by this view.
                 __rusnix_path: ::std::vec::Vec<::std::string::String>,
                 #(#branches)*
             }
@@ -672,11 +678,13 @@ mod tests {
             mod args {
                 #[rusnix(root)]
                 struct Root {
+                    // Nested supplied settings used to exercise generated field navigation.
                     settings: Settings,
                 }
 
                 #[rusnix(value)]
                 struct Settings {
+                    // Integer field used to exercise a deferred Nix lookup.
                     port: i64,
                 }
             }
@@ -710,6 +718,7 @@ mod tests {
             mod options {
                 #[rusnix(root)]
                 struct Root {
+                    // Nested supplied settings used to exercise generated field navigation.
                     settings: Settings,
                 }
 
@@ -718,6 +727,7 @@ mod tests {
                 struct Settings {
                     /// Port selected by ordinary NixOS merging.
                     port: i64,
+                    // Undocumented boolean input used to check generated fallback documentation.
                     enabled: bool,
                 }
             }
@@ -846,6 +856,7 @@ mod tests {
                 #[rusnix(root)]
                 struct Root {
                     #[rusnix(expression, rename = "external-value")]
+                    // External expression interface retained on the renamed Nix field.
                     value: external::Record,
                 }
             }

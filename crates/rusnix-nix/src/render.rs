@@ -42,8 +42,9 @@ pub struct Generated {
     pub source: String,
     /// Text ranges linked to Rust operations and their enclosing configuration fields.
     pub spans: Vec<SourceSpan>,
-    /// Optional compiler-owned backend correlation data. Older maps omit it.
-    /// This is diagnostic metadata, independent of the generated expression.
+    /// Saved authored package dependencies used to recover Rust locations from
+    /// nixpkgs build-recipe validation failures. Older saved artifacts omit this field.
+    /// This diagnostic metadata is independent of the generated Nix expression.
     #[doc(hidden)]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub backend_metadata: Option<serde_json::Value>,
