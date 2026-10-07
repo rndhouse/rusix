@@ -2,6 +2,8 @@
 //! Accessors describe deferred `config.*` lookups; they do not declare options or read values in Rust.
 use rusnix_ir as rusnix;
 
+/// Declares accessors for the final NixOS settings used by the PostgreSQL implementation.
+/// References follow config.* after merging, including defaults and choices from other modules.
 #[rusnix::options]
 mod references {
     use rusnix_ir::interop::raw::NixValue;

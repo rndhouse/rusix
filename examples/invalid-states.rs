@@ -40,7 +40,8 @@ pub struct PrivateKey(
     pub String,
 );
 
-// Local structs lower automatically; the reusable types above supply their own conversions.
+/// Places one complete transport choice under demo.transport in the generated Nix record.
+/// The transport conversion decides which credential fields accompany that choice.
 #[rusnix::config]
 mod config {
     use super::{Certificate, PrivateKey, Transport};

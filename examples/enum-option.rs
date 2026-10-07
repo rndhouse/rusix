@@ -8,7 +8,8 @@
 
 use rusnix_ir::{self as rusnix};
 
-// Local structs and unit enums lower automatically through one module boundary.
+/// Defines the connection mode and Rust policy emitted under the demo Nix attribute set.
+/// Enum variants become strings and nested structs determine the output's fields.
 #[rusnix::config]
 mod config {
     /// A choice defined by this configuration, not a built-in Rusnix type.

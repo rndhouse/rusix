@@ -10,6 +10,8 @@ pub use inputs::Arguments;
 use rusnix_ir as rusnix;
 use rusnix_ir::interop::{Nixpkgs, Package as PackageValue, PackageFunction};
 
+/// Defines the Nix output containing Git's reusable recipe function and selected package.
+/// Each root field becomes a named attribute that a Nix caller can select.
 #[rusnix::config]
 mod output {
     use super::{PackageFunction, PackageValue};

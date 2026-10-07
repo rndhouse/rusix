@@ -52,7 +52,8 @@ pub fn configure_service(endpoint: Endpoint, transport: Transport) -> ServiceCon
     }
 }
 
-// The module macro lowers local structs; Endpoint and Transport keep their own conversions.
+/// Places the typed service function's result under demo in the generated Nix attribute set.
+/// The reusable endpoint and transport types supply their own value conversions.
 #[rusnix::config]
 mod config {
     use super::{Endpoint, Hostname, Port, Transport, configure_service};

@@ -59,7 +59,8 @@ impl IntoRusnixValue for Transport {
     }
 }
 
-// One module boundary lowers these local trees; each explicit root is a separate contribution type.
+/// Defines separate Nix output trees for our transport model, package list and function results.
+/// Each root can be compiled on its own or contributed to a NixOS module.
 #[rusnix::config]
 mod config {
     use super::{NixValue, PackageRef, Transport};

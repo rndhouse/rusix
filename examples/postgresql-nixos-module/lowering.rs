@@ -717,6 +717,8 @@ fn checks() -> NixValue {
         .into()
 }
 
+/// Defines the NixOS contributions for author-supplied inputs and computed PostgreSQL settings.
+/// Their nested fields place defaults, generated files and service definitions at NixOS option paths.
 #[rusnix::config]
 mod config {
     use super::*;

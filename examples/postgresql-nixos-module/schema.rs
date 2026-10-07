@@ -10,6 +10,8 @@ use rusnix_ir::{
     nixos::{NixosModule, OptionDecl, OptionType},
 };
 
+/// Defines PostgreSQL's accepted NixOS options as a nested declaration tree.
+/// These fields describe types and defaults; configuration contributions supply their values.
 #[rusnix::config]
 mod declarations {
     use super::OptionDecl;
@@ -273,7 +275,8 @@ pub(crate) fn module() -> NixosModule {
         ]))
 }
 
-// Public documentation retained verbatim from the pinned upstream module.
+/// Retains the pinned upstream descriptions shown in PostgreSQL's NixOS option documentation.
+/// The declarations attach these strings to their options alongside types and defaults.
 mod docs {
     pub(super) const CHECK_CONFIG: &str =
         r#"Check the syntax of the configuration file at compile time"#;

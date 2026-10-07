@@ -9,7 +9,8 @@ pub struct Port(
     pub u16,
 );
 
-// Automatic structural lowering supplies paths, not NixOS option declarations.
+/// Contributes SSH settings and imports the upstream NixOS module that declares their options.
+/// Rust structs provide the setting paths; NixOS checks their values during evaluation.
 #[rusnix::config]
 mod config {
     use super::Port;

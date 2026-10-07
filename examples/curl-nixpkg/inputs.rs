@@ -2,7 +2,8 @@
 //! Accessors describe deferred lookups; Rust does not evaluate the arguments.
 use rusnix_ir as rusnix;
 
-/// Local views describe only the external Nix values used by this compatibility adapter.
+/// Declares named accessors for curl's Nix function arguments and the dependency fields it uses.
+/// Rust constructs references through these views; Nix resolves the selected values later.
 #[rusnix::args]
 pub(super) mod args {
     use rusnix_ir::interop::{NixCallable, Overridable, Package, raw::NixValue};

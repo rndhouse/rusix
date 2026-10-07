@@ -2,6 +2,8 @@
 //! Rust accessors generate references; Nix resolves their values only when the recipe needs them.
 use rusnix_ir as rusnix;
 
+/// Declares the release, dependencies and features supplied to MariaDB's Nix function.
+/// Accessors describe argument lookups without reading those values in Rust.
 #[rusnix::args]
 pub mod args {
     use rusnix_ir::interop::{NixCallable, NixLibrary, Package, Stdenv, raw::NixValue};

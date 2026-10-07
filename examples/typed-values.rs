@@ -35,7 +35,8 @@ pub fn listen(port: Port) -> Port {
     port
 }
 
-// The local tree gets automatic conversions; reusable types above keep explicit derives.
+/// Defines the demo listener's Nix fields, including renamed and flattened ownership values.
+/// Rust domain types become primitive values while the structs determine their placement.
 #[rusnix::config]
 mod config {
     use super::{Port, UserId, UserName, listen};

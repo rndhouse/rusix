@@ -1,5 +1,8 @@
 //! Declares the package and recipe fields that this overlay reads from nixpkgs.
 //! Rust field names map to Nix attribute names; accessors describe deferred lookups.
+
+/// Declares accessors for existing nixpkgs packages, builder attributes and package metadata.
+/// These views describe the fields used by the overlay without supplying their implementations.
 #[rusnix_ir::args]
 mod views {
     use rusnix_ir::{

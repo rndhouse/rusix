@@ -403,7 +403,8 @@ struct Common {
     meta: NixValue,
 }
 
-// Declare the shared fields used below while retaining the caller's complete recipe.
+/// Declares accessors for recipe fields shared by MariaDB's client and server variants.
+/// The views retain the complete shared recipe so each variant can extend it in Nix.
 #[rusnix::args]
 mod common_view {
     use rusnix_ir::interop::{NixList, NixPath, Package};

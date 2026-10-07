@@ -8,7 +8,8 @@ use rusnix_ir::{
     nixos::{NixosModule, OptionRef},
 };
 
-// One boundary supplies structural lowering for all the local configuration structs.
+/// Places service settings and a dependent startup command in their NixOS option paths.
+/// The command can refer to the final port that NixOS resolves after merging definitions.
 #[rusnix::config]
 mod config {
     use rusnix_ir::Expr;

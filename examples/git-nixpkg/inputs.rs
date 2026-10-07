@@ -6,7 +6,8 @@ use rusnix_ir::{
     interop::{NixPath, Nixpkgs, Package, raw::NixValue},
 };
 
-/// Finite navigation over the external Nix arguments this package implementation uses.
+/// Declares named accessors for the dependencies and features passed to Git's Nix function.
+/// The views describe lookups; Nix supplies their values when applying the function.
 #[rusnix::args]
 pub(super) mod args {
     use rusnix_ir::{

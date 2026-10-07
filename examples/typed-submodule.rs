@@ -32,7 +32,8 @@ pub struct Endpoint {
     pub port: Port,
 }
 
-// Reusable types above keep their derives; this local tree needs one boundary.
+/// Places the reusable endpoint under demo.endpoint in the generated Nix attribute set.
+/// Parent structs define its location while the endpoint retains its own value conversion.
 #[rusnix::config]
 mod config {
     use super::{Endpoint, Hostname, Port};

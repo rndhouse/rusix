@@ -7,7 +7,8 @@
 
 use rusnix_ir::{self as rusnix};
 
-// The enum, policy consumers and local configuration tree share one boundary.
+/// Computes firewall and service choices from one Rust mode and places them under demo in Nix.
+/// Both policies are decided in Rust before their resulting fields are emitted.
 #[rusnix::config]
 mod config {
     /// One shared model choice; Rusnix automatically lowers unit variants to strings.

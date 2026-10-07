@@ -2,6 +2,8 @@
 //! Rust accessors generate references; Nix resolves their values only when the recipe needs them.
 use rusnix_ir as rusnix;
 
+/// Declares the dependencies and feature arguments accepted by the OpenSSL Nix function.
+/// Its views retain the caller's values for Nix to resolve when the recipe needs them.
 #[rusnix::args]
 #[allow(dead_code)] // Upstream retains unused coreutils/writeShellScript parameters.
 pub mod args {
