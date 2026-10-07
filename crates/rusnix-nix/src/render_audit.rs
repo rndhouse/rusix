@@ -3,7 +3,7 @@ use super::*;
 use crate::context_audit::equivalent_diagnostics;
 use rusnix_ir::{
     Expr,
-    interop::{NixValue, Nixpkgs},
+    interop::{Nixpkgs, raw::NixValue},
     nix_text,
     nixos::{DefinitionPriority, NixosModule, OptionDecl, OptionRef, OptionType},
 };

@@ -1,4 +1,5 @@
 //! Explicit Nix text coercion retains dependency contexts and Rust provenance.
+use super::raw::NixRepresentation;
 use super::{NixExpression, NixValue, Package, PackageRef};
 use crate::{Expr, nixos::OptionRef};
 

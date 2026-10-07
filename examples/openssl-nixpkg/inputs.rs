@@ -4,7 +4,9 @@ use rusnix_ir as rusnix;
 #[rusnix::args]
 #[allow(dead_code)] // Upstream retains unused coreutils/writeShellScript parameters.
 pub mod args {
-    use rusnix_ir::interop::{NixCallable, NixLibrary, NixNullable, NixValue, Package, Stdenv};
+    use rusnix_ir::interop::{
+        NixCallable, NixLibrary, NixNullable, Package, Stdenv, raw::NixValue,
+    };
 
     /// Caller-owned dependencies and lazy policy arguments.
     #[rusnix(root)]

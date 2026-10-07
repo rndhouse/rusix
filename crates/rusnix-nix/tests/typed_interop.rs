@@ -1,9 +1,10 @@
 //! Typed authoring uses the same IR, lazy evaluator and diagnostic boundaries.
+use rusnix_ir::interop::raw::NixRepresentation;
 use rusnix_ir::{
     self as rusnix, Config, Expr, IntoRusnixValue,
     interop::{
-        NixAttrs, NixCallable, NixExpression, NixList, NixNullable, NixPath, NixValue, Nixpkgs,
-        Package, PackageFunction,
+        NixAttrs, NixCallable, NixExpression, NixList, NixNullable, NixPath, Nixpkgs, Package,
+        PackageFunction, raw::NixValue,
     },
 };
 use rusnix_nix::{NixSession, compile};
@@ -318,7 +319,7 @@ fn structured_bindings_preserve_views_and_reject_before_building_the_callback() 
 
 #[test]
 fn typed_library_operations_retain_the_supplied_helpers_and_output_fallbacks() {
-    use rusnix_ir::interop::{NixExpression, NixLibrary};
+    use rusnix_ir::interop::NixLibrary;
 
     let lib = Nixpkgs::new().library();
     assert_eq!(evaluate(lib.version_at_least("3.3.2", "3.0")), true);

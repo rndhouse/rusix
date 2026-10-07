@@ -1,10 +1,11 @@
 //! Reproduces curlMinimal's complete pinned package recipe with real nixpkgs builders.
 use super::inputs::{Inputs, args};
+use rusnix_ir::interop::raw::NixRepresentation;
 use rusnix_ir::{
     Expr, IntoRusnixValue,
     interop::{
         FinalAttrs, NixAttrs, NixCallable, NixExpression, NixLibrary, NixList, NixOverridable,
-        NixValue, Package, PackageFunction,
+        Package, PackageFunction, raw::NixValue,
     },
     nix_record, nix_text, package,
 };
@@ -53,7 +54,7 @@ pub fn factory() -> PackageFunction<Package> {
 
         // The public interface remains four independent booleans. Count with the
         // caller's lib, then use Nix's native assertion, as the pinned source does.
-        let count = i.lib.as_value().select("count").apply([
+        let count = i.lib.as_expression().select("count").apply([
             NixValue::function(|value| value),
             NixValue::list([
                 i.gnutls_support().into(),
@@ -146,7 +147,7 @@ struct Metadata {
 
 /// Construct recipe attributes inside mkDerivation's recursive finalAttrs callback.
 fn attributes(i: &Inputs, final_attrs: FinalAttrs) -> Derivation {
-    let lib = NixLibrary::from_value(i.lib.as_value());
+    let lib = NixLibrary::from_expression(i.lib.as_expression());
     let version = final_attrs.version();
     let release_tag = version.clone().replace_text([(".", "_")]);
 
@@ -181,7 +182,7 @@ fn attributes(i: &Inputs, final_attrs: FinalAttrs) -> Derivation {
         separate_debug_info: i.stdenv.host_platform().is_linux(),
         enable_parallel_building: true,
         strict_deps: true,
-        env: lib.as_value().clone().select("optionalAttrs").apply([
+        env: lib.as_expression().clone().select("optionalAttrs").apply([
             i.stdenv
                 .host_platform()
                 .is_darwin()
@@ -267,7 +268,7 @@ fn dependencies(i: &Inputs, lib: &NixLibrary) -> NixList<Package> {
 
 /// Call the supplied library's configure helpers; disabled output arguments stay deferred.
 fn configure_flags(i: &Inputs, lib: &NixLibrary) -> NixList<Expr<String>> {
-    let raw = lib.as_value();
+    let raw = lib.as_expression();
     let mut flags: Vec<Expr<String>> = vec![
         "--enable-versioned-symbols".into(),
         "--disable-manual".into(),

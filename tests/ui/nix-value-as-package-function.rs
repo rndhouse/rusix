@@ -1,4 +1,4 @@
-use rusnix_ir::interop::{NixValue, Nixpkgs};
+use rusnix_ir::interop::{raw::NixValue, Nixpkgs};
 
 fn main() {
     let pkgs = Nixpkgs::new();

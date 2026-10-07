@@ -5,7 +5,7 @@
 //! perform the actual checking and merging. Rust only describes those declarations.
 use crate::{
     IntoRusnixValue, RusnixValue, ValidationError,
-    interop::{NixValue, Nixpkgs},
+    interop::{Nixpkgs, raw::NixValue},
 };
 
 /// A rule NixOS uses to validate and merge configuration values.

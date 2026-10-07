@@ -3,7 +3,7 @@ use rusnix_ir as rusnix;
 
 #[rusnix::args]
 pub mod args {
-    use rusnix_ir::interop::{NixCallable, NixLibrary, NixValue, Package, Stdenv};
+    use rusnix_ir::interop::{NixCallable, NixLibrary, Package, Stdenv, raw::NixValue};
 
     /// Deferred common and server dependencies plus the four upstream feature defaults.
     #[rusnix(root)]

@@ -3,7 +3,7 @@ use crate::{
     Diagnostic, Evaluation, Generated, NixSession,
     ast::{BinaryOp, Builtin, NixExpr, NixKind},
 };
-use rusnix_ir::interop::{AttrPath, Reference, Source};
+use rusnix_ir::interop::{Reference, Source, raw::AttrPath};
 use std::{
     path::{Path, PathBuf},
     process::Command,

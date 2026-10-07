@@ -14,7 +14,8 @@ wrappers. `rusnix_nix` documents compilation and isolated evaluation.
 [Typed deferred package authoring](docs/typed-package-values.md) preserves package,
 function, list, record and scalar interfaces through lazy bindings and composition.
 The OpenSSL, curl, Git and MariaDB examples use these interfaces; dynamic interop
-continues to use `NixValue`.
+uses `interop::raw::NixValue`. Normal authors can import
+`rusnix_ir::prelude::*`; raw representation access requires a separate import.
 
 ```text
 User-defined Rust domain model
@@ -880,7 +881,7 @@ arguments are dependencies and feature options. Construct it with
 named defaults and body construction as `NixValue::function_attrs`.
 
 ```rust
-use rusnix_ir::{Config, Expr, interop::{NixValue, Nixpkgs, PackageFunction}};
+use rusnix_ir::{Config, Expr, interop::{raw::NixValue, Nixpkgs, PackageFunction}};
 
 let factory: PackageFunction<Expr<String>> =
     PackageFunction::from_function_attrs(["curl", "label"], |args| {
@@ -1143,7 +1144,7 @@ Nix overrides of the same artifact; UI fixtures check the compile-time boundary.
 
 `lib` is nixpkgs' utility library, a record of functions separate from the Nix
 language's `builtins`. Bind its supported Rust helpers to a caller's library with
-`NixLibrary::from_value(inputs.lib.as_value())`. The `optional`, `optionals`,
+`NixLibrary::from_expression(inputs.lib.as_expression())`. The `optional`, `optionals`,
 `optional_text`, `all`, `concat_lists`, version comparisons, output selection and
 text replacement methods call that exact library, including caller overrides.
 Conditions and version/text inputs retain scalar types; optional lists and
@@ -1152,7 +1153,7 @@ natural expression interfaces.
 `throw_if_not(condition, message, value)`
 validates an expression when Nix evaluates it; it is separate from the NixOS
 assertion collection. Arbitrary functions remain accessible through
-`lib.as_value().clone().select("makeBinPath").call(packages)`.
+`lib.as_expression().clone().select("makeBinPath").call(packages)`.
 Named helpers grow from demonstrated real-world usage; arbitrary nixpkgs `lib`
 access remains available through the generic `NixValue` escape hatch.
 For the pinned library, explicitly choose `Nixpkgs::library()`.

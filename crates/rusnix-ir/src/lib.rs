@@ -22,6 +22,9 @@ pub mod nixos;
 
 pub mod package;
 
+/// Common typed authoring interfaces; raw interop and backend access require explicit imports.
+pub mod prelude;
+
 mod value;
 
 /// Turn an inline Rust module’s local types into Nix configuration values.
@@ -124,7 +127,7 @@ pub use rusnix_derive::options;
 /// Accessors construct Nix expressions; they do not read argument values in Rust.
 ///
 /// ```
-/// use rusnix_ir::{self as rusnix, interop::NixValue};
+/// use rusnix_ir::{self as rusnix, interop::raw::NixValue};
 ///
 /// #[rusnix::args]
 /// mod arguments {
@@ -143,9 +146,9 @@ pub use rusnix_derive::options;
 /// // Each accessor describes a field lookup; no Nix evaluation happens here.
 /// ```
 ///
-/// Bind the view to an existing [`interop::NixValue`] using generated `from_value`.
+/// Bind the view to an existing [`interop::raw::NixValue`] using generated `from_value`.
 /// This also works with the placeholders supplied by
-/// [`interop::NixValue::function_attrs`]. Nix remains responsible for caller
+/// [`interop::raw::NixValue::function_attrs`]. Nix remains responsible for caller
 /// arguments, defaults and actual types.
 ///
 /// Use one root in an inline module. Leaf types, naming and optional subtree
@@ -222,7 +225,7 @@ impl Origin {
 /// Backend authors use these nodes to generate Nix; the collection of nodes is
 /// Rusnix’s *intermediate representation* (IR). It describes computation without
 /// performing it. Normal authoring uses [`Expr`], [`IntoRusnixValue`] or
-/// [`interop::NixValue`] instead of constructing nodes.
+/// [`interop::raw::NixValue`] instead of constructing nodes.
 #[derive(Clone, Debug)]
 pub struct Node {
     /// Rust operation that introduced this expression.
@@ -271,7 +274,7 @@ pub enum ValueKind {
     /// Native expression assertion; only a true condition permits demanding the result.
     Assert(Box<Node>, Box<Node>),
     /// A deferred lookup through literal attribute segments.
-    Select(Box<Node>, interop::AttrPath),
+    Select(Box<Node>, interop::raw::AttrPath),
     /// Scoped callbacks at the opaque Nix boundary, not Rust-side evaluation.
     Function {
         /// Lexical identity shared with parameter references in this callback.
@@ -297,7 +300,7 @@ pub enum ValueKind {
     /// Equality checked by the backend using its native value semantics.
     Equal(Box<Node>, Box<Node>),
     /// A NixOS-scoped dependency, never a concrete Rust value.
-    OptionReference(interop::AttrPath),
+    OptionReference(interop::raw::AttrPath),
     /// Deferred text coercion that retains Nix string dependency context.
     ToText(Box<Node>),
     /// Concrete text followed by a deferred string value.
@@ -327,7 +330,7 @@ pub enum ValueKind {
 /// For example, [`Expr<i64>`] describes an integer expression and provides
 /// integer operations such as [`Self::divide`]. Calling those methods constructs
 /// more expressions; it does not compute or read the result in Rust. Use
-/// [`interop::NixValue`] when the value’s category should remain unspecified.
+/// [`interop::raw::NixValue`] when the value’s category should remain unspecified.
 ///
 /// `T` restricts Rust composition. For references to external Nix values, it is
 /// an expectation rather than proof of their actual types; Nix or NixOS checks
@@ -427,8 +430,8 @@ impl Expr<bool> {
     /// the left is true. This uses Nix conditionals, independently of nixpkgs `lib`.
     #[track_caller]
     pub fn and(self, other: Self) -> Self {
-        let other = interop::NixValue::if_else(other, true, false);
-        interop::NixValue::if_else(self, other, false).into_expr()
+        let other = interop::raw::NixValue::if_else(other, true, false);
+        interop::raw::NixValue::if_else(self, other, false).into_expr()
     }
 
     /// Construct boolean OR for Nix to evaluate later.
@@ -436,8 +439,8 @@ impl Expr<bool> {
     /// only when the left is false, independently of nixpkgs `lib`.
     #[track_caller]
     pub fn or(self, other: Self) -> Self {
-        let other = interop::NixValue::if_else(other, true, false);
-        interop::NixValue::if_else(self, true, other).into_expr()
+        let other = interop::raw::NixValue::if_else(other, true, false);
+        interop::raw::NixValue::if_else(self, true, other).into_expr()
     }
 
     /// Construct boolean implication: the right operand must be true if the left is true.
@@ -455,7 +458,7 @@ impl std::ops::Not for Expr<bool> {
 
     #[track_caller]
     fn not(self) -> Self {
-        (!interop::NixValue::from(self)).into_expr()
+        (!interop::raw::NixValue::from(self)).into_expr()
     }
 }
 

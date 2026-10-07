@@ -26,11 +26,11 @@ the platform flags. Dependent defaults use the same lexical scope without
 reconstructing the complete argument record. Declared subtrees
 marked `#[rusnix(value)]` expose `as_value()` when the whole opaque record is
 needed. Naming follows the same rules as `#[rusnix::options]`. Generic condition/list
-helpers use `NixLibrary::from_value(inputs.lib.as_value())`, preserving the
+helpers use `NixLibrary::from_expression(inputs.lib.as_expression())`, preserving the
 caller's library overrides. Feature checks use native `NixValue::assert`; their
 order remains explicit in the package factory, and an overridden `lib.throwIfNot`
 cannot bypass them. Other library functions use the visibly dynamic
-`lib.as_value().clone().select(...).apply(...)` escape hatch.
+`lib.as_expression().clone().select(...).apply(...)` escape hatch.
 Boolean `!`, `.and()`, `.or()` and `.implies()` stay symbolic and
 independent of library overrides. Passthru merging uses `merge_attrs`, so replacing `lib.any` or
 `lib.mergeAttrs` does not change those native operations. Pinned Git asset paths

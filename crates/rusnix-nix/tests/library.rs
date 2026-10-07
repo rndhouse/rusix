@@ -1,7 +1,8 @@
 //! Generic library helpers preserve the caller's functions and deferred value semantics.
+use rusnix_ir::interop::raw::NixRepresentation;
 use rusnix_ir::{
     self as rusnix, Config, Expr,
-    interop::{InputRef, NixExpression, NixLibrary, NixList, NixValue, Nixpkgs, Package},
+    interop::{InputRef, NixLibrary, NixList, Nixpkgs, Package, raw::NixValue},
     nix_text,
 };
 use rusnix_nix::{NixSession, compile};
@@ -9,7 +10,7 @@ use std::path::Path;
 
 #[rusnix::args]
 mod args {
-    use rusnix_ir::interop::NixValue;
+    use rusnix_ir::interop::raw::NixValue;
 
     #[rusnix(root)]
     struct Inputs {
@@ -88,7 +89,7 @@ fn standard_helpers_handle_concrete_values_empty_lists_and_false_conditions() {
             ("typedNot", (!Expr::boolean(false)).into()),
             (
                 "curried",
-                lib.as_value()
+                lib.as_expression()
                     .clone()
                     .select("concatStringsSep")
                     .apply(["/".into(), NixValue::list(["a".into(), "b".into()])])
@@ -111,7 +112,7 @@ fn standard_helpers_handle_concrete_values_empty_lists_and_false_conditions() {
 fn library_helpers_accept_typed_symbolic_argument_values() {
     let factory = NixValue::function_attrs(["lib", "enabled", "number", "text"], |value| {
         let args = args::from_value(value);
-        let lib = NixLibrary::from_value(args.lib());
+        let lib = NixLibrary::from_expression(args.lib());
         let _: Expr<bool> = !args.enabled();
         let conjunction = args.enabled().and(args.enabled());
         let items = NixValue::list([args.number().into()]);
@@ -204,7 +205,7 @@ fn standard_conditionals_and_all_leave_excluded_or_short_circuited_values_lazy()
             ),
             (
                 "headOnly",
-                lib.as_value()
+                lib.as_expression()
                     .clone()
                     .select("length")
                     .apply([lib.optional(true, failure.clone()).into()])
@@ -224,7 +225,7 @@ fn standard_conditionals_and_all_leave_excluded_or_short_circuited_values_lazy()
     // concatLists must not force individual elements merely to construct the list.
     assert_eq!(
         evaluate(
-            lib.as_value().clone().select("length").apply([lib
+            lib.as_expression().clone().select("length").apply([lib
                 .concat_lists([NixValue::list([failure])].map(NixList::<NixValue>::from_expression))
                 .into()])
         ),
@@ -304,7 +305,7 @@ fn every_library_helper_uses_the_supplied_record_including_overridden_functions(
             }),
         ),
     ]);
-    let lib = NixLibrary::from_value(library);
+    let lib = NixLibrary::from_expression(library);
     let values = NixValue::list([42_i64.into()]);
 
     assert_eq!(
@@ -347,7 +348,7 @@ fn every_library_helper_uses_the_supplied_record_including_overridden_functions(
             ),
             (
                 "custom",
-                lib.as_value()
+                lib.as_expression()
                     .clone()
                     .select("custom")
                     .apply([true.into(), 7_i64.into()])
@@ -373,9 +374,9 @@ fn every_library_helper_uses_the_supplied_record_including_overridden_functions(
 
 #[test]
 fn helper_failures_capture_the_public_call_site_and_keep_the_nix_trace() {
-    let lib = NixLibrary::from_value(NixValue::record([] as [(&str, NixValue); 0]));
+    let lib = NixLibrary::from_expression(NixValue::record([] as [(&str, NixValue); 0]));
     let lookup_line = line!() + 1;
-    let missing = lib.as_value().clone().select("missing").call(true);
+    let missing = lib.as_expression().clone().select("missing").call(true);
     let supplied = Package::from_expression(NixValue::from(42_i64));
     let empty = NixList::<NixValue>::new([]);
     let cases = [
@@ -593,7 +594,7 @@ fn ordered_guards_retain_failing_condition_and_message_origins() {
 
 #[test]
 fn ordered_guards_use_the_supplied_throw_function_at_every_level() {
-    let lib = NixLibrary::from_value(NixValue::record([(
+    let lib = NixLibrary::from_expression(NixValue::record([(
         "throwIfNot",
         NixValue::function(|_| {
             NixValue::function(|message| {

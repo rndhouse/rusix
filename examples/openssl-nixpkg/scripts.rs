@@ -1,7 +1,7 @@
 //! Exact pinned phase text; these are shell scripts, not embedded Nix recipes.
 use rusnix_ir::{
     Expr,
-    interop::{NixValue, Package},
+    interop::{Package, raw::NixValue},
     nix_text,
 };
 

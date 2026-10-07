@@ -8,9 +8,10 @@ mod lowering;
 #[path = "../../../examples/curl-nixpkg/model.rs"]
 mod model;
 
+use rusnix_ir::interop::raw::NixRepresentation;
 use rusnix_ir::{
     Config, Expr, IntoRusnixValue,
-    interop::{InputRef, NixValue, Nixpkgs},
+    interop::{InputRef, Nixpkgs, raw::NixValue},
 };
 use rusnix_nix::{Diagnostic, Generated, NixSession, compile};
 use std::{
@@ -466,7 +467,7 @@ fn excluded_dependencies_passthru_and_unused_factory_remain_lazy() {
         &Config::new().set("good", true).set(
             "unused",
             lowering::factory()
-                .as_value()
+                .as_expression()
                 .call(NixValue::record([] as [(&str, NixValue); 0])),
         ),
     )

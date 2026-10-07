@@ -2,7 +2,7 @@
 use super::*;
 use rusnix_ir::{
     Expr, Origin,
-    interop::{InputRef, NixValue, Nixpkgs},
+    interop::{InputRef, Nixpkgs, raw::NixValue},
     nix_text,
 };
 use std::path::Path;

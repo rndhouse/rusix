@@ -1,3 +1,5 @@
+use rusnix_ir::interop::raw::NixRepresentation;
+
 #[path = "../../../examples/composed-packages/graph.rs"]
 pub mod graph;
 
@@ -6,7 +8,7 @@ mod support;
 
 use rusnix_ir::{
     Config,
-    interop::{NixAttrs, NixExpression, NixValue, Nixpkgs, Package},
+    interop::{NixAttrs, Nixpkgs, Package, raw::NixValue},
 };
 
 fn compare(

@@ -1,4 +1,6 @@
 //! Explicit Rust-authored edges; all other dependencies stay in pinned nixpkgs.
+use rusnix_ir::interop::raw::NixRepresentation;
+
 #[path = "../openssl-nixpkg/mod.rs"]
 pub mod openssl;
 
@@ -11,7 +13,7 @@ pub mod git;
 #[path = "../mariadb-nixpkg/mod.rs"]
 pub mod mariadb;
 
-use rusnix_ir::interop::{NixAttrs, NixExpression, NixValue, Nixpkgs, Package};
+use rusnix_ir::interop::{NixAttrs, NixExpression, Nixpkgs, Package, raw::NixValue};
 use rusnix_ir::{IntoRusnixValue, RusnixValue, nix_record};
 
 pub fn arguments() -> NixAttrs {

@@ -2,7 +2,7 @@
 //! nixpkgs supplies build environments, dependencies and builders; these helpers
 //! construct expressions using the values supplied by the package or module caller.
 
-use crate::{Expr, interop::NixValue};
+use crate::{Expr, interop::raw::NixValue};
 
 /// Compare the build and host platform values supplied by `stdenv`.
 ///
@@ -24,7 +24,7 @@ use crate::{Expr, interop::NixValue};
 /// removes top-level function-valued fields). Negate the result with `!` for inequality.
 ///
 /// ```
-/// use rusnix_ir::{Expr, interop::NixValue, package::build_host_equal};
+/// use rusnix_ir::{Expr, interop::raw::NixValue, package::build_host_equal};
 ///
 /// # fn example(stdenv: NixValue) {
 /// // `stdenv` is the value supplied by the Nix caller.

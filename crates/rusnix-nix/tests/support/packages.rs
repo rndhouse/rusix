@@ -1,7 +1,7 @@
 //! Shared evaluation harness; comparisons keep exact recipes and original diagnostics.
 use rusnix_ir::{
     Config,
-    interop::{InputRef, NixValue, Nixpkgs},
+    interop::{InputRef, Nixpkgs, raw::NixValue},
 };
 use rusnix_nix::{Generated, NixSession, compile};
 use std::{

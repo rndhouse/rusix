@@ -9,8 +9,8 @@
 //! the public options others can configure. [`OptionRef`] refers to an option’s
 //! value after all modules have been combined. Rust describes each of these;
 //! NixOS performs evaluation, type checking and merging later.
-use crate::interop::AttrPath;
-use crate::interop::{ModuleRef, NixValue, Nixpkgs, PackageRef};
+use crate::interop::raw::AttrPath;
+use crate::interop::{ModuleRef, Nixpkgs, PackageRef, raw::NixValue};
 use crate::{Config, ConfigValue, Expr, IntoConfig, Node, Origin, ValueKind};
 use std::marker::PhantomData;
 

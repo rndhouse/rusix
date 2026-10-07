@@ -6,7 +6,7 @@ use super::{
 };
 use rusnix_ir::{
     self as rusnix, Config, Expr, IntoConfig, IntoRusnixValue,
-    interop::{NixValue, Nixpkgs, PackageRef},
+    interop::{Nixpkgs, PackageRef, raw::NixValue},
     nix_record as record, nix_text,
     nixos::{self, DefinitionPriority, NixosModule},
     package,

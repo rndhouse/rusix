@@ -1,7 +1,7 @@
 //! External dependencies stay opaque; the caller supplies the normal nixpkgs scope.
 use rusnix_ir::{
     self as rusnix, IntoRusnixValue, RusnixValue,
-    interop::{NixPath, NixValue, Nixpkgs, Package},
+    interop::{NixPath, Nixpkgs, Package, raw::NixValue},
 };
 
 /// Finite navigation over the external Nix arguments this package implementation uses.
@@ -9,7 +9,7 @@ use rusnix_ir::{
 pub(super) mod args {
     use rusnix_ir::{
         Expr,
-        interop::{NixCallable, NixList, NixValue, Package},
+        interop::{NixCallable, NixList, Package, raw::NixValue},
     };
 
     /// Resolved arguments stay deferred; accessors record each lookup's Rust call site.

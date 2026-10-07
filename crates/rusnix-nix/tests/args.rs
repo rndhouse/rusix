@@ -1,7 +1,8 @@
 //! Argument views share existing selections, typed expressions and lazy native functions.
+use rusnix_ir::interop::raw::NixRepresentation;
 use rusnix_ir::{
     self as rusnix, Config, Expr, ValueKind,
-    interop::{InputRef, NixValue, Nixpkgs},
+    interop::{InputRef, Nixpkgs, raw::NixValue},
 };
 use rusnix_nix::{Generated, NixSession, Provenance, compile};
 use std::fs;
@@ -9,7 +10,7 @@ use std::fs;
 #[rusnix::args]
 #[allow(dead_code)]
 mod interface {
-    use rusnix_ir::interop::NixValue;
+    use rusnix_ir::interop::raw::NixValue;
 
     #[rusnix(root, rename_all = "PascalCase")]
     struct Inputs {
@@ -27,7 +28,7 @@ mod interface {
 
 #[rusnix::args]
 mod args {
-    use rusnix_ir::interop::NixValue;
+    use rusnix_ir::interop::raw::NixValue;
     use std::collections::{BTreeMap, HashMap};
 
     #[rusnix(root)]
@@ -128,7 +129,7 @@ fn declared_argument_names_preserve_mapping_and_native_dependent_defaults() {
         },
     );
     assert_eq!(
-        evaluate(NixValue::builtin("functionArgs").call(factory.as_value())),
+        evaluate(NixValue::builtin("functionArgs").call(factory.as_expression())),
         serde_json::json!({"Name": false, "Label": true, "pkg-config": false, "Platform": false})
     );
     let arguments = rusnix_ir::nix_record! {
@@ -136,11 +137,14 @@ fn declared_argument_names_preserve_mapping_and_native_dependent_defaults() {
         "pkg-config": Expr::int(1).divide(Expr::int(0)),
         "Platform": NixValue::record([] as [(&str, NixValue); 0]),
     };
-    assert_eq!(evaluate(factory.as_value().call(arguments.clone())), "Git");
+    assert_eq!(
+        evaluate(factory.as_expression().call(arguments.clone())),
+        "Git"
+    );
     assert_eq!(
         evaluate(
             factory
-                .as_value()
+                .as_expression()
                 .call(arguments.merge_attrs(rusnix_ir::nix_record! {
                     "Label": "explicit",
                 }))

@@ -356,7 +356,7 @@ fn unused_values_stay_lazy_and_operation_origins_survive_the_module() {
 mod handles {
     use rusnix_ir::{
         Expr,
-        interop::{InputRef, ModuleRef, NixFunction, NixValue, OverlayRef, PackageRef},
+        interop::{InputRef, ModuleRef, NixFunction, OverlayRef, PackageRef, raw::NixValue},
         nixos::OptionRef,
     };
 

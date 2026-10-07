@@ -1,7 +1,8 @@
 //! Native package function interfaces reuse scoped callbacks and the isolated evaluator.
+use rusnix_ir::interop::raw::NixRepresentation;
 use rusnix_ir::{
     Config, Expr,
-    interop::{NixValue, Nixpkgs, PackageFunction},
+    interop::{Nixpkgs, PackageFunction, raw::NixValue},
     nix_record,
 };
 use rusnix_nix::{NixSession, compile};
@@ -153,7 +154,7 @@ fn pinned_paths_remain_paths_and_validate_traversal() {
 
 #[rusnix_ir::args]
 mod arguments {
-    use rusnix_ir::interop::NixValue;
+    use rusnix_ir::interop::raw::NixValue;
 
     #[rusnix(root)]
     struct Inputs {
@@ -588,7 +589,7 @@ fn typed_package_function_emits_and_composes_as_an_ordinary_value() {
     }));
     assert_eq!(
         artifact.source,
-        compile(&Config::new().set("factory", factory.as_value()))
+        compile(&Config::new().set("factory", factory.as_expression()))
             .unwrap()
             .source
     );

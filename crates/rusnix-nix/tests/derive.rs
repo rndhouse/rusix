@@ -1,7 +1,7 @@
 //! Derive semantics exercised through real lowering and NixOS merges.
 use rusnix_ir::{
     Config, Expr, IntoConfig, IntoRusnixValue, RusnixValue, ValueKind,
-    interop::{InputRef, ModuleRef, NixFunction, NixValue, Nixpkgs, OverlayRef, PackageRef},
+    interop::{InputRef, ModuleRef, NixFunction, Nixpkgs, OverlayRef, PackageRef, raw::NixValue},
     nixos::{DefinitionPriority, NixosModule, OptionRef},
 };
 use rusnix_nix::{DiagnosticKind, NixSession, Provenance, compile, nixos::compile_module};

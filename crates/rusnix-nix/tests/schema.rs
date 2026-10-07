@@ -1,7 +1,7 @@
 //! Structural declarations reuse existing traits and real NixOS evaluation.
 use rusnix_ir::{
     self as rusnix, Expr, IntoConfig, IntoRusnixValue,
-    interop::{InputRef, NixValue, Nixpkgs},
+    interop::{InputRef, Nixpkgs, raw::NixValue},
     nixos::{NixosModule, OptionDecl, OptionRef, OptionType},
 };
 use rusnix_nix::{NixSession, Provenance, nixos::compile_module};

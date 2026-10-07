@@ -1,22 +1,20 @@
 //! Typed handles retain authoring contracts while sharing the existing deferred IR.
-use super::{NixLibrary, NixValue, PackageRef};
+use super::{
+    NixLibrary, PackageRef,
+    raw::{NixRepresentation, NixValue},
+};
 use crate::{
     ConfigValue, Expr, IntoRusnixValue, Node, Origin, RusnixValue, ValidationError, sealed,
 };
 use std::marker::PhantomData;
 
-/// A deferred expression with a Rust interface that survives lexical binding.
+/// Typed lazy operations for a deferred expression.
 ///
-/// Implement this for a finite symbolic view, not for concrete evaluated Rust data.
-/// Wrapping an external expression states an expectation; it does not evaluate or
-/// validate its Nix type. Implementations must preserve the expression and its origins.
-pub trait NixExpression: Clone + IntoRusnixValue {
-    /// Attach this interface to an expression without evaluating it.
-    fn from_expression(value: NixValue) -> Self;
-
-    /// Access the expression for dynamic interop or backend construction.
-    fn as_expression(&self) -> NixValue;
-
+/// Normal authoring retains the Rust interface through bindings, conditionals
+/// and guards. Custom symbolic interfaces implement
+/// [`NixRepresentation`](super::raw::NixRepresentation); raw representation
+/// access requires importing that separate trait explicitly.
+pub trait NixExpression: NixRepresentation + Clone + IntoRusnixValue {
     /// Share this expression through a lazy lexical parameter of the same type.
     /// Rust builds the callback once; Nix evaluates the application when demanded.
     #[track_caller]
@@ -64,7 +62,9 @@ pub trait NixExpression: Clone + IntoRusnixValue {
     }
 }
 
-impl NixExpression for NixValue {
+impl<T: NixRepresentation + Clone + IntoRusnixValue> NixExpression for T {}
+
+impl NixRepresentation for NixValue {
     fn from_expression(value: NixValue) -> Self {
         value
     }
@@ -76,7 +76,7 @@ impl NixExpression for NixValue {
 
 macro_rules! scalar {
     ($ty:ty) => {
-        impl NixExpression for Expr<$ty> {
+        impl NixRepresentation for Expr<$ty> {
             fn from_expression(value: NixValue) -> Self {
                 value.into_expr()
             }
@@ -133,7 +133,7 @@ macro_rules! expression_handle {
             }
         }
 
-        impl$(<$($parameter: NixExpression),+>)? NixExpression for $name$(<$($parameter),+>)? {
+        impl$(<$($parameter: NixExpression),+>)? NixRepresentation for $name$(<$($parameter),+>)? {
             fn from_expression(value: NixValue) -> Self {
                 Self { value, $(_type: PhantomData::<($($parameter,)+)>,)? }
             }
@@ -620,13 +620,13 @@ impl Stdenv {
     }
 }
 
-impl NixExpression for NixLibrary {
+impl NixRepresentation for NixLibrary {
     fn from_expression(value: NixValue) -> Self {
         Self::from_value(value)
     }
 
     fn as_expression(&self) -> NixValue {
-        self.as_value().clone()
+        self.value.clone()
     }
 }
 

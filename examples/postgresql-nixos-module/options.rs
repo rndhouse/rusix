@@ -4,7 +4,7 @@ use rusnix_ir as rusnix;
 
 #[rusnix::options]
 mod references {
-    use rusnix_ir::interop::NixValue;
+    use rusnix_ir::interop::raw::NixValue;
 
     #[rusnix(root)]
     struct Root {

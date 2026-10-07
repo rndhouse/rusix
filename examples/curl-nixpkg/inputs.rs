@@ -4,7 +4,7 @@ use rusnix_ir as rusnix;
 /// Local views describe only the external Nix values used by this compatibility adapter.
 #[rusnix::args]
 pub(super) mod args {
-    use rusnix_ir::interop::{NixCallable, NixValue, Overridable, Package};
+    use rusnix_ir::interop::{NixCallable, Overridable, Package, raw::NixValue};
 
     /// Deferred package dependencies and features, resolved by callPackage or an ordinary caller.
     #[rusnix(root)]

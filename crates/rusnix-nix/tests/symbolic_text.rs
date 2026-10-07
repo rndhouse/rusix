@@ -1,7 +1,7 @@
 //! Interpolation is authoring sugar: native Nix coercion, contexts and laziness.
 use rusnix_ir::{
     Config, Expr, IntoConfig,
-    interop::{InputRef, NixValue, Nixpkgs},
+    interop::{InputRef, Nixpkgs, raw::NixValue},
     nix_text,
     nixos::{DefinitionPriority, NixosModule, OptionRef},
 };

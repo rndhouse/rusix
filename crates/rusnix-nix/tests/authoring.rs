@@ -264,7 +264,7 @@ fn direct_conversion_tracks_its_caller_and_one_config_still_validates_duplicates
 
 #[test]
 fn per_value_priorities_leave_selection_to_nixos() {
-    use rusnix_ir::interop::NixValue;
+    use rusnix_ir::interop::raw::NixValue;
 
     let session = NixSession::new().unwrap();
     for (left, right, expected) in [
@@ -309,7 +309,7 @@ fn per_value_priorities_leave_selection_to_nixos() {
 
 #[test]
 fn deferred_merge_orders_list_definitions_using_nixos_before_and_after() {
-    use rusnix_ir::{interop::NixValue, nixos};
+    use rusnix_ir::{interop::raw::NixValue, nixos};
 
     let definitions = nixos::merge([
         NixValue::list([2222.into()]),
@@ -333,7 +333,7 @@ fn deferred_merge_orders_list_definitions_using_nixos_before_and_after() {
 
 #[test]
 fn deferred_when_discards_inactive_definitions_without_evaluating_their_values() {
-    use rusnix_ir::{interop::NixValue, nixos::OptionRef};
+    use rusnix_ir::{interop::raw::NixValue, nixos::OptionRef};
 
     let discarded = NixValue::list([Expr::int(1).divide(Expr::int(0)).into()])
         .when(OptionRef::<bool>::new("services.openssh.enable").into_expr());
@@ -353,7 +353,7 @@ fn deferred_when_discards_inactive_definitions_without_evaluating_their_values()
 
 #[test]
 fn active_deferred_definition_keeps_the_failing_operation_origin() {
-    use rusnix_ir::interop::NixValue;
+    use rusnix_ir::interop::raw::NixValue;
 
     let divide_line = line!() + 1;
     let invalid = Expr::int(1).divide(Expr::int(0));
@@ -380,7 +380,7 @@ fn active_deferred_definition_keeps_the_failing_operation_origin() {
 fn standard_assertions_follow_final_options_with_verbatim_deferred_messages() {
     use rusnix_ir::{
         ValueKind,
-        interop::{InputRef, NixValue},
+        interop::{InputRef, raw::NixValue},
         nix_text,
         nixos::{self, OptionRef},
     };
@@ -451,7 +451,7 @@ fn standard_assertions_follow_final_options_with_verbatim_deferred_messages() {
 #[test]
 fn standard_assertion_messages_and_unused_conditions_remain_lazy() {
     use rusnix_ir::{
-        interop::NixValue,
+        interop::raw::NixValue,
         nixos::{self, OptionRef},
     };
 
@@ -490,7 +490,7 @@ fn standard_assertion_messages_and_unused_conditions_remain_lazy() {
 
 #[test]
 fn deferred_assertion_condition_failures_keep_the_child_operation_origin() {
-    use rusnix_ir::{interop::NixValue, nixos};
+    use rusnix_ir::{interop::raw::NixValue, nixos};
 
     let operation_line = line!() + 1;
     let invalid = Expr::int(44).divide(Expr::int(0));
@@ -514,7 +514,7 @@ fn deferred_assertion_condition_failures_keep_the_child_operation_origin() {
 
 #[test]
 fn deferred_assertion_message_failures_keep_the_child_operation_origin() {
-    use rusnix_ir::{interop::NixValue, nix_text, nixos};
+    use rusnix_ir::{interop::raw::NixValue, nix_text, nixos};
 
     let operation_line = line!() + 1;
     let invalid = Expr::int(44).divide(Expr::int(0));

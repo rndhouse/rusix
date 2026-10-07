@@ -1,3 +1,5 @@
+use rusnix_ir::interop::raw::NixRepresentation;
+
 #[path = "../../../examples/mariadb-nixpkg/inputs.rs"]
 mod inputs;
 
@@ -16,7 +18,7 @@ mod support;
 use model::Release;
 use rusnix_ir::{
     Config, Expr,
-    interop::{NixAttrs, NixExpression, NixValue},
+    interop::{NixAttrs, raw::NixValue},
 };
 
 fn artifact(

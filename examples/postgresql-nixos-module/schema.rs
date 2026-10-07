@@ -4,7 +4,7 @@
 //! Public documentation mirrors pinned nixpkgs (MIT).
 use rusnix_ir::{
     self as rusnix,
-    interop::{NixValue, Nixpkgs},
+    interop::{Nixpkgs, raw::NixValue},
     nix_record,
     nixos::{NixosModule, OptionDecl, OptionType},
 };

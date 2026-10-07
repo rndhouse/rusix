@@ -9,5 +9,5 @@ mod args {
 }
 
 fn main() {
-    let _ = args::from_value(rusnix_ir::interop::NixValue::null()).as_value();
+    let _ = args::from_value(rusnix_ir::interop::raw::NixValue::null()).as_value();
 }

@@ -8,9 +8,10 @@ mod lowering;
 #[path = "../../../examples/git-nixpkg/model.rs"]
 mod model;
 
+use rusnix_ir::interop::raw::NixRepresentation;
 use rusnix_ir::{
     Config, Expr,
-    interop::{InputRef, NixValue, Nixpkgs},
+    interop::{InputRef, Nixpkgs, raw::NixValue},
 };
 use rusnix_nix::{Generated, NixSession, RenderOptions, compile, compile_with_options};
 use std::{
@@ -686,7 +687,7 @@ fn invalid_structured_dependency_maps_to_rust_lookup_or_call() {
 #[test]
 fn unused_package_and_unused_dependency_remain_lazy() {
     let unused = lowering::factory()
-        .as_value()
+        .as_expression()
         .call(NixValue::record([] as [(&str, NixValue); 0]));
     let generated = compile(&Config::new().set("good", true).set("unused", unused)).unwrap();
     let session = session().lock().unwrap_or_else(|p| p.into_inner());

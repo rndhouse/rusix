@@ -1,7 +1,8 @@
 //! Exact build/host equality uses supplied Nix values without platform-schema knowledge.
+use rusnix_ir::interop::raw::NixRepresentation;
 use rusnix_ir::{
     self as rusnix, Config, Expr, ValueKind,
-    interop::{NixValue, Nixpkgs},
+    interop::{Nixpkgs, raw::NixValue},
     package::build_host_equal,
 };
 use rusnix_nix::{Generated, NixSession, Provenance, compile};
@@ -140,7 +141,7 @@ fn raw_equality_differs_from_function_filtered_equality_and_executability() {
     )]));
     let filtered_equal = Nixpkgs::new()
         .library()
-        .as_value()
+        .as_expression()
         .clone()
         .select_segments(["systems", "equals"])
         .apply([build.clone(), host.clone()]);

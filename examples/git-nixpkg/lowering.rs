@@ -1,11 +1,12 @@
 //! Reproduces the pinned Git package recipe using real nixpkgs builders and helpers.
 //! Helpers construct deferred values and shell scripts; they never execute build commands in Rust.
 use super::inputs::{Inputs, args};
+use rusnix_ir::interop::raw::NixRepresentation;
 use rusnix_ir::{
     Expr, IntoRusnixValue,
     interop::{
-        FinalAttrs, NixAttrs, NixCallable, NixExpression, NixLibrary, NixList, NixValue, Package,
-        PackageFunction,
+        FinalAttrs, NixAttrs, NixCallable, NixExpression, NixLibrary, NixList, Package,
+        PackageFunction, raw::NixValue,
     },
     nix_record, nix_text, package,
 };
@@ -133,7 +134,7 @@ struct Derivation {
 /// Assemble the builder attributes from deferred feature and platform inputs.
 /// The finalAttrs parameter preserves the install-check test's dependency on later overrides.
 fn attributes(i: &Inputs, final_attrs: FinalAttrs) -> Derivation {
-    let lib = NixLibrary::from_value(i.lib.as_value());
+    let lib = NixLibrary::from_expression(i.lib.as_expression());
 
     let minimal = [
         i.svn_support(),
@@ -491,7 +492,7 @@ fn secret_install() -> Expr<String> {
 /// Common installation commands for contrib tools, completions and embedded runtime-tool paths.
 /// Also defines the removal helper used by disabled-feature installation branches.
 fn base_install(i: &Inputs) -> Expr<String> {
-    let lib = NixLibrary::from_value(i.lib.as_value());
+    let lib = NixLibrary::from_expression(i.lib.as_expression());
 
     nix_text!(
         r#"
@@ -564,7 +565,7 @@ fn base_install(i: &Inputs) -> Expr<String> {
 
 /// Wrap Perl helpers with their library paths and patch gitweb's gzip and CGI dependencies.
 fn perl_install(i: &Inputs) -> Expr<String> {
-    let lib = NixLibrary::from_value(i.lib.as_value());
+    let lib = NixLibrary::from_expression(i.lib.as_expression());
 
     nix_text!(
         r#"
@@ -593,24 +594,28 @@ fn perl_install(i: &Inputs) -> Expr<String> {
         perl_prefix = i.perl_packages.perl.lib_prefix(),
         perl_path = i.perl_packages.make_perl_path().call(i.perl_libs()),
         gzip = i.gzip(),
-        gitweb_libs = lib.as_value().clone().select("concatStringsSep").apply([
-            " ".into(),
-            NixList::new([
-                i.perl_packages.cgi(),
-                i.perl_packages.html_parser(),
-                i.perl_packages.cgi_fast(),
-                i.perl_packages.fcgi(),
-                i.perl_packages.fcgi_proc_manager(),
-                i.perl_packages.html_tag_cloud(),
+        gitweb_libs = lib
+            .as_expression()
+            .clone()
+            .select("concatStringsSep")
+            .apply([
+                " ".into(),
+                NixList::new([
+                    i.perl_packages.cgi(),
+                    i.perl_packages.html_parser(),
+                    i.perl_packages.cgi_fast(),
+                    i.perl_packages.fcgi(),
+                    i.perl_packages.fcgi_proc_manager(),
+                    i.perl_packages.html_tag_cloud(),
+                ])
+                .into()
             ])
-            .into()
-        ])
     )
 }
 
 /// Wrap git-svn with the selected Subversion package and its Perl libraries.
 fn svn_install(i: &Inputs, svn: Package) -> Expr<String> {
-    let lib = NixLibrary::from_value(i.lib.as_value());
+    let lib = NixLibrary::from_expression(i.lib.as_expression());
 
     nix_text!(
         r#"
@@ -718,7 +723,7 @@ fn keychain_config() -> Expr<String> {
 /// Prepare installed tests and exclude sandbox-incompatible tests exactly as upstream does.
 /// SVN test selection remains dependent on the final factory arguments.
 fn base_check(i: &Inputs) -> Expr<String> {
-    let lib = NixLibrary::from_value(i.lib.as_value());
+    let lib = NixLibrary::from_expression(i.lib.as_expression());
 
     nix_text!(
         r#"
@@ -822,7 +827,7 @@ fn musl_check() -> Expr<String> {
 
 /// Compose the patch phase, including SSH substitutions only when requested.
 fn post_patch(i: &Inputs) -> Expr<String> {
-    let lib = NixLibrary::from_value(i.lib.as_value());
+    let lib = NixLibrary::from_expression(i.lib.as_expression());
 
     Expr::concat([
         gettext_patch(i),
@@ -832,7 +837,7 @@ fn post_patch(i: &Inputs) -> Expr<String> {
 
 /// Compose auxiliary builds in upstream order, retaining symbolic feature conditions.
 fn post_build(i: &Inputs) -> Expr<String> {
-    let lib = NixLibrary::from_value(i.lib.as_value());
+    let lib = NixLibrary::from_expression(i.lib.as_expression());
 
     Expr::concat([
         subtree_build(),
@@ -844,7 +849,7 @@ fn post_build(i: &Inputs) -> Expr<String> {
 
 /// Compose pre-install preparation for whichever credential helpers are enabled.
 fn pre_install(i: &Inputs) -> Expr<String> {
-    let lib = NixLibrary::from_value(i.lib.as_value());
+    let lib = NixLibrary::from_expression(i.lib.as_expression());
 
     Expr::concat([
         lib.optional_text(i.osxkeychain_support(), keychain_install()),
@@ -855,7 +860,7 @@ fn pre_install(i: &Inputs) -> Expr<String> {
 /// Compose installation and wrapping branches in upstream order.
 /// Nix selects feature branches later, preserving laziness and string dependency context.
 fn post_install(i: &Inputs, svn: Package) -> Expr<String> {
-    let lib = NixLibrary::from_value(i.lib.as_value());
+    let lib = NixLibrary::from_expression(i.lib.as_expression());
 
     Expr::concat([
         base_install(i),
@@ -870,7 +875,7 @@ fn post_install(i: &Inputs, svn: Package) -> Expr<String> {
 
 /// Compose installed-test setup and feature/platform exclusions in upstream order.
 fn pre_install_check(i: &Inputs) -> Expr<String> {
-    let lib = NixLibrary::from_value(i.lib.as_value());
+    let lib = NixLibrary::from_expression(i.lib.as_expression());
 
     Expr::concat([
         base_check(i),

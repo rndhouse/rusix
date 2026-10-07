@@ -1,7 +1,7 @@
 //! Finite structural views share OptionRef IR, laziness and NixOS composition.
 use rusnix_ir::{
     self as rusnix, Config, Expr, ValueKind,
-    interop::{InputRef, NixValue},
+    interop::{InputRef, raw::NixValue},
     nixos::{DefinitionPriority, NixosModule, OptionRef},
 };
 use rusnix_nix::{DiagnosticKind, NixSession, Provenance, nixos::compile_module};
@@ -9,7 +9,7 @@ use std::{fs, path::Path};
 
 #[rusnix::options]
 mod options {
-    use rusnix_ir::interop::NixValue;
+    use rusnix_ir::interop::raw::NixValue;
     use std::collections::{BTreeMap, HashMap};
 
     #[rusnix(root)]

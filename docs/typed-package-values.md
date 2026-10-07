@@ -177,3 +177,26 @@ curl, OpenSSL, MariaDB and composed-graph tests pass. Verification artifacts are
 retained under `target/typed-operations-*.log`. The nixpkgs pin remains
 `8b27c1239e5c421a2bbc2c65d52e4a6fbf2ff296`; all Nix evaluations use fresh isolated
 local stores, with no package builds or network fetches.
+
+## Authoring and raw interop
+
+`rusnix_ir::prelude` exports typed authoring, configuration macros and conversion
+traits. It excludes `NixValue` and representation access. Import
+`interop::raw::{NixValue, NixRepresentation}` only when an adapter needs dynamic
+Nix operations or an unchecked external interface expectation.
+
+`NixExpression` supplies lazy `bind`, `choose`, `require`, `asserted` and finite
+record binding. Implement `raw::NixRepresentation` for custom symbolic interfaces;
+those implementing `Clone` and `IntoRusnixValue` receive `NixExpression` automatically.
+The generated argument views follow the same rule. Their raw `as_value` hooks
+remain available for interoperability but are hidden from normal rustdoc listings.
+
+Factories themselves implement `ConfigValue`; pass them directly into records,
+`Config::set` and callPackage. Factory `.as_value()` has been removed. Library
+adapters use `raw::expect::<NixLibrary>` or the raw representation trait rather
+than a public raw constructor. Pass Rust structs directly to `try_call_package`,
+`try_call`, or `try_mk_derivation`; these receiving interfaces perform conversion
+at the boundary. `try_into_nix_value` remains an explicit escape hatch.
+
+This changes import paths and custom trait implementations, while retaining the
+same lazy expressions, Nix evaluation and diagnostic origins.

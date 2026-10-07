@@ -1,7 +1,8 @@
 //! Call common functions from nixpkgs’ utility library without evaluating them in Rust.
+use super::raw::{NixRepresentation, replacement_lists};
 // Promote named helpers from demonstrated real-world usage; keep arbitrary lib
 // access on the existing NixValue escape hatch rather than mirroring nixpkgs.
-use super::{IntoNixExpression, NixExpression, NixList, NixValue, replacement_lists};
+use super::{IntoNixExpression, NixExpression, NixList, NixValue};
 use crate::Expr;
 
 /// A Rust handle for nixpkgs’ utility library, `lib`.
@@ -16,10 +17,10 @@ use crate::Expr;
 /// read the library or execute its functions. Nix checks the arguments’ actual
 /// types. Text results preserve the package dependencies attached to Nix strings.
 ///
-/// If a package caller supplies `lib`, wrap that value with [`Self::from_value`].
+/// If a package caller supplies `lib`, wrap that value through [`super::raw::expect::<NixLibrary>`].
 /// All methods use that exact library, including any functions the caller replaces.
 /// [`super::Nixpkgs::library`] instead selects Rusnix’s pinned nixpkgs library.
-/// Functions without a named helper remain available through [`Self::as_value`]
+/// Functions without a named helper require explicit [`super::raw::NixRepresentation`]
 /// using the generic [`NixValue`] selection and application methods.
 ///
 /// ```
@@ -33,32 +34,15 @@ pub struct NixLibrary {
     /// The deferred Nix value representing the nixpkgs `lib` attribute set.
     /// Methods look up and call utility functions on this exact value; Rust does
     /// not evaluate its contents.
-    value: NixValue,
+    pub(super) value: NixValue,
 }
 
 impl NixLibrary {
     /// Wrap a deferred Nix value representing nixpkgs `lib`.
     /// Methods call functions from this exact library value. Rust does not evaluate
     /// or check its contents; [`super::Nixpkgs::library`] selects the pinned library.
-    pub fn from_value(value: NixValue) -> Self {
+    pub(crate) fn from_value(value: NixValue) -> Self {
         Self { value }
-    }
-
-    /// Access the deferred nixpkgs `lib` value wrapped by this handle.
-    ///
-    /// Use this escape hatch for functions without a supported helper. Clone the
-    /// value, then use [`NixValue::select`] and [`NixValue::apply`] to describe the
-    /// call. Rust does not read the library or execute the function.
-    ///
-    /// ```
-    /// use rusnix_ir::interop::Nixpkgs;
-    /// let lib = Nixpkgs::new().library();
-    /// let headers = lib.as_value().clone().select("getDev")
-    ///     .apply([Nixpkgs::new().get("curl").into()]);
-    /// // Represents lib.getDev pkgs.curl, evaluated later by Nix.
-    /// ```
-    pub fn as_value(&self) -> &NixValue {
-        &self.value
     }
 
     // Common dispatch for supported helpers; track_caller preserves their callers.

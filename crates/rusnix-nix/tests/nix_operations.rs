@@ -1,5 +1,5 @@
 //! Native Nix operations remain lazy and preserve source locations without library substitution.
-use rusnix_ir::{Config, Expr, interop::NixValue};
+use rusnix_ir::{Config, Expr, interop::raw::NixValue};
 use rusnix_nix::{NixSession, compile};
 
 fn evaluate(value: NixValue) -> serde_json::Value {

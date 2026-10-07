@@ -4,11 +4,12 @@ use super::{
     model::Release,
     scripts,
 };
+use rusnix_ir::interop::raw::NixRepresentation;
 use rusnix_ir::{
     self as rusnix, Expr, IntoRusnixValue,
     interop::{
-        NixAttrs, NixExpression, NixLibrary, NixList, NixPath, NixValue, Nixpkgs, Package,
-        PackageFunction,
+        NixAttrs, NixExpression, NixLibrary, NixList, NixPath, Nixpkgs, Package, PackageFunction,
+        raw::NixValue,
     },
     nix_record, nix_text,
 };

@@ -14,7 +14,7 @@ mod scripts;
 mod support;
 
 use model::Release;
-use rusnix_ir::{Config, Expr, interop::NixValue};
+use rusnix_ir::{Config, Expr, interop::raw::NixValue};
 
 fn artifact(
     release: Release,

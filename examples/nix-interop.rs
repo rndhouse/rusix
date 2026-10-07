@@ -2,7 +2,7 @@
 //! Opaque handles preserve Nix objects without package-specific Rust bindings.
 use rusnix_ir::{
     self as rusnix, Config, IntoConfig, IntoRusnixValue, RusnixValue,
-    interop::{InputRef, ModuleRef, NixFunction, NixValue, Nixpkgs, OverlayRef, PackageRef},
+    interop::{InputRef, ModuleRef, NixFunction, Nixpkgs, OverlayRef, PackageRef, raw::NixValue},
     nix_record,
     nixos::NixosModule,
 };

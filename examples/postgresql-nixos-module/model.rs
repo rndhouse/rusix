@@ -1,6 +1,6 @@
 //! User-defined PostgreSQL configuration types and an example server configuration.
 //! Packages and open settings use opaque boundary values; compatibility policy stays in lowering.rs.
-use rusnix_ir::interop::{NixValue, PackageRef};
+use rusnix_ir::interop::{PackageRef, raw::NixValue};
 use std::collections::BTreeMap;
 
 /// Models role-clause intent using ordinary Rust; Rusnix core knows nothing about PostgreSQL.

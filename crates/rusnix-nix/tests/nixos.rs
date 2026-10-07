@@ -325,7 +325,7 @@ fn checked_nixpkgs_is_staged_only_inside_disposable_session() {
 fn assertion_conditions_reject_invalid_ir_before_lowering() {
     use rusnix_ir::{
         ConfigValue, Origin,
-        interop::NixValue,
+        interop::raw::NixValue,
         nixos::{NixosModule, OptionRef},
     };
 

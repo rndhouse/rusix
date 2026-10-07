@@ -1,7 +1,7 @@
 //! Structured opaque arguments use real pinned functions; no outputs are built.
 use rusnix_ir::{
     Config, Expr, IntoConfig, IntoRusnixValue, ValueKind,
-    interop::{InputRef, NixValue, Nixpkgs},
+    interop::{InputRef, Nixpkgs, raw::NixValue},
     nixos::{NixosModule, OptionRef},
 };
 use rusnix_nix::{

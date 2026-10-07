@@ -34,13 +34,13 @@ pub trait IntoRusnixValue {
     ///
     /// Returns an error if a `#[rusnix(flatten)]` field does not produce a
     /// structural record. This can happen even with a derived type: a scalar,
-    /// `None`, or an opaque [`crate::interop::NixValue`] cannot be structurally
+    /// `None`, or an opaque [`crate::interop::raw::NixValue`] cannot be structurally
     /// flattened. Nested fields and list elements can contain the same error.
     /// Duplicate keys and other IR validity checks happen during compilation;
     /// Nix function and NixOS option types are checked later by Nix.
     ///
     /// ```
-    /// use rusnix_ir::{IntoRusnixValue, ValidationError, interop::NixValue};
+    /// use rusnix_ir::{IntoRusnixValue, ValidationError, interop::raw::NixValue};
     ///
     /// #[derive(IntoRusnixValue)]
     /// struct FileArguments {
@@ -58,7 +58,7 @@ pub trait IntoRusnixValue {
     /// }
     /// ```
     #[track_caller]
-    fn try_into_nix_value(self) -> Result<crate::interop::NixValue, ValidationError>
+    fn try_into_nix_value(self) -> Result<crate::interop::raw::NixValue, ValidationError>
     where
         Self: Sized,
     {
@@ -107,7 +107,7 @@ impl RusnixValue {
     /// Build named fields whose configuration paths are chosen by their parent.
     /// For example, a parent’s `endpoint` field adds `endpoint` before these names.
     /// [`Config::from_value`] expands this structural tree into complete settings.
-    /// Unlike [`crate::interop::NixValue::record`], it is not kept as one Nix value;
+    /// Unlike [`crate::interop::raw::NixValue::record`], it is not kept as one Nix value;
     /// keys still remain literal path segments.
     #[track_caller]
     pub fn record(fields: impl IntoIterator<Item = (impl Into<String>, Self)>) -> Self {
@@ -145,10 +145,10 @@ impl RusnixValue {
     /// other validation happens when the configuration is compiled.
     /// For a Rust type implementing [`IntoRusnixValue`], prefer its direct
     /// [`IntoRusnixValue::try_into_nix_value`] method.
-    pub fn into_nix_value(self) -> Result<crate::interop::NixValue, ValidationError> {
+    pub fn into_nix_value(self) -> Result<crate::interop::raw::NixValue, ValidationError> {
         self.resolve(&[])
             .map(opaque_record_nodes)
-            .map(crate::interop::NixValue::from_node)
+            .map(crate::interop::raw::NixValue::from_node)
     }
 
     fn resolve(self, path: &[String]) -> Result<Node, ValidationError> {
@@ -313,7 +313,7 @@ leaf!(
     crate::Expr<bool>,
     crate::Expr<String>,
     crate::interop::PackageRef,
-    crate::interop::NixValue
+    crate::interop::raw::NixValue
 );
 
 impl<T: IntoRusnixValue> IntoRusnixValue for Option<T> {
@@ -321,7 +321,7 @@ impl<T: IntoRusnixValue> IntoRusnixValue for Option<T> {
     fn into_value(self) -> RusnixValue {
         match self {
             Some(value) => value.into_value(),
-            None => RusnixValue::leaf(crate::interop::NixValue::null()),
+            None => RusnixValue::leaf(crate::interop::raw::NixValue::null()),
         }
     }
 }

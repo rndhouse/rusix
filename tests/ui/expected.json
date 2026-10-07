@@ -542,7 +542,7 @@
     "file": "args-wrong-scalar.rs",
     "code": "E0308",
     "count": 1,
-    "source": "args::from_value(rusnix_ir::interop::NixValue::null()).port()",
+    "source": "args::from_value(rusnix_ir::interop::raw::NixValue::null()).port()",
     "reason_tokens": [
       "Expr<bool>",
       "Expr<i64>"
@@ -710,11 +710,30 @@
   {
     "file": "view-expression-contract.rs",
     "code": "E0277",
-    "count": 1,
+    "count": 2,
     "source": "value: std::time::Duration",
     "reason_tokens": [
       "Duration",
       "NixExpression"
+    ]
+  },
+  {
+    "file": "prelude-raw-access.rs",
+    "code": "E0599",
+    "count": 1,
+    "source": "as_expression",
+    "reason_tokens": [
+      "as_expression",
+      "Package"
+    ]
+  },
+  {
+    "file": "prelude-dynamic-value.rs",
+    "code": "E0433",
+    "count": 1,
+    "source": "NixValue::null()",
+    "reason_tokens": [
+      "NixValue"
     ]
   }
 ]
