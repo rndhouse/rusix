@@ -1,17 +1,53 @@
 # MariaDB authored in Rusnix
 
+This example defines MariaDB's client and server build recipes in Rust, sharing
+one recipe across four pinned releases. Start with [model.rs](model.rs) to choose
+a release, then [main.rs](main.rs) to see how it becomes generated Nix.
+
+```rust
+use rusnix_ir::interop::Nixpkgs;
+
+let release = model::Release::V1011;
+let factory = lowering::factory();
+let mariadb = Nixpkgs::new()
+    .try_call_package(&factory, release.arguments())
+    .expect("fixed release arguments");
+```
+
+A package factory is a Nix function that returns a build recipe. The release
+supplies its version and expected source archive checksum. `try_call_package`
+checks the Rust argument record and describes a Nix `callPackage` call, which
+fills other dependencies from the package set. Rust does not evaluate Nix or
+build MariaDB; Nix resolves the actual dependencies and feature defaults later.
+The resulting server package also exposes separate `client` and `server` members.
+
+From the repository root:
+
+```bash
+cargo run --locked -p rusnix-nix --example mariadb-nixpkg
+```
+
+The executable prints the shared `factory`, a `family` containing all four
+release packages, and `mariadb` selecting 10.11.10, the default at this pin.
+To select another pinned release, change the enum variant in `main.rs`.
+
+| File | Purpose |
+| --- | --- |
+| [model.rs](model.rs) | Release choices, fixed versions and source archive checksums |
+| [inputs.rs](inputs.rs) | References to dependencies and feature arguments supplied later in Nix |
+| [lowering.rs](lowering.rs) | Shared recipe and the client/server differences |
+| [scripts.rs](scripts.rs) | Shell text for build phases; Rust does not execute these commands |
+| [main.rs](main.rs) | Selects a release and prints the generated Nix |
+| [mod.rs](mod.rs) | Exposes the factory and family for other Rust examples |
+
+## Recipe and compatibility details
+
 The authoritative recipe is `pkgs/servers/sql/mariadb/default.nix`, 269 lines at
 nixpkgs `8b27c1239e5c421a2bbc2c65d52e4a6fbf2ff296`. Its generic function has
 51 arguments, including required version/hash and four lazy feature defaults.
 The release policy includes 10.5.27, 10.6.20, 10.11.10 (the pinned default) and
-11.4.4. `model.rs` owns that ordinary Rust release enum and the explicit version,
-hash and CoreServices arguments.
+11.4.4. The release arguments also supply the CoreServices framework for macOS.
 
-`inputs.rs` is a finite `#[rusnix::args]` view. `lowering.rs` authors the full
-shared common record, client/server refinements, dependencies, CMake flags,
-platform and cross behavior, storage options, tests and metadata. `scripts.rs`
-preserves exact shell phase text and interpolation contexts. `main.rs` emits the
-factory, family and default package; `mod.rs` exposes the reusable factory.
 The complete argument view supplies `args::argument_names()` to the factory and
 family forwarders. The four lazy defaults are declared once and shared by both
 interfaces. Only exceptional names such as `CoreServices`, `pkg-config`,
@@ -37,6 +73,8 @@ forwarders so every member retains the real callPackage override interface.
 The backend still supplies stdenv, fetchurl, CMake hooks, Perl's withPackages,
 platform emulators, builders, package outputs and NixOS tests. No dependency
 closure is rewritten and no derivations are built or fetched.
+
+## Verification
 
 Run `cargo test --locked -p rusnix-nix --test mariadb`. It compares exact server
 and client recipes, identities, outputs, source recipes, patch bytes/store paths,

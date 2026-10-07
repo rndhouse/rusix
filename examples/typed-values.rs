@@ -1,5 +1,11 @@
-//! Demonstrates distinct Rust types with identical primitive representations.
-//! A UserId cannot be passed to an API expecting Port, even when both contain 1000.
+//! Keeps ports, user IDs and names distinct in Rust while emitting primitive values in a
+//! fictional `demo` tree.
+//! Renaming and flattening place the ownership fields beside the listener's fields in Nix.
+//!
+//! ```nix
+//! demo = { port = 1000; host = "admin"; userId = 1000; owner = "admin"; };
+//! ```
+
 use rusnix_ir::{self as rusnix, IntoConfig, IntoRusnixValue};
 
 /// A listening-port domain value; the inner u16 lowers to a Nix integer.
@@ -41,7 +47,6 @@ mod config {
     struct Listener {
         // Requires a port-domain value even though UserId also contains a u16.
         port: Port,
-        // A host-domain string, independent of the username-domain string below.
         host: Hostname,
         // Put Identity's fields beside port and host in the generated Nix record.
         #[rusnix(flatten)]
@@ -51,7 +56,6 @@ mod config {
     /// Places the listener in the fictional `demo` option tree.
     #[rusnix(root)]
     pub struct Root {
-        // Structural lowering preserves primitive values; NixOS checks its own schema later.
         demo: Listener,
     }
 

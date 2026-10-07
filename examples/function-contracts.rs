@@ -1,5 +1,11 @@
-//! Demonstrates a typed function contract for configuration.
-//! A caller must supply an Endpoint and a Transport, rather than arbitrary strings or flags.
+//! Builds a fictional `demo` configuration through a function requiring typed endpoint and
+//! transport inputs.
+//! Rust checks the caller's types; conversion places the result in nested Nix attributes.
+//!
+//! ```nix
+//! demo = { endpoint = { host = "service.internal"; port = 8080; }; transport.tls = false; };
+//! ```
+
 use rusnix_ir::{self as rusnix, IntoConfig, IntoRusnixValue, RusnixValue};
 
 /// A reusable hostname-domain string; no hostname syntax check is implied.
@@ -77,21 +83,16 @@ pub use config::{ServiceConfig, model};
 
 impl IntoRusnixValue for Transport {
     fn into_value(self) -> RusnixValue {
-        // This domain conversion chooses two Nix record shapes; it does not change the
-        // typed caller contract. NixOS still checks the lowered records when evaluated.
-        // The plain shape has no credential fields.
+        // This custom mapping chooses the Nix shape for each Rust alternative:
+        // Plain emits { tls = false; }; Tls adds both credential paths with tls = true.
         #[derive(IntoRusnixValue)]
         struct Plain {
-            // Always false for Transport::Plain.
             tls: bool,
         }
 
-        // The TLS shape carries both paths from the caller's chosen alternative.
         #[derive(IntoRusnixValue)]
         struct Tls {
-            // Always true for Transport::Tls.
             tls: bool,
-            // Emitted as the certificate-path string.
             certificate: String,
             // Emitted as `privateKey` by the default field naming rule.
             private_key: String,

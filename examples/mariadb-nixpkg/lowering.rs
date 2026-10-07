@@ -14,6 +14,8 @@ use rusnix_ir::{
     nix_record, nix_text,
 };
 
+/// Creates a deferred Nix function for a server package with separate `client` and `server` members.
+/// Callers supply a version and source checksum; `callPackage` supplies other dependencies.
 pub fn factory() -> PackageFunction<Package> {
     PackageFunction::from_function_attrs(args::argument_names().iter().copied(), |arguments| {
         let i = args::from_value(arguments);
@@ -34,7 +36,8 @@ pub fn factory() -> PackageFunction<Package> {
     })
 }
 
-/// The family uses ordinary Rust iteration, not a package-family framework.
+/// Describes all four pinned releases under their package-set names, sharing one recipe.
+/// Each value is a deferred server package with separate `client` and `server` members.
 pub fn family() -> NixAttrs<Package> {
     factory().bind(|factory| {
         NixAttrs::new(Release::ALL.map(|release| {
@@ -369,19 +372,33 @@ fn server(i: &Inputs, lib: &NixLibrary, common: &common_view::Common) -> Package
     )
 }
 
+// Both derivations start with this recipe. Nix's standard builder runs the phase scripts
+// when building a package; creating this Rust record only describes those steps.
 #[derive(IntoRusnixValue)]
 struct Common {
+    // Source release shared by client and server.
     version: rusnix_ir::Expr<String>,
+    // Archive-fetching recipe with the caller's URL version and expected checksum.
     src: Package,
+    // Separate store outputs for installed files and manual pages.
     outputs: Vec<&'static str>,
+    // Tools that execute on the build machine, including when cross-compiling.
     native_build_inputs: NixList<Package>,
+    // Libraries used on the host platform, where the resulting MariaDB package runs.
     build_inputs: NixList<Package>,
+    // Shell text run before patching to remove upstream log-directory assumptions.
     pre_patch: Expr<String>,
+    // Checked-in patch files shared by both recipes, applied in order.
     patches: NixList<NixPath>,
+    // Shared CMake switches and platform-dependent configuration choices.
     cmake_flags: NixList<rusnix_ir::Expr<String>>,
+    // Shell text that removes development files unless the embedded server is requested.
     post_install: Expr<String>,
+    // Shell text that supplies the mytop monitoring script's program search path.
     post_fixup: Expr<String>,
+    // Existing NixOS tests exposed as package attributes for separate use.
     passthru: NixValue,
+    // Package description, license, maintainers and supported platforms.
     meta: NixValue,
 }
 

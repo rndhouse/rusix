@@ -1,5 +1,11 @@
-//! Demonstrates typed fields in a reusable Rust struct.
-//! Nested structs become nested Nix attributes without handwritten paths.
+//! Reuses a typed Rust endpoint by placing it in a fictional `demo` configuration tree.
+//! Nested structs become nested Nix attributes, while single-field wrappers become their
+//! primitive values.
+//!
+//! ```nix
+//! demo.endpoint = { host = "service.internal"; port = 443; };
+//! ```
+
 use rusnix_ir::{self as rusnix, IntoConfig, IntoRusnixValue};
 
 /// An ordinary Rust domain type; its inner value lowers to a Nix string.
@@ -28,7 +34,6 @@ mod config {
     /// Places the reusable Endpoint in this configuration's attribute tree.
     #[rusnix(root)]
     pub struct Root {
-        // Introduces the fictional `demo` namespace, without changing Endpoint.
         demo: Demo,
     }
 
@@ -53,7 +58,7 @@ mod config {
 pub use config::model;
 
 fn main() {
-    // This prints compiler output; Nix/NixOS validates the lowered values later.
+    // Prints source only; evaluating it as NixOS needs declarations for the fictional demo options.
     let generated = rusnix_nix::compile(&model().into_config()).unwrap();
     println!("{}", generated.source);
 }

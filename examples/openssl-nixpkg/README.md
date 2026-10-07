@@ -1,13 +1,51 @@
 # OpenSSL authored in Rusnix
 
+This example defines OpenSSL build recipes in Rust for three releases from the
+pinned nixpkgs checkout. Start with [model.rs](model.rs) to choose a release, then
+[main.rs](main.rs) to see how that choice becomes generated Nix.
+
+The authoring code uses an ordinary Rust enum:
+
+```rust
+use rusnix_ir::{interop::Nixpkgs, nix_record};
+
+let release = model::Release::Preview;
+let factory = lowering::factory(release);
+let openssl = Nixpkgs::new().call_package(&factory, nix_record! {});
+```
+
+A package factory is a Nix function that accepts dependencies and feature choices
+and returns a build recipe. `call_package` describes a Nix `callPackage` call:
+it fills unspecified arguments from the package set. The empty argument record
+above keeps the factory's Nix defaults. Rust constructs these expressions without
+evaluating Nix or building OpenSSL.
+
+From the repository root:
+
+```bash
+cargo run --locked -p rusnix-nix --example openssl-nixpkg
+```
+
+The executable prints `factory` for the selected release, `family` as a function
+returning all three releases, and `openssl` as the selected package expression.
+`Preview` means OpenSSL 3.3.2 at this pin; `Lts` means 3.0.15 and `Legacy` means
+1.1.1w. These labels describe the pinned checkout's policy.
+To select another pinned release, change the enum variant in `main.rs`.
+
+| File | Purpose |
+| --- | --- |
+| [model.rs](model.rs) | Release choices, fixed versions and source archive checksums |
+| [inputs.rs](inputs.rs) | References to dependencies and feature arguments supplied later in Nix |
+| [lowering.rs](lowering.rs) | Shared build recipe and release-specific patches and metadata |
+| [scripts.rs](scripts.rs) | Shell text for build phases; Rust does not execute these commands |
+| [main.rs](main.rs) | Selects a release and prints the generated Nix |
+| [mod.rs](mod.rs) | Exposes the factories for other Rust examples |
+
+## Recipe and compatibility details
+
 The semantic reference is `pkgs/development/libraries/openssl/default.nix`
 (337 lines, 20 public arguments, eight lazy defaults) at nixpkgs
 `8b27c1239e5c421a2bbc2c65d52e4a6fbf2ff296`.
-`model.rs` preserves the three releases: 1.1.1w, 3.0.15 and 3.3.2.
-`lowering.rs` shares the complete recipe, selects version patches and metadata,
-and exports both a family factory and individually overridable package factories.
-`inputs.rs` describes the finite argument interface; `scripts.rs` preserves exact
-shell phase text using `nix_text!`. `main.rs` emits the family and default package.
 The complete argument view supplies `args::argument_names()` to both factories,
 including unused upstream parameters. Naming annotations cover exceptions such
 as `enableSSL2`; ordinary names use the default lowerCamelCase mapping.
@@ -32,6 +70,8 @@ OpenSSL bootstraps fetchurl. Patches therefore use checked-in files from the pin
 introducing fetchpatch here would create a bootstrap dependency cycle. No source
 or patch is downloaded and no package is built by this experiment.
 
+## Verification
+
 Run `cargo test --locked -p rusnix-nix --test openssl`. The suite compares exact
 `.drv` identities and recipe bytes, output paths, source recipes, patch bytes and
 store paths, phase text and string contexts, flags, metadata, family membership,
@@ -45,16 +85,6 @@ Patch source paths refer to either the checked checkout or its session symlink;
 comparisons inspect their actual bytes and Nix store paths rather than temporary
 filesystem spelling. Metadata's source `position` is excluded because the package
 is now authored in Rust. Neither exclusion changes or normalizes derivation recipes.
-
-```rust
-use rusnix_ir::{interop::Nixpkgs, nix_record};
-
-let pkgs = Nixpkgs::new();
-let openssl = pkgs.call_package(
-    &lowering::factory(model::Release::Preview),
-    nix_record! {},
-);
-```
 
 The independent factory returns `PackageFunction<Package>` and the family factory
 returns `PackageFunction<NixAttrs<Package>>`. The supplied `Stdenv`, `NixLibrary`,

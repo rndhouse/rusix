@@ -1,5 +1,8 @@
-//! Demonstrates OptionRef: Rust declares a typed symbolic dependency.
-//! NixOS resolves its final value after ordinary module merging.
+//! Builds a service command that follows the final merged value of `services.example.port` in
+//! NixOS.
+//! The fictional service needs separate option declarations; Rust's OptionRef generates a
+//! reference without reading the port.
+
 use rusnix_ir::{
     self as rusnix,
     nixos::{NixosModule, OptionRef},
@@ -22,7 +25,6 @@ mod config {
 
     // Places this configuration's service under the `services` namespace.
     struct Services {
-        // Introduces `services.example`, not an entire generated NixOS schema.
         example: ExampleOptions,
     }
 
@@ -32,15 +34,11 @@ mod config {
         enable: bool,
     }
 
-    // Places dependent outputs under NixOS's systemd namespace.
     struct Systemd {
-        // Contains the unit definitions contributed by this component.
         services: Units,
     }
 
-    // Names the unit that consumes the example service's port.
     struct Units {
-        // Produces `systemd.services.example` independently of `services.example`.
         example: Unit,
     }
 

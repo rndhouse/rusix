@@ -1,4 +1,20 @@
-# Rusnix: user models, existing Nix objects, and an escape hatch
+# Examples: Rust models and existing Nix packages
+
+These examples show how to describe configuration and package recipes in Rust
+and print the resulting Nix code. You can define your own Rust models, refer to
+existing Nix packages and functions without inspecting their contents in Rust,
+and set option paths directly when a typed model is inconvenient.
+
+Start with [enum-option.rs](enum-option.rs) for a small model, or
+[nix-interop.rs](nix-interop.rs) to reuse existing packages. From the repository root:
+
+```bash
+cargo run --locked -p rusnix-nix --example enum-option
+```
+
+The executable prints Nix source. It does not evaluate Nix, build packages or
+apply configuration to your machine. The package and service examples below
+link to READMEs that identify the Rust model to edit and explain their outputs.
 
 ```text
 User-defined Rust domain model
@@ -10,9 +26,10 @@ semantic IR → Nix AST → Nix backend
 Nix/NixOS ecosystem
 ```
 
-Three coexisting authoring choices feed this pipeline: user-defined typed models,
-opaque handles for existing Nix objects, and an explicit generic escape hatch.
-They are not a mandatory sequence for every value.
+References to existing Nix objects are called opaque handles: Rust tracks the
+expression and its category, while Nix supplies the object's contents later.
+User models, these handles and direct option definitions can be combined in the
+same program.
 
 Rusnix uses Rust's existing type system rather than defining a new configuration
 type system. Domain types belong to users and libraries. Core supplies composition,
@@ -45,13 +62,17 @@ configuration, while keeping Nix's ecosystem and final checks underneath.
 | [OpenSSL family](openssl-nixpkg/README.md) | Shared release policy and complete bootstrap-safe recipes |
 | [MariaDB family](mariadb-nixpkg/README.md) | Shared client/server policy across four releases |
 | [Composed package graph](composed-packages/README.md) | Explicit dependency edges and incremental replacement boundaries |
+| [Package overlay](overlay/README.md) | Customize an existing package while reusing the upstream recipe |
 | [PostgreSQL NixOS module](postgresql-nixos-module/README.md) | Real module implementation with typed provisioning and NixOS compatibility |
 
 The nine small showcases each use **one Rust file** for user models, structural
-placement and lightweight source generation. Git, curl, OpenSSL, MariaDB and PostgreSQL are substantial
-multi-file exceptions. Git and curl separate their models, symbolic inputs, package lowering
-and entry point. PostgreSQL uses five files, separating the model, public schema,
-symbolic dependencies, lowering and entry point. Examples invoke no Nix evaluator
+placement and lightweight source generation. Git, curl, OpenSSL, MariaDB,
+PostgreSQL, composed-packages and overlay use multiple files. The four package
+examples separate their models, symbolic inputs, package lowering and entry point;
+OpenSSL and MariaDB also separate shell phase text. PostgreSQL uses five files,
+separating the model, public option declarations, symbolic dependencies, lowering
+and entry point. Composed-packages separates dependency wiring from its entry point;
+overlay separates customization from source generation. Examples invoke no Nix evaluator
 and write no artifacts; integration tests prove the behavioral claims. There is
 no handwritten mechanical lowering in the nine small examples. PostgreSQL adds
 one semantic IntoConfig adapter for ownership-derived roles and collection policy;

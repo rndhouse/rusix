@@ -19,7 +19,7 @@ mod config {
         pub services: Services<T>,
     }
 
-    /// Structural placement shared by valid and deliberately invalid test inputs.
+    /// Places a supplied SSH model under services; imported NixOS declarations check its values.
     pub struct Services<T> {
         /// NixOS's imported schema ultimately checks whatever T lowers into this option.
         pub openssh: T,

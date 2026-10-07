@@ -1,4 +1,5 @@
-//! Finite view of MariaDB generic arguments; dependencies stay caller-owned.
+//! Describes the dependencies and feature switches accepted by the pinned MariaDB Nix function.
+//! Rust accessors generate references; Nix resolves their values only when the recipe needs them.
 use rusnix_ir as rusnix;
 
 #[rusnix::args]
@@ -8,111 +9,111 @@ pub mod args {
     /// Deferred common and server dependencies plus the four upstream feature defaults.
     #[rusnix(root)]
     struct Inputs {
-        /// Pinned `version` argument, evaluated only as demanded by Nix.
+        /// Release version used in the source archive URL and version-dependent recipe choices.
         version: String,
-        /// Pinned `hash` argument, evaluated only as demanded by Nix.
+        /// Expected SHA-256 checksum of the source archive, checked when Nix fetches it.
         hash: String,
-        /// Pinned `lib` argument, evaluated only as demanded by Nix.
+        /// Utility functions and package metadata supplied by the Nix caller.
         lib: NixLibrary,
-        /// Pinned `stdenv` argument, evaluated only as demanded by Nix.
+        /// Standard build environment: compiler, platform information and build-recipe constructor.
         stdenv: Stdenv,
-        /// Pinned `fetchurl` argument, evaluated only as demanded by Nix.
+        /// Source fetcher that describes downloading an archive with an expected checksum.
         fetchurl: NixCallable<Package>,
-        /// Pinned `nixosTests` argument, evaluated only as demanded by Nix.
+        /// Existing NixOS integration tests selected for the chosen MariaDB release.
         nixos_tests: NixValue,
-        /// Pinned `buildPackages` argument, evaluated only as demanded by Nix.
+        /// Packages that run on the build machine, even when compiling for another platform.
         build_packages: NixValue,
-        /// Pinned `bison` argument, evaluated only as demanded by Nix.
+        /// Parser generator used while building the server.
         bison: Package,
-        /// Pinned `boost` argument, evaluated only as demanded by Nix.
+        /// C++ headers used while building the server.
         boost: Package,
-        /// Pinned `cmake` argument, evaluated only as demanded by Nix.
+        /// Build tool and setup hook that configure the client and server.
         cmake: Package,
-        /// Pinned `fixDarwinDylibNames` argument, evaluated only as demanded by Nix.
+        /// Build hook that repairs shared-library paths on macOS.
         fix_darwin_dylib_names: Package,
-        /// Pinned `flex` argument, evaluated only as demanded by Nix.
+        /// Lexer generator used while building the server.
         flex: Package,
-        /// Pinned `makeWrapper` argument, evaluated only as demanded by Nix.
+        /// Build hook that sets the program search path for the mytop monitoring script.
         make_wrapper: Package,
-        /// Pinned `pkg-config` argument, evaluated only as demanded by Nix.
+        /// Build tool that locates dependency headers and libraries.
         #[rusnix(rename = "pkg-config")]
         pkg_config: Package,
-        /// Pinned `curl` argument, evaluated only as demanded by Nix.
+        /// HTTP client library linked into the client and server recipes.
         curl: Package,
-        /// Pinned `libiconv` argument, evaluated only as demanded by Nix.
+        /// Character-encoding conversion library used by both recipes.
         libiconv: Package,
-        /// Pinned `ncurses` argument, evaluated only as demanded by Nix.
+        /// Terminal library used by the client and the mytop monitoring environment.
         ncurses: Package,
-        /// Pinned `openssl` argument, evaluated only as demanded by Nix.
+        /// TLS library linked into the client and server recipes.
         openssl: Package,
-        /// Pinned `pcre2` argument, evaluated only as demanded by Nix.
+        /// Regular-expression library used by both recipes.
         pcre2: Package,
-        /// Pinned `libkrb5` argument, evaluated only as demanded by Nix.
+        /// Kerberos authentication library included on Linux.
         libkrb5: Package,
-        /// Pinned `libaio` argument, evaluated only as demanded by Nix.
+        /// Linux asynchronous-I/O library selected for releases older than 10.6.
         libaio: Package,
-        /// Pinned `liburing` argument, evaluated only as demanded by Nix.
+        /// Linux io_uring library selected for releases from 10.6 onward.
         liburing: Package,
-        /// Pinned `systemd` argument, evaluated only as demanded by Nix.
+        /// Linux service-manager dependency included by the shared recipe.
         systemd: Package,
-        /// Pinned `CoreServices` argument, evaluated only as demanded by Nix.
+        /// Apple CoreServices framework included on macOS.
         #[rusnix(rename = "CoreServices")]
         core_services: Package,
-        /// Pinned `cctools` argument, evaluated only as demanded by Nix.
+        /// Apple toolchain utilities included by the macOS recipe.
         cctools: Package,
-        /// Pinned `perl` argument, evaluated only as demanded by Nix.
+        /// Perl dependency included by the macOS recipe.
         perl: Package,
-        /// Pinned `jemalloc` argument, evaluated only as demanded by Nix.
+        /// Memory allocator used on platforms other than macOS.
         jemalloc: Package,
-        /// Pinned `less` argument, evaluated only as demanded by Nix.
+        /// Pager placed on the mytop monitoring script's program search path.
         less: Package,
-        /// Pinned `libedit` argument, evaluated only as demanded by Nix.
+        /// Line-editing library included on macOS.
         libedit: Package,
-        /// Pinned `bzip2` argument, evaluated only as demanded by Nix.
+        /// Bzip2 compression library included in the server recipe.
         bzip2: Package,
-        /// Pinned `lz4` argument, evaluated only as demanded by Nix.
+        /// LZ4 compression library included in the server recipe.
         lz4: Package,
-        /// Pinned `lzo` argument, evaluated only as demanded by Nix.
+        /// LZO compression library included in the server recipe.
         lzo: Package,
-        /// Pinned `snappy` argument, evaluated only as demanded by Nix.
+        /// Snappy compression library included in the server recipe.
         snappy: Package,
-        /// Pinned `xz` argument, evaluated only as demanded by Nix.
+        /// LZMA compression library included in the server recipe.
         xz: Package,
-        /// Pinned `zlib` argument, evaluated only as demanded by Nix.
+        /// Compression library shared by client and server; the recipe selects the system library.
         zlib: Package,
-        /// Pinned `zstd` argument, evaluated only as demanded by Nix.
+        /// Zstandard compression library included in the server recipe.
         zstd: Package,
-        /// Pinned `cracklib` argument, evaluated only as demanded by Nix.
+        /// Password-checking library included in the server recipe.
         cracklib: Package,
-        /// Pinned `judy` argument, evaluated only as demanded by Nix.
+        /// Array library included in the server recipe.
         judy: Package,
-        /// Pinned `libevent` argument, evaluated only as demanded by Nix.
+        /// Event-loop library included in the server recipe.
         libevent: Package,
-        /// Pinned `libxml2` argument, evaluated only as demanded by Nix.
+        /// XML library included in the server recipe.
         libxml2: Package,
-        /// Pinned `linux-pam` argument, evaluated only as demanded by Nix.
+        /// Authentication-module library included in the Linux server recipe.
         #[rusnix(rename = "linux-pam")]
         linux_pam: Package,
-        /// Pinned `numactl` argument, evaluated only as demanded by Nix.
+        /// NUMA library added and propagated when withNuma is enabled.
         numactl: Package,
-        /// Pinned `fmt_8` argument, evaluated only as demanded by Nix.
+        /// C++ formatting library included in both recipes from release 10.7 onward.
         #[rusnix(rename = "fmt_8")]
         fmt_8: Package,
-        /// Pinned `withStorageMroonga` argument, evaluated only as demanded by Nix.
+        /// Enables the Mroonga full-text storage engine and its dependencies; defaults to true.
         with_storage_mroonga: bool,
-        /// Pinned `kytea` argument, evaluated only as demanded by Nix.
+        /// Text-analysis dependency included when Mroonga is enabled.
         kytea: Package,
-        /// Pinned `libsodium` argument, evaluated only as demanded by Nix.
+        /// Cryptography dependency included when Mroonga is enabled.
         libsodium: Package,
-        /// Pinned `msgpack` argument, evaluated only as demanded by Nix.
+        /// MessagePack dependency included when Mroonga is enabled.
         msgpack: Package,
-        /// Pinned `zeromq` argument, evaluated only as demanded by Nix.
+        /// Messaging dependency included when Mroonga is enabled.
         zeromq: Package,
-        /// Pinned `withStorageRocks` argument, evaluated only as demanded by Nix.
+        /// Enables the RocksDB storage engine; defaults to true in Nix.
         with_storage_rocks: bool,
-        /// Pinned `withEmbedded` argument, evaluated only as demanded by Nix.
+        /// Enables the embedded server and retains development files; defaults to false.
         with_embedded: bool,
-        /// Pinned `withNuma` argument, evaluated only as demanded by Nix.
+        /// Enables NUMA support and its numactl dependency; defaults to false in Nix.
         with_numa: bool,
     }
 }

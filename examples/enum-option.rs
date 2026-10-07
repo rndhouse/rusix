@@ -1,5 +1,11 @@
-//! Demonstrates a Rust enum that constrains configuration functions and fields.
-//! NixOS still validates the final value; Rust checks every typed caller first.
+//! Shows how a Rust enum constrains configuration choices before emitting a fictional `demo` tree.
+//! Rust computes the connection policy; Rusnix maps variant and field names to Nix strings and
+//! attributes.
+//!
+//! ```nix
+//! demo = { mode = "server"; acceptsConnections = true; };
+//! ```
+
 use rusnix_ir::{self as rusnix, IntoConfig};
 
 // Local structs and unit enums lower automatically through one module boundary.
@@ -24,7 +30,6 @@ mod config {
 
     // Groups a typed choice with a decision computed from it before lowering.
     struct ConnectionPolicy {
-        // Remains a Mode throughout Rust code; becomes a string in Nix.
         mode: Mode,
         // A concrete Rust decision, not a read of final NixOS configuration.
         accepts_connections: bool,

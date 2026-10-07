@@ -15,6 +15,26 @@ the [PostgreSQL NixOS module](../postgresql-nixos-module/README.md).
 - `main.rs`: composes the model and factory, then prints generated Nix. It evaluates
   no Nix and builds nothing.
 
+Start with `model.rs` to change Git's features. For example, these choices exclude
+Perl and all helpers that require it:
+
+```rust
+let choices = model::Git {
+    perl: model::Perl::Disabled,
+    manual: false,
+    ..model::Git::defaults()
+};
+let factory = lowering::factory();
+let git = rusnix_ir::interop::Nixpkgs::new()
+    .try_call_package(&factory, inputs::arguments(choices))
+    .expect("fixed authoring arguments");
+```
+
+The factory is a Nix function returning a build recipe. `try_call_package` checks
+the Rust argument record and describes Nix filling other arguments from its package
+set through `callPackage`. Run the executable from the repository root to print
+the reusable `factory` and selected `git` expressions:
+
 ```bash
 cargo run --locked -p rusnix-nix --example git-nixpkg
 ```

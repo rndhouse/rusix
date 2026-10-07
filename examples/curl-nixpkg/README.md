@@ -7,11 +7,6 @@ nixpkgs builders. Its reference is **nixpkgs
 227 lines, curl **8.11.0**, 53 arguments (35 required, 18 with defaults).
 The checked `vendor/nixpkgs` submodule supplies the reference offline.
 
-The complete `#[rusnix::args]` view supplies `args::argument_names()` to the
-factory, so public argument names are declared once. Defaults remain explicit
-deferred expressions. Fixed opaque records use `nix_record!`; dynamic feature
-arguments remain ordinary Rust collections.
-
 - `model.rs` offers a small optional Rust authoring surface. `TlsBackend` makes a
   concrete choice of at most one backend; it does not replace the public Nix API.
 - `inputs.rs` declares the finite external interface with `#[rusnix::args]`.
@@ -20,10 +15,35 @@ arguments remain ordinary Rust collections.
   feature flags, scripts, dependencies, recursive checks and metadata.
 - `main.rs` prints a record containing the ordinary factory and an example package.
 
+Start with `model.rs` to change the TLS backend, HTTP/3 or websocket choice.
+`main.rs` connects those ordinary Rust choices to the package recipe:
+
+```rust
+let choices = model::Curl {
+    tls: Some(model::TlsBackend::OpenSsl),
+    http3: true,
+    websocket: false,
+};
+let factory = lowering::factory();
+let curl = rusnix_ir::interop::Nixpkgs::new()
+    .try_call_package(&factory, choices.arguments())
+    .expect("fixed authoring arguments");
+```
+
+The factory is a Nix function returning a build recipe. `try_call_package` checks
+the Rust argument record and describes Nix filling other arguments from its package
+set through `callPackage`. The executable prints `factory` and `curl` expressions;
+Rust does not evaluate Nix or build curl.
+
 ```bash
 cargo run --locked -p rusnix-nix --example curl-nixpkg > target/curl.nix
 cargo test --locked -p rusnix-nix --test curl
 ```
+
+The complete `#[rusnix::args]` view supplies `args::argument_names()` to the
+factory, so public argument names are declared once. Defaults remain explicit
+deferred expressions. Fixed opaque records use `nix_record!`; dynamic feature
+arguments remain ordinary Rust collections.
 
 Ordinary Nix code can use `pkgs.callPackage generated.factory { ... }`, inspect
 `builtins.functionArgs generated.factory`, and use `.override` and `.overrideAttrs`.

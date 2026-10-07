@@ -1,4 +1,5 @@
-//! External dependencies stay opaque; the caller supplies the normal nixpkgs scope.
+//! Describes the dependencies and feature switches accepted by the pinned Git Nix function.
+//! Rust accessors generate references; Nix resolves their values only when the recipe needs them.
 use rusnix_ir::interop::raw::NixpkgsExt;
 use rusnix_ir::{
     self as rusnix, IntoRusnixValue, RusnixValue,
@@ -26,115 +27,115 @@ pub(super) mod args {
         stdenv: Stdenv,
         /// Tools that run on the build platform, including cross builds.
         build_packages: BuildPackages,
-        /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
+        /// HTTP transport library used by Git.
         curl: Package,
-        /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
+        /// TLS and cryptography library used by Git.
         openssl: Package,
-        /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
+        /// Compression library used for Git objects.
         zlib: Package,
-        /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
+        /// XML parser used by Git's HTTP transport.
         expat: Package,
-        /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
+        /// Interpreter for optional Python helper programs.
         python3: Package,
-        /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
+        /// Translation tools and runtime paths used by Git's shell helpers.
         gettext: Package,
-        /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
+        /// Archive tool used during the build.
         cpio: Package,
-        /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
+        /// Search tool whose store path is embedded in installed Git helpers.
         gnugrep: Package,
-        /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
+        /// Text-editing tool whose store path is embedded in installed Git helpers.
         gnused: Package,
-        /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
+        /// AWK interpreter whose store path is embedded in installed Git helpers.
         gawk: Package,
-        /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
+        /// Basic command-line tools whose store paths are embedded in installed helpers.
         coreutils: Package,
-        /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
+        /// SSH client embedded in invocation paths when withSsh is enabled.
         openssh: Package,
-        /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
+        /// Regular-expression library selected when withpcre2 is enabled.
         pcre2: Package,
-        /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
+        /// Shell dependency used by Git's build and scripts.
         bash: Package,
-        /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
+        /// Documentation generator used when withManual is enabled.
         asciidoc: Package,
-        /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
+        /// Documentation tools used when withManual is enabled.
         texinfo: Package,
-        /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
+        /// XML conversion tools used when withManual is enabled.
         xmlto: Package,
-        /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
+        /// DocBook-to-Texinfo converter used when withManual is enabled.
         docbook2x: Package,
-        /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
+        /// DocBook stylesheets used to generate the manual.
         #[rusnix(rename = "docbook_xsl")]
         docbook_xsl: Package,
-        /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
+        /// DocBook document definitions used to generate the manual.
         #[rusnix(rename = "docbook_xml_dtd_45")]
         docbook_xml_dtd_45: Package,
-        /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
+        /// XML transformation library and tools used by the recipe.
         libxslt: Package,
-        /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
+        /// Tcl interpreter used by the optional GUI programs.
         tcl: Package,
-        /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
+        /// Tk toolkit whose wish executable runs the optional GUI programs.
         tk: Package,
-        /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
+        /// Build hook that sets interpreter and library paths for installed helpers.
         make_wrapper: Package,
-        /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
+        /// Character-encoding library used on platforms other than FreeBSD.
         libiconv: Package,
-        /// Opaque nixpkgs dependency; its internals remain authoritative in Nix.
+        /// Character-encoding library selected on FreeBSD.
         libiconv_real: Package,
         /// Perl interpreter, library-path helper and gitweb dependencies.
         perl_packages: PerlPackages,
-        /// Deferred feature choice, including Nix-resolved argument defaults.
+        /// Enables git-svn and its Perl bindings; requires perlSupport.
         svn_support: bool,
-        /// Deferred feature choice, including Nix-resolved argument defaults.
+        /// Enables Perl helpers; defaults to equal build and host platforms in Nix.
         perl_support: bool,
-        /// Deferred feature choice, including Nix-resolved argument defaults.
+        /// Enables translated messages; defaults to true in Nix.
         nls_support: bool,
-        /// Deferred feature choice, including Nix-resolved argument defaults.
+        /// Enables the Apple keychain credential helper; defaults to true on macOS only.
         osxkeychain_support: bool,
-        /// Deferred feature choice, including Nix-resolved argument defaults.
+        /// Enables the Tcl/Tk GUI programs; defaults to false in Nix.
         gui_support: bool,
-        /// Deferred feature choice, including Nix-resolved argument defaults.
+        /// Builds and installs manual and HTML documentation; defaults to true in Nix.
         with_manual: bool,
-        /// Deferred feature choice, including Nix-resolved argument defaults.
+        /// Enables Python helper programs; defaults to true in Nix.
         python_support: bool,
-        /// Deferred feature choice, including Nix-resolved argument defaults.
+        /// Enables PCRE2 regular expressions; defaults to true in Nix.
         withpcre2: bool,
-        /// Deferred feature choice, including Nix-resolved argument defaults.
+        /// Enables git-send-email; defaults to perlSupport and requires Perl.
         send_email_support: bool,
-        /// Deferred feature choice, including Nix-resolved argument defaults.
+        /// Installs the libsecret credential helper; defaults to false in Nix.
         with_libsecret: bool,
-        /// Deferred feature choice, including Nix-resolved argument defaults.
+        /// Embeds the supplied OpenSSH client in Git's SSH paths; defaults to false in Nix.
         with_ssh: bool,
-        /// Deferred feature choice, including Nix-resolved argument defaults.
+        /// Runs tests against installed Git during a build; defaults to false on macOS.
         do_install_check: bool,
-        /// Caller-supplied dependency or test value; Nix owns its semantics.
+        /// Subversion client whose Perl bindings are selected for git-svn.
         subversion_client: Package,
-        /// Caller-supplied dependency or test value; Nix owns its semantics.
+        /// Perl libraries placed on the search path of installed Perl helpers.
         perl_libs: NixList<Package>,
-        /// Caller-supplied dependency or test value; Nix owns its semantics.
+        /// SMTP and TLS Perl libraries placed on git-send-email's search path.
         smtp_perl_libs: NixList<Package>,
-        /// Caller-supplied dependency or test value; Nix owns its semantics.
+        /// Apple Security framework linked by the macOS keychain helper.
         #[rusnix(rename = "Security")]
         security: Package,
-        /// Caller-supplied dependency or test value; Nix owns its semantics.
+        /// Apple CoreServices framework included on macOS.
         #[rusnix(rename = "CoreServices")]
         core_services: Package,
-        /// Caller-supplied dependency or test value; Nix owns its semantics.
+        /// Existing NixOS integration tests exposed on the package for separate use.
         nixos_tests: NixosTests,
-        /// Caller-supplied dependency or test value; Nix owns its semantics.
+        /// Build tool that locates dependency headers and libraries.
         #[rusnix(rename = "pkg-config")]
         pkg_config: Package,
-        /// Caller-supplied dependency or test value; Nix owns its semantics.
+        /// GLib library included when the libsecret credential helper is enabled.
         glib: Package,
-        /// Caller-supplied dependency or test value; Nix owns its semantics.
+        /// Secret-storage library used by the optional credential helper.
         libsecret: Package,
-        /// Caller-supplied dependency or test value; Nix owns its semantics.
+        /// Compression tool whose store path is embedded in gitweb.cgi.
         gzip: Package,
-        /// Caller-supplied dependency or test value; Nix owns its semantics.
+        /// System-information tool used by installed tests on macOS and FreeBSD.
         sysctl: Package,
-        /// Caller-supplied dependency or test value; Nix owns its semantics.
+        /// Build tool that makes platform detection use the host when cross-compiling.
         #[rusnix(rename = "deterministic-host-uname")]
         deterministic_host_uname: Package,
-        /// Caller-supplied dependency or test value; Nix owns its semantics.
+        /// Existing fetchgit package tests merged with Git's own package checks.
         tests: Tests,
     }
 
@@ -275,6 +276,8 @@ pub struct Arguments {
 }
 
 impl Arguments {
+    /// Supplies the OpenSSL dependency explicitly, replacing Nix's automatic package lookup.
+    /// The package remains deferred; this method neither builds it nor inspects its contents.
     pub fn with_openssl(mut self, openssl: Package) -> Self {
         self.openssl = Some(openssl);
         self

@@ -1,7 +1,9 @@
 # Incrementally replacing package authoring
 
-See the [verified report](REPORT.md) for the source matrix, exact derivation
-identities, boundary/provenance results and full verification.
+This example connects four Rust-authored package recipes: OpenSSL supplies curl
+and Git, and curl supplies MariaDB. A dependency is another package a recipe needs;
+the Rust code supplies selected dependencies explicitly and lets nixpkgs supply
+the rest. Start with [graph.rs](graph.rs) to change those connections.
 
 Rusnix does not require a whole dependency closure to be rewritten. A package can
 first be rewritten while all dependencies remain normal pinned nixpkgs. Rewritten
@@ -38,6 +40,15 @@ The full assembly in `graph.rs` returns `NixAttrs<Package>` and binds OpenSSL an
 curl once, retaining `Package` on the lexical parameters. Typed argument records
 lower at calls; neither packages nor factories need `as_value` conversions.
 See [typed package authoring](../../docs/typed-package-values.md).
+
+From the repository root, run `cargo run --locked -p rusnix-nix --example composed-packages`.
+It prints generated Nix containing the four connected package expressions;
+Rust does not evaluate Nix or build the packages.
+
+## Verification
+
+See the [verified report](REPORT.md) for the source matrix, exact derivation
+identities, source attribution results and full verification.
 
 `cargo test --locked -p rusnix-nix --test composed` compares exact ATerm recipe
 bytes, derivation identities and all output paths. Tags attached through the

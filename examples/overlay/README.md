@@ -1,14 +1,30 @@
 # A normal nixpkgs overlay authored in Rust
 
-An overlay is a Nix function `final: prev: { ... }` that extends a package set.
-`prev` provides the set before this overlay; `final` refers to the fully overlaid
-set, including later overlays. Nixpkgs evaluates that fixed point lazily.
+An overlay customizes named packages while reusing the rest of nixpkgs' package
+set. It is a Nix function `final: prev: { ... }`: `prev` provides the packages
+before this overlay, and `final` refers to the set after all overlays. References
+to `final` let packages depend on each other's final versions; Nix resolves only
+the values an evaluation needs.
 
 This example authors the same function in Rust/Rusnix. It modifies ordinary
 pinned nixpkgs `curl` with `prev.curl.overrideAttrs`, appending `--disable-dict`
 to its existing configure flags to disable the DICT protocol. Curl's source,
 dependencies and upstream package definition stay in nixpkgs. The remaining
 package set stays ordinary nixpkgs.
+
+Start with [authoring.rs](authoring.rs) to change the curl customization.
+[main.rs](main.rs) composes it with source generation:
+
+```rust
+let pkgs = authoring::package_set();
+let output = rusnix_ir::Config::new()
+    .set("overlay", authoring::overlay())
+    .set("curlDerivation", pkgs.select("curl.drvPath"));
+```
+
+Both calls construct deferred expressions in Rust. The executable prints the
+overlay function and an expression selecting the modified curl's build-recipe
+path (`drvPath`); Nix applies the overlay only when that output is evaluated.
 
 The equivalent handwritten overlay is:
 
@@ -26,7 +42,7 @@ and uses nested `NixValue::function` callbacks for
 `Nixpkgs::new().pkgs_function("extend").call(overlay())` asks ordinary nixpkgs to
 apply the function. Selecting `curl` from the returned set observes the modified
 package. The same Rust-authored function can be passed in an import's `overlays`
-list. No new core API, package schema or Rust fixed-point evaluator is needed.
+list.
 
 - Rusnix package examples replace package definitions written in Nixlang.
 - This overlay example replaces overlay/customization code written in Nixlang.

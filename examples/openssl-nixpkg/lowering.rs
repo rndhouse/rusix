@@ -14,7 +14,8 @@ use rusnix_ir::{
     nix_record, nix_text,
 };
 
-/// The default nixpkgs OpenSSL is the 3.3 preview release at this pin.
+/// Creates a deferred Nix package function for the chosen OpenSSL release.
+/// Nix callers supply dependencies through `callPackage` and can override feature arguments.
 pub fn factory(release: Release) -> PackageFunction<Package> {
     PackageFunction::from_function_attrs(args::argument_names().iter().copied(), |arguments| {
         let i = args::from_value(arguments);
@@ -23,7 +24,8 @@ pub fn factory(release: Release) -> PackageFunction<Package> {
     })
 }
 
-/// Preserve upstream's multi-result family interface without duplicating recipe policy.
+/// Creates a deferred Nix function returning all three releases under their package-set names.
+/// Each release shares the caller's dependencies and feature arguments.
 pub fn family_factory() -> PackageFunction<NixAttrs<Package>> {
     PackageFunction::from_function_attrs(args::argument_names().iter().copied(), |arguments| {
         let i = args::from_value(arguments);
@@ -390,26 +392,48 @@ fn configure_script(i: &Inputs, lib: &NixLibrary, version: &Expr<String>) -> Exp
         .into_expr::<String>()
 }
 
+// A Nix derivation describes how to build a package. These fields become the attributes
+// passed to nixpkgs' standard builder; Rust constructs the recipe without running its phases.
 #[derive(IntoRusnixValue)]
 struct Recipe {
+    // Package name without its version.
     pname: &'static str,
+    // Source release selected in Rust and emitted as a Nix string expression.
     version: Expr<String>,
+    // Archive-fetching recipe; its output is not downloaded during source generation.
     src: Package,
+    // Checked-in patch files applied before configuration, in this order.
     patches: NixList<NixPath>,
+    // Shell text run by the builder after applying patches.
     post_patch: Expr<String>,
+    // Separate store outputs for executables, headers, libraries, manuals and optional docs/config.
     outputs: NixList<Expr<String>>,
+    // Disables standard output-directory flags because OpenSSL supplies its own.
     set_output_flags: bool,
+    // Platform-dependent choice to put debugging symbols in a separate output.
     separate_debug_info: Expr<bool>,
+    // Tools that execute on the build machine, including when cross-compiling.
     native_build_inputs: NixList<Package>,
+    // Libraries used by OpenSSL on the host platform, where the resulting package runs.
     build_inputs: NixList<Package>,
+    // Platforms for generic --build/--host/--target flags; empty for OpenSSL's custom Configure.
     configure_platforms: Vec<Expr<String>>,
+    // Configure command selected for the platform and release during Nix evaluation.
     configure_script: Expr<String>,
+    // Suppresses generic static-build flags in favour of OpenSSL-specific ones.
     dont_add_static_configure_flags: bool,
+    // OpenSSL feature switches and installation paths passed to Configure.
     configure_flags: NixList<Expr<String>>,
+    // Manual-page location and suffix supplied to make.
     make_flags: Vec<&'static str>,
+    // Allows the builder to run make jobs concurrently.
     enable_parallel_building: bool,
+    // Shell text that splits installed files among the declared outputs.
     post_install: Expr<String>,
+    // Shell text that rejects unwanted Perl references and removes CMake helper files.
     post_fixup: Expr<String>,
+    // Extra package attributes, including checks that refer to the final overridden package.
     passthru: NixValue,
+    // Descriptive package information, supported platforms and release-specific restrictions.
     meta: NixValue,
 }

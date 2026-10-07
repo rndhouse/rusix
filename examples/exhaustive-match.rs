@@ -1,5 +1,10 @@
-//! Demonstrates two configuration decisions consuming the same Rust enum.
-//! Adding a variant makes the compiler identify both incomplete matches.
+//! Uses one Rust enum to compute firewall and service choices in a fictional `demo` tree.
+//! Adding a variant requires updating both Rust matches before Nix source can be generated.
+//!
+//! ```nix
+//! demo = { mode = "client"; firewall.allowedPorts = []; service.acceptsConnections = false; };
+//! ```
+
 use rusnix_ir::{self as rusnix, IntoConfig};
 
 // The enum, policy consumers and local configuration tree share one boundary.
@@ -53,18 +58,15 @@ mod config {
 
     // Collects the model choice and both decisions under one fictional option tree.
     struct Policies {
-        // Emitted as the enum string, alongside the decisions derived from it.
         mode: Mode,
-        // Nests the first consumer's result under `demo.firewall`.
         firewall: FirewallPolicy,
-        // Nests the second consumer's result under `demo.service`.
         service: ServicePolicy,
     }
 
     /// A rooted contribution; the local structs supply automatic structural lowering.
     #[rusnix(root)]
     pub struct Root {
-        // The fictional `demo` schema remains subject to NixOS validation later.
+        // Keeps both Rust-computed policies under the fictional demo namespace.
         demo: Policies,
     }
 

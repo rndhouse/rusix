@@ -1,4 +1,5 @@
-//! Finite view of the pinned public package interface.
+//! Describes the dependencies and feature switches accepted by the pinned OpenSSL Nix function.
+//! Rust accessors generate references; Nix resolves their values only when the recipe needs them.
 use rusnix_ir as rusnix;
 
 #[rusnix::args]
@@ -11,52 +12,52 @@ pub mod args {
     /// Caller-owned dependencies and lazy policy arguments.
     #[rusnix(root)]
     struct Inputs {
-        /// Pinned `lib` argument; resolved by Nix when demanded.
+        /// Utility functions and package metadata supplied by the Nix caller.
         lib: NixLibrary,
-        /// Pinned `stdenv` argument; resolved by Nix when demanded.
+        /// Standard build environment: compiler, platform information and build-recipe constructor.
         stdenv: Stdenv,
-        /// Pinned `fetchurl` argument; resolved by Nix when demanded.
+        /// Source fetcher that describes downloading an archive with an expected checksum.
         fetchurl: NixCallable<Package>,
-        /// Pinned `buildPackages` argument; resolved by Nix when demanded.
+        /// Packages that run on the build machine, even when compiling for another platform.
         build_packages: NixValue,
-        /// Pinned `perl` argument; resolved by Nix when demanded.
+        /// Interpreter used to run OpenSSL's Configure script.
         perl: Package,
-        /// Pinned `coreutils` argument; resolved by Nix when demanded.
+        /// Unused upstream parameter retained so existing Nix callers can still supply it.
         #[allow(dead_code)]
         coreutils: Package,
-        /// Pinned `writeShellScript` argument; resolved by Nix when demanded.
+        /// Unused upstream script helper retained for compatibility with Nix callers.
         #[allow(dead_code)]
         write_shell_script: NixValue,
-        /// Pinned `makeBinaryWrapper` argument; resolved by Nix when demanded.
+        /// Build hook that creates the c_rehash compatibility wrapper around openssl rehash.
         make_binary_wrapper: Package,
-        /// Pinned `withCryptodev` argument; resolved by Nix when demanded.
+        /// Enables the cryptodev engine and adds its dependency; defaults to false in Nix.
         with_cryptodev: bool,
-        /// Pinned `cryptodev` argument; resolved by Nix when demanded.
+        /// Kernel-crypto interface used only when the cryptodev engine is enabled.
         cryptodev: Package,
-        /// Pinned `withZlib` argument; resolved by Nix when demanded.
+        /// Enables compression through zlib; defaults to false in Nix.
         with_zlib: bool,
-        /// Pinned `zlib` argument; resolved by Nix when demanded.
+        /// Compression library used only when withZlib is enabled.
         zlib: Package,
-        /// Pinned `enableSSL2` argument; resolved by Nix when demanded.
+        /// Requests the legacy SSL 2 protocol through the upstream configure flags.
         #[rusnix(rename = "enableSSL2")]
         enable_ssl2: bool,
-        /// Pinned `enableSSL3` argument; resolved by Nix when demanded.
+        /// Requests the legacy SSL 3 protocol through the upstream configure flags.
         #[rusnix(rename = "enableSSL3")]
         enable_ssl3: bool,
-        /// Pinned `enableMD2` argument; resolved by Nix when demanded.
+        /// Requests the legacy MD2 digest through the upstream configure flags.
         #[rusnix(rename = "enableMD2")]
         enable_md2: bool,
-        /// Pinned `enableKTLS` argument; resolved by Nix when demanded.
+        /// Enables kernel TLS support; the Nix default follows the host platform's Linux flag.
         #[rusnix(rename = "enableKTLS")]
         enable_ktls: bool,
-        /// Pinned `static` argument; resolved by Nix when demanded.
+        /// Selects static libraries; the Nix default follows the host platform's static-build flag.
         #[rusnix(rename = "static")]
         static_build: bool,
-        /// Pinned `conf` argument; resolved by Nix when demanded.
+        /// Optional openssl.cnf file copied into the configuration output; null keeps the default file.
         conf: NixNullable<NixValue>,
-        /// Pinned `removeReferencesTo` argument; resolved by Nix when demanded.
+        /// Build tool that removes the library output's own store-path reference from static archives.
         remove_references_to: Package,
-        /// Pinned `testers` argument; resolved by Nix when demanded.
+        /// nixpkgs test helpers used to check the final package's pkg-config metadata.
         testers: NixValue,
     }
 }

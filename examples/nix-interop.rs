@@ -1,5 +1,7 @@
-//! Demonstrates typed Rust models alongside existing Nix packages, modules and functions.
-//! Opaque handles preserve Nix objects without package-specific Rust bindings.
+//! Combines a Rust transport model with references to existing Nix packages, modules and functions.
+//! Rust describes their use without inspecting their contents; Nix resolves them when the
+//! output is evaluated.
+
 use rusnix_ir::interop::raw::NixFunctionExt;
 use rusnix_ir::{
     self as rusnix, Config, IntoConfig, IntoRusnixValue, RusnixValue,
@@ -27,16 +29,13 @@ impl IntoRusnixValue for Transport {
         // The plain shape omits credential fields entirely.
         #[derive(IntoRusnixValue)]
         struct Plain {
-            // Emits the disabled-TLS flag for Transport::Plain.
             tls: bool,
         }
 
         // The TLS shape carries the two paths required by Transport::Tls.
         #[derive(IntoRusnixValue)]
         struct Tls {
-            // Emits the enabled-TLS flag for this alternative.
             tls: bool,
-            // Preserves the concrete certificate-path string.
             certificate: String,
             // Becomes `privateKey` under the default naming rule.
             private_key: String,

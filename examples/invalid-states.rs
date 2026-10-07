@@ -1,5 +1,15 @@
-//! Demonstrates a Rust enum whose Plain case cannot carry TLS credentials.
-//! The Tls case requires both credentials before Rusnix can lower it.
+//! Uses a Rust enum to require both TLS credentials and exclude them from plain connections.
+//! Conversion emits the chosen record shape under a fictional `demo` tree, with credential
+//! paths as strings.
+//!
+//! ```nix
+//! demo.transport = {
+//!   tls = true;
+//!   certificate = "/run/keys/service.pem";
+//!   privateKey = "/run/keys/service.key";
+//! };
+//! ```
+
 use rusnix_ir::{self as rusnix, IntoConfig, IntoRusnixValue, RusnixValue};
 
 /// An ordinary Rust sum type: credentials exist only in the TLS alternative.
@@ -58,21 +68,16 @@ pub use config::{Root, ServiceConfig, model};
 
 impl IntoRusnixValue for Transport {
     fn into_value(self) -> RusnixValue {
-        // The enum's Nix representation is a domain choice, so it needs a custom conversion.
-        // NixOS can still validate the resulting record against its own schema.
-        // A plain connection emits only the TLS flag, with no credential fields.
+        // This custom mapping chooses the Nix shape for each Rust alternative:
+        // Plain emits { tls = false; }; Tls adds both credential paths with tls = true.
         #[derive(IntoRusnixValue)]
         struct Plain {
-            // The lowered flag for this alternative is always false.
             tls: bool,
         }
 
-        // A TLS connection emits the flag together with both required paths.
         #[derive(IntoRusnixValue)]
         struct Tls {
-            // The lowered flag for this alternative is always true.
             tls: bool,
-            // Preserves the certificate selected by the Rust model.
             certificate: Certificate,
             // Becomes `privateKey` under Rusnix's default naming convention.
             private_key: PrivateKey,
