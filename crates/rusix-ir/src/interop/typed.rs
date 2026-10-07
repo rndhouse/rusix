@@ -5,7 +5,7 @@ use super::{
 };
 use crate::{
     ConfigValue, Expr, IntoRusixValue, RusixValue, ValidationError,
-    backend::{IntoNode, Node, Origin},
+    ir::{IntoNode, Node, Origin},
     sealed,
 };
 use std::marker::PhantomData;

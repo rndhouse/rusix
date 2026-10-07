@@ -5,7 +5,7 @@ use rusix_nix::{NixSession, compile};
 fn evaluate(value: NixValue) -> serde_json::Value {
     NixSession::new()
         .unwrap()
-        .evaluate_interop(&compile(&Config::new().set_dynamic("result", value)).unwrap())
+        .evaluate_interop(&compile(Config::new().set_dynamic("result", value)).unwrap())
         .unwrap()
         .value["result"]
         .clone()
@@ -135,7 +135,7 @@ fn native_assertion_leaves_its_value_lazy_and_retains_its_call_site() {
     let unused: NixValue = Expr::int(1).divide(Expr::int(0)).into();
     let line = line!() + 1;
     let rejected = NixValue::assert(false, unused.clone());
-    let generated = compile(&Config::new().set_dynamic("result", rejected.clone())).unwrap();
+    let generated = compile(Config::new().set_dynamic("result", rejected.clone())).unwrap();
     assert!(generated.source.contains("assert false;"));
     let error = NixSession::new()
         .unwrap()
@@ -215,7 +215,7 @@ fn native_operation_failures_preserve_child_origins_and_operation_boundaries() {
     ] {
         let error = NixSession::new()
             .unwrap()
-            .evaluate_interop(&compile(&Config::new().set_dynamic("result", value)).unwrap())
+            .evaluate_interop(&compile(Config::new().set_dynamic("result", value)).unwrap())
             .unwrap_err();
         assert_eq!(error.reason, "division by zero");
         assert_eq!(error.primary.as_ref().unwrap().line, child_line);
@@ -233,7 +233,7 @@ fn native_operation_failures_preserve_child_origins_and_operation_boundaries() {
         let invalid = left.merge_attrs(right);
         let error = NixSession::new()
             .unwrap()
-            .evaluate_interop(&compile(&Config::new().set_dynamic("result", invalid)).unwrap())
+            .evaluate_interop(&compile(Config::new().set_dynamic("result", invalid)).unwrap())
             .unwrap_err();
         assert_eq!(error.primary.as_ref().unwrap().line, call_line);
         assert!(!error.raw_nix.is_empty());
@@ -244,7 +244,7 @@ fn native_operation_failures_preserve_child_origins_and_operation_boundaries() {
     let invalid = replace.apply([true.into(), false.into(), 1_i64.into()]);
     let error = NixSession::new()
         .unwrap()
-        .evaluate_interop(&compile(&Config::new().set_dynamic("result", invalid)).unwrap())
+        .evaluate_interop(&compile(Config::new().set_dynamic("result", invalid)).unwrap())
         .unwrap_err();
     assert_eq!(error.primary.as_ref().unwrap().line, call_line);
 }
@@ -267,7 +267,7 @@ fn named_operation_type_failures_report_the_public_call_site() {
     for (value, line) in cases {
         let error = NixSession::new()
             .unwrap()
-            .evaluate_interop(&compile(&Config::new().set_dynamic("result", value)).unwrap())
+            .evaluate_interop(&compile(Config::new().set_dynamic("result", value)).unwrap())
             .unwrap_err();
         assert_eq!(error.primary.as_ref().unwrap().file, file!());
         assert_eq!(error.primary.as_ref().unwrap().line, line);
@@ -281,13 +281,11 @@ fn builtin_names_are_literal_path_segments_and_invalid_paths_are_rejected() {
     let missing = NixValue::builtin("not.a.builtin");
     let error = NixSession::new()
         .unwrap()
-        .evaluate_interop(&compile(&Config::new().set_dynamic("result", missing)).unwrap())
+        .evaluate_interop(&compile(Config::new().set_dynamic("result", missing)).unwrap())
         .unwrap_err();
     assert!(error.reason.contains("not.a.builtin"));
     assert_eq!(error.primary.as_ref().unwrap().line, line);
     assert!(!error.raw_nix.is_empty());
 
-    assert!(
-        compile(&Config::new().set_dynamic("invalid", NixValue::builtin("bad\0name"))).is_err()
-    );
+    assert!(compile(Config::new().set_dynamic("invalid", NixValue::builtin("bad\0name"))).is_err());
 }

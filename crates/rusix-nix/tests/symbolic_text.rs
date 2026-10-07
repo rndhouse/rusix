@@ -19,7 +19,7 @@ struct ResultContribution {
 }
 
 fn generated(result: NixValue) -> Generated {
-    compile(&ResultContribution { result }.into_config()).unwrap()
+    compile(ResultContribution { result }.into_config()).unwrap()
 }
 
 #[test]

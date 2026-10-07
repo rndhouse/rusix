@@ -16,7 +16,7 @@ function, list, record and scalar interfaces through lazy bindings and compositi
 The OpenSSL, curl, Git and MariaDB examples use these interfaces; dynamic interop
 uses `interop::raw::NixValue`. Normal authors can import
 `rusix_ir::prelude::*`; raw representation access requires a separate import.
-Compiler IR types and inspection hooks live in `rusix_ir::backend`.
+Compiler IR types and inspection hooks live in `rusix_ir::ir`.
 
 ```text
 User-defined Rust domain model

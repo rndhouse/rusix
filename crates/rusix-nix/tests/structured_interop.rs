@@ -1,10 +1,10 @@
 //! Structured opaque arguments use real pinned functions; no outputs are built.
-use rusix_ir::backend::ReferencedExpression;
 use rusix_ir::interop::raw::{AsNixValue, InputRefExt, NixFunctionExt};
+use rusix_ir::ir::ReferencedExpression;
 use rusix_ir::{
     Config, Expr, IntoConfig, IntoRusixValue,
-    backend::ValueKind,
     interop::{InputRef, Nixpkgs, raw::NixValue},
+    ir::ValueKind,
     nixos::{NixosModule, OptionRef},
 };
 use rusix_nix::{
@@ -23,7 +23,7 @@ struct ResultContribution {
 
 #[track_caller]
 fn generated(value: NixValue) -> Generated {
-    compile(&ResultContribution { result: value }.into_config()).unwrap()
+    compile(ResultContribution { result: value }.into_config()).unwrap()
 }
 
 fn evaluate(value: NixValue) -> serde_json::Value {
@@ -118,7 +118,7 @@ fn unsupported_float_literals_are_ir_errors_at_the_literal_origin() {
     ] {
         let origin_line = line!() + 1;
         let value = NixValue::literal(float);
-        let error = compile(&ResultContribution { result: value }.into_config()).unwrap_err();
+        let error = compile(ResultContribution { result: value }.into_config()).unwrap_err();
         assert_eq!(error.kind, DiagnosticKind::Validation);
         assert!(error.reason.contains("finite"));
         assert_eq!(error.primary.as_ref().unwrap().line, origin_line);
@@ -184,7 +184,7 @@ fn duplicate_and_nul_record_keys_are_rejected_at_the_record_boundary() {
     for keys in [["same", "same"], ["good", "bad\0key"]] {
         let record_line = line!() + 1;
         let result = NixValue::record(keys.map(|key| (key, true.into())));
-        let error = compile(&ResultContribution { result }.into_config()).unwrap_err();
+        let error = compile(ResultContribution { result }.into_config()).unwrap_err();
         assert_eq!(error.kind, DiagnosticKind::Validation);
         assert_eq!(error.primary.as_ref().unwrap().line, record_line);
     }
@@ -587,7 +587,7 @@ fn scoped_symbols_inside_structured_arguments_cannot_escape_nixos() {
                     .into(),
             ),
         ]));
-    let error = compile(&ResultContribution { result: value }.into_config()).unwrap_err();
+    let error = compile(ResultContribution { result: value }.into_config()).unwrap_err();
     assert_eq!(error.kind, DiagnosticKind::Validation);
     assert!(error.reason.contains("NixosModule"));
 }
@@ -653,7 +653,7 @@ fn callback_parameters_cannot_escape_their_lexical_scope() {
         true.into()
     });
     let error = compile(
-        &ResultContribution {
+        ResultContribution {
             result: escaped.unwrap(),
         }
         .into_config(),
@@ -694,7 +694,7 @@ fn module_package_handles_are_scoped_and_follow_module_package_arguments() {
     let pkgs = Nixpkgs::from_module();
     let value = pkgs.get("hello").as_value().select("pname");
     let error = compile(
-        &ResultContribution {
+        ResultContribution {
             result: value.clone(),
         }
         .into_config(),

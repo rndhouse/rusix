@@ -28,7 +28,7 @@ fn typed_authoring_prelude_keeps_calls_templates_and_guards_lazy() {
     let text = call.bind(|call| call.call(NixAttrs::new([("text", text)])));
     let record = NixAttrs::try_from_record(model::Arguments { text }).unwrap();
     let result: Expr<String> = record.field("text");
-    let generated = compile(&Config::new().set_dynamic("result", result)).unwrap();
+    let generated = compile(Config::new().set_dynamic("result", result)).unwrap();
     let value = NixSession::new()
         .unwrap()
         .evaluate_interop(&generated)
@@ -55,7 +55,7 @@ fn an_explicit_raw_adapter_preserves_a_custom_interface_through_normal_operation
     }
 
     let label = Label("adapted".into()).bind(|label| label.asserted(true));
-    let generated = compile(&Config::new().set_dynamic("result", label.0)).unwrap();
+    let generated = compile(Config::new().set_dynamic("result", label.0)).unwrap();
     let value = NixSession::new()
         .unwrap()
         .evaluate_interop(&generated)
@@ -90,7 +90,7 @@ fn overlays_keep_their_type_through_views_and_bindings_without_raw_imports() {
             .into();
         hello.field::<Expr<String>>("pname")
     });
-    let generated = compile(&Config::new().set_dynamic(
+    let generated = compile(Config::new().set_dynamic(
         "name",
         inputs.call(NixAttrs::new([("overlay", overlay.into())])),
     ))

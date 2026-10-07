@@ -1,10 +1,10 @@
 //! Inline module sugar uses the same traits, IR, and evaluator as explicit derives.
-use rusix_ir::backend::ReferencedExpression;
 use rusix_ir::interop::raw::NixFunctionExt;
+use rusix_ir::ir::ReferencedExpression;
 use rusix_ir::{
     self as rusix, Expr, IntoConfig, IntoRusixValue,
-    backend::ValueKind,
     interop::{InputRef, Nixpkgs},
+    ir::ValueKind,
     nixos::{DefinitionPriority, NixosModule},
 };
 use rusix_nix::{DiagnosticKind, NixSession, Provenance, compile, nixos::compile_module};
@@ -330,7 +330,7 @@ fn unused_values_stay_lazy_and_operation_origins_survive_the_module() {
     let bad = Expr::int(44).divide(Expr::int(0));
 
     let generated = compile(
-        &expressions::Root {
+        expressions::Root {
             good: 42,
             bad: vec![bad],
         }
@@ -506,7 +506,7 @@ fn local_enum_derives_and_semantic_overrides_use_the_same_traits() {
     assert_eq!(
         NixSession::new()
             .unwrap()
-            .evaluate(&compile(&model.into_config()).unwrap())
+            .evaluate(&compile(model.into_config()).unwrap())
             .unwrap()
             .value,
         serde_json::json!({"modes":["ReadOnly","read-write"],"state":"ready","permissions":[false,true]})

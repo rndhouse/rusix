@@ -3,8 +3,8 @@ use super::*;
 use rusix_ir::interop::raw::{InputRefExt, NixFunctionExt};
 use rusix_ir::{
     Expr,
-    backend::Origin,
     interop::{InputRef, Nixpkgs, raw::NixValue},
+    ir::Origin,
     nix_text,
 };
 use std::path::Path;
@@ -340,8 +340,8 @@ fn curried_calls_have_one_boundary_but_distinct_operations_keep_theirs() {
         .apply(["/".into(), NixValue::list(["a".into(), "b".into()])]);
     let first = function.call("/");
     let second = first.call(NixValue::list(["a".into(), "b".into()]));
-    let applied = compile(&Config::new().set_dynamic("result", applied)).unwrap();
-    let distinct = compile(&Config::new().set_dynamic("result", second)).unwrap();
+    let applied = compile(Config::new().set_dynamic("result", applied)).unwrap();
+    let distinct = compile(Config::new().set_dynamic("result", second)).unwrap();
 
     // The imported function boundary is shared; .apply needs only one extra marker.
     assert_eq!(applied.source.matches("addErrorContext").count(), 2);
@@ -361,7 +361,7 @@ fn curried_calls_have_one_boundary_but_distinct_operations_keep_theirs() {
 #[test]
 fn persisted_source_maps_without_site_metadata_remain_readable() {
     let generated =
-        compile(&Config::new().set_dynamic("value", Expr::int(1).divide(Expr::int(0)))).unwrap();
+        compile(Config::new().set_dynamic("value", Expr::int(1).divide(Expr::int(0)))).unwrap();
     let mut old = serde_json::to_value(&generated).unwrap();
     for span in old["spans"].as_array_mut().unwrap() {
         span.as_object_mut().unwrap().remove("diagnostic_site");

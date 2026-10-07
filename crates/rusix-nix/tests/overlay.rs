@@ -69,7 +69,7 @@ fn evaluate(name: &str, config: Config) -> serde_json::Value {
 #[test]
 fn ordinary_baseline_and_handwritten_overlay_establish_the_reference() {
     let generated = compile(
-        &Config::new()
+        Config::new()
             .set_dynamic("baseline", inspect(Nixpkgs::new().as_value()))
             .set_dynamic("ordinary", inspect(ordinary(None)))
             .set_dynamic(
@@ -283,7 +283,7 @@ fn unrelated_failing_package_set_attributes_remain_lazy() {
         .with_overlay(poison)
         .with_overlay(authoring::overlay());
     let generated = compile(
-        &Config::new()
+        Config::new()
             .set_dynamic("curl", pkgs.value("curl.drvPath"))
             .set_dynamic("hello", pkgs.value("hello.drvPath"))
             .set_dynamic("ordinaryHello", Nixpkgs::new().value("hello.drvPath")),
@@ -296,7 +296,7 @@ fn unrelated_failing_package_set_attributes_remain_lazy() {
     save("lazy", &generated, &value);
     assert_eq!(value["hello"], value["ordinaryHello"]);
     let demanded =
-        compile(&Config::new().set_dynamic("bad", pkgs.value("rusixUnusedPackage"))).unwrap();
+        compile(Config::new().set_dynamic("bad", pkgs.value("rusixUnusedPackage"))).unwrap();
     let error = session.evaluate_interop(&demanded).unwrap_err();
     assert!(error.reason.contains("unused overlay attribute evaluated"));
 }
@@ -319,7 +319,7 @@ fn failure_inside_override_attrs_maps_to_the_rust_operation() {
     });
     let pkgs = Nixpkgs::new().with_overlay(overlay);
     let generated =
-        compile(&Config::new().set_dynamic("flags", pkgs.value("curl.configureFlags"))).unwrap();
+        compile(Config::new().set_dynamic("flags", pkgs.value("curl.configureFlags"))).unwrap();
     let error = NixSession::new()
         .unwrap()
         .evaluate_interop(&generated)
@@ -405,7 +405,7 @@ fn overlay_bodies_cannot_hide_invalid_records_or_nixos_scoped_references() {
         NixAttrs::new([("duplicate", NixValue::from(1)), ("duplicate", 2.into())])
     });
     let error = compile(
-        &Config::new().set_dynamic("package", Nixpkgs::new().with_overlay(invalid).get("hello")),
+        Config::new().set_dynamic("package", Nixpkgs::new().with_overlay(invalid).get("hello")),
     )
     .unwrap_err();
     assert_eq!(error.kind, DiagnosticKind::Validation);
@@ -420,7 +420,7 @@ fn overlay_bodies_cannot_hide_invalid_records_or_nixos_scoped_references() {
         )])
     });
     let error = compile(
-        &Config::new().set_dynamic("label", Nixpkgs::new().with_overlay(option).value("label")),
+        Config::new().set_dynamic("label", Nixpkgs::new().with_overlay(option).value("label")),
     )
     .unwrap_err();
     assert_eq!(error.kind, DiagnosticKind::Validation);

@@ -4,7 +4,7 @@
 //! lengths stop indexing; no Nix values or package identities are evaluated here.
 use rusix_ir::{
     Config,
-    backend::{Node, Origin, Source, ValueKind},
+    ir::{Node, Origin, Source, ValueKind},
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeSet, rc::Rc};

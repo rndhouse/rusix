@@ -4,8 +4,8 @@ use crate::{
     ast::{BinaryOp, Builtin, NixExpr, NixKind},
 };
 use rusix_ir::{
-    backend::{Node, Reference, Source},
     interop::raw::AttrPath,
+    ir::{Node, Reference, Source},
 };
 use std::{
     path::{Path, PathBuf},
@@ -219,7 +219,7 @@ impl NixSession {
 
 // Check only the broad module category with the upstream predicate. This forces
 // the handle's head, not its option values. Metadata survives NixOS merge errors.
-pub(crate) fn module(reference: &Reference, origin: &rusix_ir::backend::Origin) -> NixExpr {
+pub(crate) fn module(reference: &Reference, origin: &rusix_ir::ir::Origin) -> NixExpr {
     let variable = || NixExpr::plain(NixKind::Variable("__rusix_module".into()));
     let check = select(
         source(&Source::Library),

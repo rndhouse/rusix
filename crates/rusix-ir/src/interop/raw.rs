@@ -4,10 +4,10 @@
 //! contains dynamic selection/application and unchecked interface expectations.
 //! These operations remain lazy; Nix checks actual values when demanded.
 use super::{ModuleRef, NixCallable, NixExpression, NixFunction, Nixpkgs, OverlayRef, PackageRef};
-use crate::backend::{Reference, Source};
+use crate::ir::{Reference, Source};
 use crate::{
     ConfigValue, ValidationError,
-    backend::{IntoNode, Node, Origin, ValueKind},
+    ir::{IntoNode, Node, Origin, ValueKind},
     sealed,
 };
 

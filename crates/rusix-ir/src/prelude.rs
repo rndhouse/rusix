@@ -1,7 +1,7 @@
 //! Common interfaces for typed package and configuration authoring.
 //!
 //! Dynamic operations live in [`crate::interop::raw`]; IR construction lives in
-//! [`crate::backend`]. Neither is included in this prelude.
+//! [`crate::ir`]. Neither is included in this prelude.
 //!
 //! ```
 //! use rusix_ir::prelude::*;

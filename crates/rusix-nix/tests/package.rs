@@ -2,8 +2,8 @@
 use rusix_ir::interop::raw::NixRepresentation;
 use rusix_ir::{
     self as rusix, Config, Expr,
-    backend::ValueKind,
     interop::{Nixpkgs, raw::NixValue},
+    ir::ValueKind,
     package::build_host_equal,
 };
 use rusix_nix::{Generated, NixSession, Provenance, compile};
@@ -42,7 +42,7 @@ fn stdenv(build: NixValue, host: NixValue) -> NixValue {
 }
 
 fn artifact(value: impl Into<NixValue>) -> Generated {
-    compile(&Config::new().set_dynamic("result", value.into())).unwrap()
+    compile(Config::new().set_dynamic("result", value.into())).unwrap()
 }
 
 fn evaluate(value: impl Into<NixValue>) -> serde_json::Value {

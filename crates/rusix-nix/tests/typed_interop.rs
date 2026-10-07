@@ -35,7 +35,7 @@ mod views {
 fn evaluate(value: impl rusix_ir::ConfigValue) -> serde_json::Value {
     NixSession::new()
         .unwrap()
-        .evaluate_interop(&compile(&Config::new().set_dynamic("result", value)).unwrap())
+        .evaluate_interop(&compile(Config::new().set_dynamic("result", value)).unwrap())
         .unwrap()
         .value["result"]
         .clone()
@@ -197,7 +197,7 @@ fn typed_binding_shares_source_and_preserves_child_failure_provenance() {
     let bad: Package =
         Package::from_expression(NixValue::builtin("throw").call("typed child failure"));
     let result = bad.bind(|package| package.field::<Expr<String>>("name"));
-    let generated = compile(&Config::new().set_dynamic("result", result)).unwrap();
+    let generated = compile(Config::new().set_dynamic("result", result)).unwrap();
     assert_eq!(generated.source.matches("typed child failure").count(), 1);
     let error = NixSession::new()
         .unwrap()
@@ -533,7 +533,7 @@ fn nullable_transform_failures_keep_child_provenance_and_original_nix_diagnostic
         .unwrap_or("fallback");
     let diagnostic = NixSession::new()
         .unwrap()
-        .evaluate_interop(&compile(&Config::new().set_dynamic("result", result)).unwrap())
+        .evaluate_interop(&compile(Config::new().set_dynamic("result", result)).unwrap())
         .unwrap_err();
     assert_eq!(diagnostic.primary.as_ref().unwrap().file, file!());
     assert_eq!(diagnostic.primary.as_ref().unwrap().line, line);

@@ -3,8 +3,8 @@ use rusix_ir::interop::raw::NixFunctionExt;
 use rusix_ir::interop::raw::NixRepresentation;
 use rusix_ir::{
     self as rusix, Config, Expr,
-    backend::ValueKind,
     interop::{InputRef, Nixpkgs, raw::NixValue},
+    ir::ValueKind,
 };
 use rusix_nix::{Generated, NixSession, Provenance, compile};
 use std::fs;
@@ -90,7 +90,7 @@ fn input() -> NixValue {
 }
 
 fn artifact(value: NixValue) -> Generated {
-    compile(&Config::new().set_dynamic("result", value)).unwrap()
+    compile(Config::new().set_dynamic("result", value)).unwrap()
 }
 
 fn evaluate(value: NixValue) -> serde_json::Value {
@@ -283,7 +283,7 @@ fn unused_views_and_unselected_leaves_do_not_force_argument_values() {
     });
     let result = factory.call(NixValue::record([("platform", platform(42))]));
     let artifact = compile(
-        &Config::new()
+        Config::new()
             .set_dynamic("good", result.clone().select("good"))
             .set_dynamic("bad", result.select("bad")),
     )

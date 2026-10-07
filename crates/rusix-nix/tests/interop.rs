@@ -1,5 +1,5 @@
-use rusix_ir::backend::ReferencedExpression;
 use rusix_ir::interop::raw::{InputRefExt, NixFunctionExt};
+use rusix_ir::ir::ReferencedExpression;
 use rusix_ir::{
     Config, IntoConfig,
     interop::{InputRef, Nixpkgs},
@@ -132,7 +132,7 @@ fn package_error(module: NixosModule, purpose: &str) -> Box<Diagnostic> {
         .unwrap_err();
     assert_eq!(error.provenance, Provenance::ErrorContext, "{error:?}");
     let origin = error.primary.as_ref().unwrap();
-    let rusix_ir::backend::ValueKind::List(packages) =
+    let rusix_ir::ir::ValueKind::List(packages) =
         &module.modules[0].config.assignments[0].value.kind
     else {
         panic!("package IR list");
@@ -229,7 +229,7 @@ fn missing_module_maps_to_lookup() {
 fn existing_lib_function_executes_in_nix() {
     let value = NixSession::new()
         .unwrap()
-        .evaluate_interop(&compile(&config::function()).unwrap())
+        .evaluate_interop(&compile(config::function()).unwrap())
         .unwrap()
         .value;
     assert_eq!(value["result"], "RUSIX");
@@ -268,7 +268,7 @@ fn failed_lib_function_maps_to_rust_call() {
 fn missing_lib_function_maps_to_lookup() {
     let error = NixSession::new()
         .unwrap()
-        .evaluate_interop(&compile(&config::missing_function()).unwrap())
+        .evaluate_interop(&compile(config::missing_function()).unwrap())
         .unwrap_err();
     assert_eq!(
         error.primary.unwrap().purpose,
@@ -351,7 +351,7 @@ fn invalid_module_reports_rust_boundary() {
 #[test]
 fn structured_paths_are_validated_and_escaped() {
     let pkgs = Nixpkgs::new();
-    assert!(compile(&Config::new().set_dynamic("value", pkgs.get("bad..path"))).is_err());
+    assert!(compile(Config::new().set_dynamic("value", pkgs.get("bad..path"))).is_err());
     assert!(
         compile_module(&NixosModule::new(Config::new()).import_ref(pkgs.module("../escape.nix")))
             .is_err()
@@ -359,8 +359,7 @@ fn structured_paths_are_validated_and_escaped() {
     let input = InputRef::local("example", "/nonexistent.nix");
 
     let generated =
-        compile(&Config::new().set_dynamic("value", input.package("packages.odd\"${key}")))
-            .unwrap();
+        compile(Config::new().set_dynamic("value", input.package("packages.odd\"${key}"))).unwrap();
     assert!(generated.source.contains("\\\"\\${"));
 }
 
@@ -383,7 +382,7 @@ fn missing_input_file_maps_to_rust_lookup() {
     let package = input.package("packages.example");
     let origin = package.reference().origin.clone();
 
-    let generated = compile(&Config::new().set_dynamic("value", package)).unwrap();
+    let generated = compile(Config::new().set_dynamic("value", package)).unwrap();
     let error = NixSession::new()
         .unwrap()
         .evaluate_interop(&generated)
@@ -403,7 +402,7 @@ fn unrelated_opaque_values_remain_lazy() {
     // Stage sources using the public interop entrypoint, selecting a result
     // explicitly rather than demanding the sibling value.
     let selected = compile(
-        &Config::new().set_dynamic(
+        Config::new().set_dynamic(
             "value",
             InputRef::local(
                 "example",
@@ -442,7 +441,7 @@ fn delayed_function_failure_maps_to_selection_not_original_call() {
         .call(true)
         .select("bad");
 
-    let generated = compile(&Config::new().set_dynamic("result", value)).unwrap();
+    let generated = compile(Config::new().set_dynamic("result", value)).unwrap();
     let error = NixSession::new()
         .unwrap()
         .evaluate_interop(&generated)

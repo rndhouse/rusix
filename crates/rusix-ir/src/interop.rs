@@ -11,7 +11,7 @@
 //! arguments; Rusix records Rust locations to help explain failures.
 use crate::{
     ConfigValue, ValidationError,
-    backend::{IntoNode, Node, Origin, Reference, Source},
+    ir::{IntoNode, Node, Origin, Reference, Source},
     sealed,
 };
 use std::path::PathBuf;
@@ -48,7 +48,7 @@ macro_rules! handle {
             pub(crate) Reference,
         );
 
-        impl crate::backend::ReferencedExpression for $name {
+        impl crate::ir::ReferencedExpression for $name {
             fn reference(&self) -> &Reference {
                 &self.0
             }

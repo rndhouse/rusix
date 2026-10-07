@@ -94,7 +94,7 @@ use ast::{BinaryOp, Builtin, NixExpr, NixKind};
 pub use diagnostic::{Diagnostic, DiagnosticKind, DiagnosticOrigin, OriginRole, Provenance};
 pub use isolated::{Evaluation, NixSession};
 pub use render::{Generated, RenderOptions, SourceSpan, render, render_with_options};
-use rusix_ir::{Config, IntoConfig, backend::Node, backend::ValueKind};
+use rusix_ir::{Config, IntoConfig, ir::Node, ir::ValueKind};
 use std::{cell::Cell, rc::Rc};
 
 /// Generate Nix source directly from a typed root implementing [`IntoConfig`].
@@ -197,8 +197,8 @@ fn scoped_reference(node: &Node, packages_only: bool) -> Option<&Node> {
             .or_else(|| option_reference(yes))
             .or_else(|| option_reference(no)),
         ValueKind::Reference(reference) => match &reference.source {
-            rusix_ir::backend::Source::NixosPackages { .. } => Some(node),
-            rusix_ir::backend::Source::Packages { overlays } => {
+            rusix_ir::ir::Source::NixosPackages { .. } => Some(node),
+            rusix_ir::ir::Source::Packages { overlays } => {
                 overlays.iter().find_map(option_reference)
             }
             _ => None,

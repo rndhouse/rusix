@@ -5,7 +5,7 @@ mod precedence;
 use crate::ast::{Builtin, NixExpr, NixKind};
 use layout::{Doc, attributed, concat, group, hard_line, line, nest, text};
 use precedence::{Context, precedence};
-use rusix_ir::backend::Origin;
+use rusix_ir::ir::Origin;
 use serde::{Deserialize, Serialize};
 
 /// A range of generated Nix text linked to the Rust operation that created it.

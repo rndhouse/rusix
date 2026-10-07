@@ -1,10 +1,10 @@
 //! Derive semantics exercised through real lowering and NixOS merges.
-use rusix_ir::backend::ReferencedExpression;
 use rusix_ir::interop::raw::NixFunctionExt;
+use rusix_ir::ir::ReferencedExpression;
 use rusix_ir::{
     Config, Expr, IntoConfig, IntoRusixValue, RusixValue,
-    backend::ValueKind,
     interop::{InputRef, ModuleRef, NixFunction, Nixpkgs, OverlayRef, PackageRef, raw::NixValue},
+    ir::ValueKind,
     nixos::{DefinitionPriority, NixosModule, OptionRef},
 };
 use rusix_nix::{DiagnosticKind, NixSession, Provenance, compile, nixos::compile_module};
@@ -127,7 +127,7 @@ fn flatten_skip_generics_and_borrowed_values_have_only_requested_effects() {
     };
     let _ = &document.state; // Not converted and needs no IntoRusixValue implementation.
 
-    let generated = compile(&document.into_config()).unwrap();
+    let generated = compile(document.into_config()).unwrap();
     assert_eq!(
         NixSession::new()
             .unwrap()
@@ -528,7 +528,7 @@ fn invalid_flatten_shapes_and_duplicate_fields_are_ir_errors() {
     }
 
     assert!(
-        compile(&BadShape { number: 1 }.into_config())
+        compile(BadShape { number: 1 }.into_config())
             .unwrap_err()
             .reason
             .contains("flatten requires a record")
@@ -541,7 +541,7 @@ fn invalid_flatten_shapes_and_duplicate_fields_are_ir_errors() {
     }
 
     let error = compile(
-        &Duplicate {
+        Duplicate {
             listen_port: 1,
             second: 2,
         }
@@ -551,7 +551,7 @@ fn invalid_flatten_shapes_and_duplicate_fields_are_ir_errors() {
     assert_eq!(error.kind, DiagnosticKind::Validation);
     assert!(error.reason.contains("duplicate"));
 
-    let error = compile(&Config::from_value(1.into_value())).unwrap_err();
+    let error = compile(Config::from_value(1.into_value())).unwrap_err();
     assert!(error.reason.contains("rooted record"));
 }
 
@@ -806,16 +806,14 @@ fn derived_records_remain_atomic_when_used_as_opaque_nix_values() {
         .select("package.pname");
     let value = NixSession::new()
         .unwrap()
-        .evaluate_interop(&compile(&Config::new().set_dynamic("result", received)).unwrap())
+        .evaluate_interop(&compile(Config::new().set_dynamic("result", received)).unwrap())
         .unwrap()
         .value;
     assert_eq!(value["result"], "hello");
 
     let value = NixSession::new()
         .unwrap()
-        .evaluate(
-            &compile(&Config::new().set_dynamic("result", arguments.select("items"))).unwrap(),
-        )
+        .evaluate(&compile(Config::new().set_dynamic("result", arguments.select("items"))).unwrap())
         .unwrap()
         .value;
     assert_eq!(
@@ -848,7 +846,7 @@ fn structural_to_opaque_conversion_preserves_laziness_and_child_error_origin() {
     .try_into_nix_value()
     .unwrap();
     let artifact = compile(
-        &Config::new()
+        Config::new()
             .set_dynamic("good", value.clone().select("deferred.good"))
             .set_dynamic("bad", value.select("deferred.bad")),
     )
@@ -895,7 +893,7 @@ fn structural_to_opaque_conversion_retains_flatten_validation() {
     .unwrap();
     let evaluated = NixSession::new()
         .unwrap()
-        .evaluate(&compile(&Config::new().set_dynamic("result", value)).unwrap())
+        .evaluate(&compile(Config::new().set_dynamic("result", value)).unwrap())
         .unwrap()
         .value;
     assert_eq!(
@@ -947,7 +945,7 @@ fn direct_value_conversion_composes_naming_nulls_omission_and_dynamic_values() {
     .unwrap();
     let result = NixSession::new()
         .unwrap()
-        .evaluate(&compile(&Config::new().set_dynamic("result", value)).unwrap())
+        .evaluate(&compile(Config::new().set_dynamic("result", value)).unwrap())
         .unwrap()
         .value;
     assert_eq!(
@@ -1062,7 +1060,7 @@ fn value_conversion_does_not_replace_compilation_validation() {
         // No flatten error occurs here. These values are rejected when compiled,
         // just like records constructed directly with NixValue::record.
         let value = structural.into_nix_value().unwrap();
-        let error = compile(&Config::new().set_dynamic("result", value)).unwrap_err();
+        let error = compile(Config::new().set_dynamic("result", value)).unwrap_err();
         assert_eq!(error.kind, DiagnosticKind::Validation);
         assert_eq!(error.primary.unwrap().file, file!());
     }
@@ -1183,7 +1181,7 @@ fn emitted_optional_expressions_and_packages_keep_child_origins_and_laziness() {
     let lookup_line = line!() + 1;
     let missing = Nixpkgs::new().get("rusixDefinitelyMissing");
     let artifact = compile(
-        &config::Root {
+        config::Root {
             good: Some("only this field is selected".into()),
             bad: Some(bad),
             package: Some(missing.clone()),
@@ -1203,7 +1201,7 @@ fn emitted_optional_expressions_and_packages_keep_child_origins_and_laziness() {
     assert!(diagnostic.reason.contains("division by zero"));
 
     let package = compile(
-        &config::Root {
+        config::Root {
             good: None,
             bad: None,
             package: Some(missing),

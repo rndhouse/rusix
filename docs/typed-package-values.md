@@ -209,12 +209,12 @@ The public surface has three entry points:
 | --- | --- | --- |
 | Package/configuration authors | `prelude`, `interop`, `nixos` | typed packages, factories, calls, lists, views, macros |
 | Adapters needing dynamic Nix values | `interop::raw` | `NixValue`, `NixRepresentation`, raw lookup/call traits |
-| Compiler/backend implementers | `backend` | nodes, origins, source/reference metadata, lowering/inspection traits |
+| Compiler/backend implementers | `ir` | nodes, origins, source/reference metadata, lowering/inspection traits |
 
 `raw` names a representation boundary; attaching an interface remains lazy.
 These operations stay supported when the typed surface cannot describe an external
 interface. Raw type names and extension traits are absent from the authoring
-prelude. Import them explicitly when writing dynamic adapters. Raw IR construction is public under `backend`
+prelude. Import them explicitly when writing dynamic adapters. Raw IR construction is public under `ir`
 because `rusix-nix` is a separate crate; crate-only constructors stay restricted.
 Macro implementation hooks remain public where generated external code requires
 them and use hidden documentation rather than claiming to be private.
@@ -224,15 +224,15 @@ The following import and implementation changes are intentional:
 | Previous interface | Current interface |
 | --- | --- |
 | `interop::{NixValue, AttrPath}` | `interop::raw::{NixValue, AttrPath}` |
-| Root `Origin`, `Node`, `ValueKind`, `Assignment` | `backend::{Origin, Node, ValueKind, Assignment}` |
-| `interop::{Source, Reference}` | `backend::{Source, Reference}` |
+| Root `Origin`, `Node`, `ValueKind`, `Assignment` | `ir::{Origin, Node, ValueKind, Assignment}` |
+| `interop::{Source, Reference}` | `ir::{Source, Reference}` |
 | Implementing `NixExpression` | Implement `raw::NixRepresentation`, `Clone`, and `IntoRusixValue` |
-| Node lowering through `ConfigValue` | Explicit `backend::IntoNode` import |
+| Node lowering through `ConfigValue` | Explicit `ir::IntoNode` import |
 | Handle/option erasure | Explicit `raw::AsNixValue` import |
 | Dynamic Nix function calls and signature expectations | Explicit `raw::NixFunctionExt` import |
 | Dynamic package-set/library lookup | Explicit `raw::NixpkgsExt` import |
 | Dynamic local-input lookup | Explicit `raw::InputRefExt` import |
-| Inspecting external lookup metadata | Explicit `backend::ReferencedExpression` import |
+| Inspecting external lookup metadata | Explicit `ir::ReferencedExpression` import |
 
 `PackageRef`, `ModuleRef` and related handles still support ordinary typed
 placement/imports; `.as_value()` now requires the raw erasure trait. `OptionRef`

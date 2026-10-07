@@ -194,7 +194,7 @@ fn excluded_dependencies_defaults_and_client_server_siblings_remain_lazy() {
                 ]))),
         )
         .expect("fixed authoring arguments");
-    let generated = rusix_nix::compile(&Config::new().set_dynamic(
+    let generated = rusix_nix::compile(Config::new().set_dynamic(
         "client",
         package.field::<rusix_ir::Expr<String>>("client.drvPath"),
     ))
@@ -204,7 +204,7 @@ fn excluded_dependencies_defaults_and_client_server_siblings_remain_lazy() {
         .unwrap_or_else(|p| p.into_inner())
         .evaluate_interop(&generated)
         .unwrap();
-    let source = rusix_nix::compile(&Config::new().set_dynamic("factory", lowering::factory()))
+    let source = rusix_nix::compile(Config::new().set_dynamic("factory", lowering::factory()))
         .unwrap()
         .source;
     assert!(!source.contains("deepSeq"));

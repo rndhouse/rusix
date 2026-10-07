@@ -29,7 +29,7 @@ pub fn artifact(
     )
     .function("compare")
     .call(NixValue::record(fields));
-    compile(&Config::new().set_dynamic("result", result)).unwrap()
+    compile(Config::new().set_dynamic("result", result)).unwrap()
 }
 
 pub fn compare(suite: &str, name: &str, generated: Generated) -> serde_json::Value {

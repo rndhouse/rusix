@@ -1,4 +1,4 @@
-use rusix_ir::{Config, backend::Origin, backend::ValueKind};
+use rusix_ir::{Config, ir::Origin, ir::ValueKind};
 use rusix_nix::{
     Diagnostic, DiagnosticKind, Generated, NixSession, Provenance, SourceSpan, compile,
 };
@@ -78,7 +78,7 @@ fn snapshot(name: &str, diagnostic: &Diagnostic) {
 
 #[test]
 fn valid_rust_ir_ast_nix_json_roundtrip() {
-    let generated = compile(&fixtures::config("good").unwrap()).unwrap();
+    let generated = compile(fixtures::config("good").unwrap()).unwrap();
     assert!(!generated.source.contains("# rn-"));
     let evaluated = session().evaluate(&generated).unwrap();
     assert_eq!(
@@ -89,7 +89,7 @@ fn valid_rust_ir_ast_nix_json_roundtrip() {
         })
     );
     assert_eq!(
-        compile(&fixtures::config("good").unwrap()).unwrap().source,
+        compile(fixtures::config("good").unwrap()).unwrap().source,
         generated.source
     );
 }
@@ -97,7 +97,7 @@ fn valid_rust_ir_ast_nix_json_roundtrip() {
 #[test]
 fn inspection_comments_and_persisted_source_spans_use_the_same_origin_ids() {
     let generated = rusix_nix::compile_with_options(
-        &fixtures::config("good").unwrap(),
+        fixtures::config("good").unwrap(),
         rusix_nix::RenderOptions {
             origin_comments: true,
         },
@@ -228,7 +228,7 @@ fn missing_provenance_is_explicit_and_original_is_retained() {
 
 #[test]
 fn ir_validation_precedes_codegen() {
-    let diagnostic = compile(&fixtures::config("conflict").unwrap()).unwrap_err();
+    let diagnostic = compile(fixtures::config("conflict").unwrap()).unwrap_err();
     assert_eq!(diagnostic.kind, DiagnosticKind::Validation);
     snapshot("conflict", &diagnostic);
 }
