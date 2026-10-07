@@ -394,6 +394,13 @@ expression and currently have no Rust primary origin. A shallow container
 context still loses runtime provenance; static ancestry only helps when an
 operation origin or mapped generated frame can be recovered.
 
+The [delayed backend investigation](docs/backend-provenance-investigation.md)
+tests lazy contexts on fields and dependency elements entering stdenv. A context
+survives if evaluating that value throws, but ends after successful evaluation;
+stdenv's later rejection of an integer/attrset and later forcing of its children
+still lose the supplier's Rust origin. No backend-argument instrumentation is
+adopted. Raw diagnostics and explicit mapping limitations remain preserved.
+
 ## Store isolation
 
 **The normal Nix store is never selected.** `NixSession` owns a fresh temporary

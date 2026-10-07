@@ -5,6 +5,12 @@ Runtime `addErrorContext` markers supplement that map only at boundaries where
 Nix can lose the useful Rust operation. Fine-grained origin comments are optional
 human inspection aids; normal generated Nix omits them.
 
+The [backend handoff investigation](backend-provenance-investigation.md) tests
+whole-field and element contexts with real stdenv dependencies. Contexts survive
+deferred evaluation exceptions but end when a value evaluates successfully;
+they do not fix later backend type rejection or forcing of container children.
+The runtime boundary policy remains unchanged.
+
 The audit uses the existing isolated evaluator (Nix 2.34.8), pinned nixpkgs
 `8b27c1239e5c421a2bbc2c65d52e4a6fbf2ff296`, and live evaluator locations.
 No generated-source rewriting, fetching or building is involved.
