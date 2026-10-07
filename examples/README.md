@@ -647,7 +647,7 @@ cargo run --locked -p rusix --example nix-interop
 cargo run --locked -p rusix --example symbolic-option
 ```
 
-Run the shared [workspace verification checks](../README.md#verification) for
+Run the shared [workspace verification checks](../docs/development.md#verification) for
 Rust tests, formatting, structural spacing, Clippy and diagnostic fixtures.
 
 All showcase examples compile and run without invoking Nix: they print generated
