@@ -192,7 +192,7 @@ The generated argument views follow the same rule. Their raw `as_value` hooks
 remain available for interoperability but are hidden from normal rustdoc listings.
 
 Factories themselves implement `ConfigValue`; pass them directly into records,
-`Config::set` and callPackage. Factory `.as_value()` has been removed. Library
+`Config::set_dynamic` and callPackage. Factory `.as_value()` has been removed. Library
 adapters use `raw::expect::<NixLibrary>` or the raw representation trait rather
 than a public raw constructor. Pass Rust structs directly to `try_call_package`,
 `try_call`, or `try_mk_derivation`; these receiving interfaces perform conversion

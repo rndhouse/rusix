@@ -83,7 +83,7 @@ mod config {
     }
 
     pub fn external_module() -> NixosModule {
-        NixosModule::new(Config::new().set("services.rusnixExternal.enable", true))
+        NixosModule::new(Config::new().set_dynamic("services.rusnixExternal.enable", true))
             .import_ref(input().module("nixosModules.example"))
     }
 
@@ -97,16 +97,16 @@ mod config {
 
     pub fn function() -> Config {
         let uppercase = Nixpkgs::new().function("toUpper");
-        Config::new().set("result", uppercase.call("rusnix"))
+        Config::new().set_dynamic("result", uppercase.call("rusnix"))
     }
 
     pub fn broken_function() -> Config {
         let uppercase = Nixpkgs::new().function("toUpper");
-        Config::new().set("result", uppercase.call(true))
+        Config::new().set_dynamic("result", uppercase.call(true))
     }
 
     pub fn missing_function() -> Config {
-        Config::new().set(
+        Config::new().set_dynamic(
             "result",
             Nixpkgs::new().function("rusnixMissing").call("value"),
         )
@@ -351,7 +351,7 @@ fn invalid_module_reports_rust_boundary() {
 #[test]
 fn structured_paths_are_validated_and_escaped() {
     let pkgs = Nixpkgs::new();
-    assert!(compile(&Config::new().set("value", pkgs.get("bad..path"))).is_err());
+    assert!(compile(&Config::new().set_dynamic("value", pkgs.get("bad..path"))).is_err());
     assert!(
         compile_module(&NixosModule::new(Config::new()).import_ref(pkgs.module("../escape.nix")))
             .is_err()
@@ -359,14 +359,16 @@ fn structured_paths_are_validated_and_escaped() {
     let input = InputRef::local("example", "/nonexistent.nix");
 
     let generated =
-        compile(&Config::new().set("value", input.package("packages.odd\"${key}"))).unwrap();
+        compile(&Config::new().set_dynamic("value", input.package("packages.odd\"${key}")))
+            .unwrap();
     assert!(generated.source.contains("\\\"\\${"));
 }
 
 #[test]
 fn package_handle_can_be_passed_to_an_opaque_function() {
     let pkgs = Nixpkgs::new();
-    let config = Config::new().set("name", pkgs.function("getName").call(pkgs.get("hello")));
+    let config =
+        Config::new().set_dynamic("name", pkgs.function("getName").call(pkgs.get("hello")));
     let value = NixSession::new()
         .unwrap()
         .evaluate_interop(&compile(&config).unwrap())
@@ -381,7 +383,7 @@ fn missing_input_file_maps_to_rust_lookup() {
     let package = input.package("packages.example");
     let origin = package.reference().origin.clone();
 
-    let generated = compile(&Config::new().set("value", package)).unwrap();
+    let generated = compile(&Config::new().set_dynamic("value", package)).unwrap();
     let error = NixSession::new()
         .unwrap()
         .evaluate_interop(&generated)
@@ -394,14 +396,14 @@ fn missing_input_file_maps_to_rust_lookup() {
 fn unrelated_opaque_values_remain_lazy() {
     let pkgs = Nixpkgs::new();
     let config = Config::new()
-        .set("good", pkgs.function("toUpper").call("works"))
-        .set("bad", pkgs.get("rusnixMissing"));
+        .set_dynamic("good", pkgs.function("toUpper").call("works"))
+        .set_dynamic("bad", pkgs.get("rusnixMissing"));
 
     let session = NixSession::new().unwrap();
     // Stage sources using the public interop entrypoint, selecting a result
     // explicitly rather than demanding the sibling value.
     let selected = compile(
-        &Config::new().set(
+        &Config::new().set_dynamic(
             "value",
             InputRef::local(
                 "example",
@@ -440,7 +442,7 @@ fn delayed_function_failure_maps_to_selection_not_original_call() {
         .call(true)
         .select("bad");
 
-    let generated = compile(&Config::new().set("result", value)).unwrap();
+    let generated = compile(&Config::new().set_dynamic("result", value)).unwrap();
     let error = NixSession::new()
         .unwrap()
         .evaluate_interop(&generated)

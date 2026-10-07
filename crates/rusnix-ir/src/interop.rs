@@ -128,13 +128,19 @@ impl<R: NixExpression> PackageFunction<R> {
     /// Defaults may depend on other arguments and remain unforced until needed.
     ///
     /// ```
-    /// use rusnix_ir::{Config, interop::{raw::NixValue, Nixpkgs, PackageFunction}};
+    /// use rusnix_ir::{IntoConfig, interop::{raw::NixValue, Nixpkgs, PackageFunction}};
+    ///
+    /// #[derive(IntoConfig)]
+    /// struct Output {
+    ///     factory: PackageFunction,
+    ///     result: NixValue,
+    /// }
     ///
     /// let factory = PackageFunction::from_function_attrs(["lib", "label"], |args| {
     ///     (vec![("label", "example".into())], args.select("label"))
     /// });
     /// let result = Nixpkgs::new().call_package(&factory, NixValue::record([] as [(&str, NixValue); 0]));
-    /// let output = Config::new().set("factory", factory).set("result", result);
+    /// let output = Output { factory, result };
     /// ```
     #[track_caller]
     pub fn from_function_attrs<K: Into<String>>(

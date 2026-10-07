@@ -10,7 +10,7 @@
 //! };
 //! ```
 
-use rusnix_ir::{self as rusnix, IntoConfig, IntoRusnixValue, RusnixValue};
+use rusnix_ir::{self as rusnix, IntoRusnixValue, RusnixValue};
 
 /// An ordinary Rust sum type: credentials exist only in the TLS alternative.
 /// This shape cannot express disabled TLS with credentials or TLS missing a key.
@@ -100,6 +100,6 @@ impl IntoRusnixValue for Transport {
 
 fn main() {
     // Lower the valid Rust model to Nix; backend schemas and credential files remain unchecked here.
-    let generated = rusnix_nix::compile(&model().into_config()).unwrap();
+    let generated = rusnix_nix::compile(model()).unwrap();
     println!("{}", generated.source);
 }

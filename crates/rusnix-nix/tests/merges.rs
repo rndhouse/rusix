@@ -219,7 +219,7 @@ fn priorities_are_resolved_by_nixos_and_discarded_values_stay_lazy() {
     );
     // mkOverride 40 beats mkForce 50. The losing invalid expression is never
     // type checked or evaluated by Rusnix to reconstruct provenance.
-    let losing = NixosModule::new(Config::new().set(
+    let losing = NixosModule::new(Config::new().set_dynamic(
         "services.openssh.authorizedKeysCommandUser",
         Expr::int(44).divide(Expr::int(0)),
     ))

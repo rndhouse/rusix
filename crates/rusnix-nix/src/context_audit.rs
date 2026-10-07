@@ -72,7 +72,7 @@ pub(super) fn contexts(expr: &mut NixExpr, legacy: bool) {
 }
 
 fn origin(value: NixValue) -> Origin {
-    Config::new().set("value", value).assignments[0]
+    Config::new().set_dynamic("value", value).assignments[0]
         .value
         .origin
         .clone()
@@ -244,7 +244,7 @@ fn diagnostic_matrix_preserves_operations_paths_and_raw_errors() {
     let session = NixSession::new().unwrap();
 
     for case in cases {
-        let config = Config::new().set("package.buildInputs", case.value);
+        let config = Config::new().set_dynamic("package.buildInputs", case.value);
         let ast = lower(&config);
         let current = render(&ast);
         let debug = render_with_options(
@@ -316,7 +316,7 @@ fn boundary_contexts_have_real_counterexamples_without_markers() {
     let session = NixSession::new().unwrap();
 
     for value in [library, prefix] {
-        let config = Config::new().set("result", value);
+        let config = Config::new().set_dynamic("result", value);
         let expected = config.assignments[0].value.origin.clone();
         let mut ast = lower(&config);
         let boundary = session.evaluate_interop(&render(&ast)).unwrap_err();
@@ -337,8 +337,8 @@ fn curried_calls_have_one_boundary_but_distinct_operations_keep_theirs() {
         .apply(["/".into(), NixValue::list(["a".into(), "b".into()])]);
     let first = function.call("/");
     let second = first.call(NixValue::list(["a".into(), "b".into()]));
-    let applied = compile(&Config::new().set("result", applied)).unwrap();
-    let distinct = compile(&Config::new().set("result", second)).unwrap();
+    let applied = compile(&Config::new().set_dynamic("result", applied)).unwrap();
+    let distinct = compile(&Config::new().set_dynamic("result", second)).unwrap();
 
     // The imported function boundary is shared; .apply needs only one extra marker.
     assert_eq!(applied.source.matches("addErrorContext").count(), 2);
@@ -358,7 +358,7 @@ fn curried_calls_have_one_boundary_but_distinct_operations_keep_theirs() {
 #[test]
 fn persisted_source_maps_without_site_metadata_remain_readable() {
     let generated =
-        compile(&Config::new().set("value", Expr::int(1).divide(Expr::int(0)))).unwrap();
+        compile(&Config::new().set_dynamic("value", Expr::int(1).divide(Expr::int(0)))).unwrap();
     let mut old = serde_json::to_value(&generated).unwrap();
     for span in old["spans"].as_array_mut().unwrap() {
         span.as_object_mut().unwrap().remove("diagnostic_site");

@@ -176,7 +176,7 @@ fn literal_contents_signed_numbers_and_quoted_segments_are_not_reformatted() {
 
 #[test]
 fn layout_and_spans_are_deterministic_in_both_modes() {
-    let config = Config::new().set("long", vec!["a string with Unicode: λ"; 12]);
+    let config = Config::new().set_dynamic("long", vec!["a string with Unicode: λ"; 12]);
     let ast = crate::lower(&config);
     for options in [
         RenderOptions::default(),
@@ -317,7 +317,7 @@ fn every_syntax_variant_keeps_tokens_and_parentheses_across_layouts() {
 
 #[test]
 fn byte_columns_map_failures_after_inline_unicode_in_both_modes() {
-    let config = Config::new().set("good", "λé").set(
+    let config = Config::new().set_dynamic("good", "λé").set_dynamic(
         "bad",
         rusnix_ir::Expr::int(1).divide(rusnix_ir::Expr::int(0)),
     );

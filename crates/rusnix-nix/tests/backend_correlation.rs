@@ -109,8 +109,10 @@ fn real_case(case: &str, supplied: NixValue) -> (rusnix_nix::Generated, String) 
         "mariadb.drvPath"
     };
     (
-        rusnix_nix::compile(&Config::new().set("result", graph.as_expression().select(path)))
-            .unwrap(),
+        rusnix_nix::compile(
+            &Config::new().set_dynamic("result", graph.as_expression().select(path)),
+        )
+        .unwrap(),
         path.into(),
     )
 }
@@ -228,11 +230,11 @@ fn dependency_recipe(name: &str, field: &str, inputs: NixValue) -> NixValue {
 
 fn demand(recipe: NixValue) -> Generated {
     let package = Nixpkgs::new().value("stdenv.mkDerivation").call(recipe);
-    rusnix_nix::compile(&Config::new().set("result", package.select("drvPath"))).unwrap()
+    rusnix_nix::compile(&Config::new().set_dynamic("result", package.select("drvPath"))).unwrap()
 }
 
 fn value_origin(value: NixValue) -> rusnix_ir::backend::Origin {
-    Config::new().set("probe", value).assignments[0]
+    Config::new().set_dynamic("probe", value).assignments[0]
         .value
         .origin
         .clone()
@@ -331,7 +333,8 @@ fn unused_defaults_optional_fields_and_partial_graph_stay_lazy() {
     let good = factory.call(graph::arguments());
     let partial = NixValue::record([("good", good), ("unused", broken)]);
     let generated =
-        rusnix_nix::compile(&Config::new().set("result", partial.select("good.drvPath"))).unwrap();
+        rusnix_nix::compile(&Config::new().set_dynamic("result", partial.select("good.drvPath")))
+            .unwrap();
     assert!(generated.backend_metadata.is_some());
     let mut baseline = generated.clone();
     baseline.backend_metadata = None;
@@ -430,8 +433,8 @@ fn unused_same_name_assignment_does_not_contaminate_the_active_scope() {
     ));
     let generated = rusnix_nix::compile(
         &Config::new()
-            .set("unused", left.select("drvPath"))
-            .set("result", right.select("drvPath")),
+            .set_dynamic("unused", left.select("drvPath"))
+            .set_dynamic("result", right.select("drvPath")),
     )
     .unwrap();
     // Stage pinned inputs using the isolated interop helper, then use its
@@ -458,7 +461,7 @@ fn opaque_overrides_do_not_reuse_the_original_recipe_table() {
     let package = package
         .override_attrs(|_| NixAttrs::new([("buildInputs", NixValue::list([2_i64.into()]))]));
     let generated = rusnix_nix::compile(
-        &Config::new().set("result", package.as_expression().select("drvPath")),
+        &Config::new().set_dynamic("result", package.as_expression().select("drvPath")),
     )
     .unwrap();
     assert!(generated.backend_metadata.is_none());
@@ -632,7 +635,8 @@ fn call_package_auto_arguments_are_not_mistaken_for_authored_defaults() {
         .call(factory.clone())
         .call(graph::arguments());
     let automatic =
-        rusnix_nix::compile(&Config::new().set("result", automatic.select("drvPath"))).unwrap();
+        rusnix_nix::compile(&Config::new().set_dynamic("result", automatic.select("drvPath")))
+            .unwrap();
     let metadata = automatic.backend_metadata.as_ref().unwrap();
     let recorded: rusnix_ir::backend::Origin = serde_json::from_value(
         metadata["boundaries"][0]["fields"][0]["children"][0]["origin"].clone(),
@@ -641,7 +645,8 @@ fn call_package_auto_arguments_are_not_mistaken_for_authored_defaults() {
     assert_ne!(recorded, default_origin);
     let direct = factory.call(NixAttrs::new([("stdenv", pkgs.value("stdenv"))]));
     let direct =
-        rusnix_nix::compile(&Config::new().set("result", direct.select("drvPath"))).unwrap();
+        rusnix_nix::compile(&Config::new().set_dynamic("result", direct.select("drvPath")))
+            .unwrap();
     let session = NixSession::new().unwrap();
     session.evaluate_interop(&automatic).unwrap();
     let error = session.evaluate_interop(&direct).unwrap_err();
@@ -679,7 +684,8 @@ fn unresolved_automatic_default_cannot_hide_a_competing_package_owner() {
         .call(factory)
         .call(graph::arguments());
     let generated =
-        rusnix_nix::compile(&Config::new().set("result", package.select("drvPath"))).unwrap();
+        rusnix_nix::compile(&Config::new().set_dynamic("result", package.select("drvPath")))
+            .unwrap();
     let error = NixSession::new()
         .unwrap()
         .evaluate_interop(&generated)
@@ -706,7 +712,7 @@ fn backend_failure_in_an_assertion_guard_does_not_blame_the_unforced_body() {
         NixValue::list([rusnix_ir::Expr::int(2).into()]),
     ));
     let guarded = NixValue::assert(a.select("drvPath").equals("unused"), b.select("drvPath"));
-    let generated = rusnix_nix::compile(&Config::new().set("result", guarded)).unwrap();
+    let generated = rusnix_nix::compile(&Config::new().set_dynamic("result", guarded)).unwrap();
     let error = NixSession::new()
         .unwrap()
         .evaluate_interop(&generated)

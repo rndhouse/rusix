@@ -64,9 +64,9 @@ fn evaluate(name: &str, config: Config) -> serde_json::Value {
 fn ordinary_baseline_and_handwritten_overlay_establish_the_reference() {
     let generated = compile(
         &Config::new()
-            .set("baseline", inspect(Nixpkgs::new().as_value()))
-            .set("ordinary", inspect(ordinary(None)))
-            .set(
+            .set_dynamic("baseline", inspect(Nixpkgs::new().as_value()))
+            .set_dynamic("ordinary", inspect(ordinary(None)))
+            .set_dynamic(
                 "reference",
                 inspect(ordinary(Some(reference().overlay("overlay").into()))),
             ),
@@ -104,16 +104,16 @@ fn rust_overlay_matches_the_handwritten_recipe_and_downstream_dependency_exactly
     let value = evaluate(
         "rust",
         Config::new()
-            .set("baseline", inspect(ordinary(None)))
-            .set(
+            .set_dynamic("baseline", inspect(ordinary(None)))
+            .set_dynamic(
                 "reference",
                 inspect(ordinary(Some(reference().overlay("overlay").into()))),
             )
-            .set(
+            .set_dynamic(
                 "rustImported",
                 inspect(ordinary(Some(authoring::overlay().into()))),
             )
-            .set("rust", inspect(authoring::package_set().as_value())),
+            .set_dynamic("rust", inspect(authoring::package_set().as_value())),
     );
     assert_eq!(value["rust"], value["reference"]);
     assert_eq!(value["rustImported"], value["reference"]);
@@ -155,10 +155,10 @@ fn prev_modifies_the_previous_package_once_per_overlay_without_self_recursion() 
     let value = evaluate(
         "prev",
         Config::new()
-            .set("baseline", inspect(ordinary(None)))
-            .set("once", inspect(authoring::package_set().as_value()))
-            .set("twice", inspect(twice.as_value()))
-            .set(
+            .set_dynamic("baseline", inspect(ordinary(None)))
+            .set_dynamic("once", inspect(authoring::package_set().as_value()))
+            .set_dynamic("twice", inspect(twice.as_value()))
+            .set_dynamic(
                 "mixed",
                 inspect(
                     Nixpkgs::new()
@@ -167,7 +167,7 @@ fn prev_modifies_the_previous_package_once_per_overlay_without_self_recursion() 
                         .as_value(),
                 ),
             )
-            .set("referenceTwice", inspect(reference_twice)),
+            .set_dynamic("referenceTwice", inspect(reference_twice)),
     );
     assert_eq!(value["twice"], value["referenceTwice"]);
     assert_eq!(value["mixed"], value["referenceTwice"]);
@@ -207,10 +207,10 @@ fn final_sees_a_later_overlay_while_prev_keeps_the_preceding_package() {
     let value = evaluate(
         "final",
         Config::new()
-            .set("baseline", Nixpkgs::new().value("curl.drvPath"))
-            .set("modified", pkgs.value("curl.drvPath"))
-            .set("final", pkgs.value("rusnixFinalCurl"))
-            .set("prev", pkgs.value("rusnixPreviousCurl")),
+            .set_dynamic("baseline", Nixpkgs::new().value("curl.drvPath"))
+            .set_dynamic("modified", pkgs.value("curl.drvPath"))
+            .set_dynamic("final", pkgs.value("rusnixFinalCurl"))
+            .set_dynamic("prev", pkgs.value("rusnixPreviousCurl")),
     );
     assert_eq!(value["final"], value["modified"]);
     assert_eq!(value["prev"], value["baseline"]);
@@ -230,9 +230,9 @@ fn unrelated_failing_package_set_attributes_remain_lazy() {
         .with_overlay(authoring::overlay());
     let generated = compile(
         &Config::new()
-            .set("curl", pkgs.value("curl.drvPath"))
-            .set("hello", pkgs.value("hello.drvPath"))
-            .set("ordinaryHello", Nixpkgs::new().value("hello.drvPath")),
+            .set_dynamic("curl", pkgs.value("curl.drvPath"))
+            .set_dynamic("hello", pkgs.value("hello.drvPath"))
+            .set_dynamic("ordinaryHello", Nixpkgs::new().value("hello.drvPath")),
     )
     .unwrap();
     assert!(!generated.source.contains("deepSeq"));
@@ -241,7 +241,8 @@ fn unrelated_failing_package_set_attributes_remain_lazy() {
     let value = session.evaluate_interop(&generated).unwrap().value;
     save("lazy", &generated, &value);
     assert_eq!(value["hello"], value["ordinaryHello"]);
-    let demanded = compile(&Config::new().set("bad", pkgs.value("rusnixUnusedPackage"))).unwrap();
+    let demanded =
+        compile(&Config::new().set_dynamic("bad", pkgs.value("rusnixUnusedPackage"))).unwrap();
     let error = session.evaluate_interop(&demanded).unwrap_err();
     assert!(error.reason.contains("unused overlay attribute evaluated"));
 }
@@ -264,7 +265,7 @@ fn failure_inside_override_attrs_maps_to_the_rust_operation() {
     });
     let pkgs = Nixpkgs::new().with_overlay(overlay);
     let generated =
-        compile(&Config::new().set("flags", pkgs.value("curl.configureFlags"))).unwrap();
+        compile(&Config::new().set_dynamic("flags", pkgs.value("curl.configureFlags"))).unwrap();
     let error = NixSession::new()
         .unwrap()
         .evaluate_interop(&generated)
@@ -302,7 +303,7 @@ fn overlays_capture_outer_callback_parameters_and_reject_escaped_ones() {
     assert_eq!(builds, 1);
     let value = evaluate(
         "captured",
-        Config::new().set("label", label.call("captured")),
+        Config::new().set_dynamic("label", label.call("captured")),
     );
     assert_eq!(value["label"], "captured");
 
@@ -319,7 +320,7 @@ fn overlays_capture_outer_callback_parameters_and_reject_escaped_ones() {
     });
     let value = evaluate(
         "named-capture",
-        Config::new().set(
+        Config::new().set_dynamic(
             "label",
             named.call(NixAttrs::new([("label", NixValue::from("named"))])),
         ),
@@ -333,7 +334,7 @@ fn overlays_capture_outer_callback_parameters_and_reject_escaped_ones() {
         }));
         "unused".into()
     });
-    let generated = Config::new().set(
+    let generated = Config::new().set_dynamic(
         "label",
         Nixpkgs::new()
             .with_overlay(escaped.unwrap())
@@ -349,9 +350,10 @@ fn overlay_bodies_cannot_hide_invalid_records_or_nixos_scoped_references() {
     let invalid = Overlay::from_function(|_, _| {
         NixAttrs::new([("duplicate", NixValue::from(1)), ("duplicate", 2.into())])
     });
-    let error =
-        compile(&Config::new().set("package", Nixpkgs::new().with_overlay(invalid).get("hello")))
-            .unwrap_err();
+    let error = compile(
+        &Config::new().set_dynamic("package", Nixpkgs::new().with_overlay(invalid).get("hello")),
+    )
+    .unwrap_err();
     assert_eq!(error.kind, DiagnosticKind::Validation);
     assert!(error.reason.contains("duplicate record field"));
 
@@ -363,9 +365,10 @@ fn overlay_bodies_cannot_hide_invalid_records_or_nixos_scoped_references() {
                 .into(),
         )])
     });
-    let error =
-        compile(&Config::new().set("label", Nixpkgs::new().with_overlay(option).value("label")))
-            .unwrap_err();
+    let error = compile(
+        &Config::new().set_dynamic("label", Nixpkgs::new().with_overlay(option).value("label")),
+    )
+    .unwrap_err();
     assert_eq!(error.kind, DiagnosticKind::Validation);
     assert!(
         error
@@ -396,8 +399,8 @@ fn authored_overlays_extend_the_module_package_set_and_can_read_final_options() 
     let pkgs = Nixpkgs::from_module().with_overlay(overlay);
     let module = NixosModule::new(
         Config::new()
-            .set("rusnixPrefix", "module-")
-            .set("environment.rusnixResult", pkgs.value("rusnixLabel")),
+            .set_dynamic("rusnixPrefix", "module-")
+            .set_dynamic("environment.rusnixResult", pkgs.value("rusnixLabel")),
     )
     .declare(Schema {
         prefix: OptionDecl::new(OptionType::named("str")),

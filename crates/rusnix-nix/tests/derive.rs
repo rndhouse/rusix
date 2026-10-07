@@ -806,14 +806,16 @@ fn derived_records_remain_atomic_when_used_as_opaque_nix_values() {
         .select("package.pname");
     let value = NixSession::new()
         .unwrap()
-        .evaluate_interop(&compile(&Config::new().set("result", received)).unwrap())
+        .evaluate_interop(&compile(&Config::new().set_dynamic("result", received)).unwrap())
         .unwrap()
         .value;
     assert_eq!(value["result"], "hello");
 
     let value = NixSession::new()
         .unwrap()
-        .evaluate(&compile(&Config::new().set("result", arguments.select("items"))).unwrap())
+        .evaluate(
+            &compile(&Config::new().set_dynamic("result", arguments.select("items"))).unwrap(),
+        )
         .unwrap()
         .value;
     assert_eq!(
@@ -847,8 +849,8 @@ fn structural_to_opaque_conversion_preserves_laziness_and_child_error_origin() {
     .unwrap();
     let artifact = compile(
         &Config::new()
-            .set("good", value.clone().select("deferred.good"))
-            .set("bad", value.select("deferred.bad")),
+            .set_dynamic("good", value.clone().select("deferred.good"))
+            .set_dynamic("bad", value.select("deferred.bad")),
     )
     .unwrap();
     let session = NixSession::new().unwrap();
@@ -893,7 +895,7 @@ fn structural_to_opaque_conversion_retains_flatten_validation() {
     .unwrap();
     let evaluated = NixSession::new()
         .unwrap()
-        .evaluate(&compile(&Config::new().set("result", value)).unwrap())
+        .evaluate(&compile(&Config::new().set_dynamic("result", value)).unwrap())
         .unwrap()
         .value;
     assert_eq!(
@@ -945,7 +947,7 @@ fn direct_value_conversion_composes_naming_nulls_omission_and_dynamic_values() {
     .unwrap();
     let result = NixSession::new()
         .unwrap()
-        .evaluate(&compile(&Config::new().set("result", value)).unwrap())
+        .evaluate(&compile(&Config::new().set_dynamic("result", value)).unwrap())
         .unwrap()
         .value;
     assert_eq!(
@@ -1029,11 +1031,11 @@ fn direct_conversion_keeps_the_same_structure_and_origins_as_the_low_level_path(
     assert_eq!(
         format!(
             "{:?}",
-            Config::new().set("value", direct).assignments[0].value
+            Config::new().set_dynamic("value", direct).assignments[0].value
         ),
         format!(
             "{:?}",
-            Config::new().set("value", legacy).assignments[0].value
+            Config::new().set_dynamic("value", legacy).assignments[0].value
         )
     );
 
@@ -1060,7 +1062,7 @@ fn value_conversion_does_not_replace_compilation_validation() {
         // No flatten error occurs here. These values are rejected when compiled,
         // just like records constructed directly with NixValue::record.
         let value = structural.into_nix_value().unwrap();
-        let error = compile(&Config::new().set("result", value)).unwrap_err();
+        let error = compile(&Config::new().set_dynamic("result", value)).unwrap_err();
         assert_eq!(error.kind, DiagnosticKind::Validation);
         assert_eq!(error.primary.unwrap().file, file!());
     }
@@ -1288,7 +1290,7 @@ fn omitted_definitions_keep_nixos_defaults_while_explicit_null_changes_them() {
             .value,
         serde_json::json!({"port": 5432, "label": null})
     );
-    let invalid = module.add(Config::new().set("services.example.port", NixValue::null()));
+    let invalid = module.add(Config::new().set_dynamic("services.example.port", NixValue::null()));
     let diagnostic = session
         .evaluate_nixos(&compile_module(&invalid).unwrap(), selection, false)
         .unwrap_err();

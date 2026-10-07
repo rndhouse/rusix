@@ -192,10 +192,10 @@ fn same_artifact_interpolation_follows_ordinary_and_force_overrides() {
             )
             .import_ref(InputRef::local("downstream", &downstream).module("module"))
             .module(
-                NixosModule::new(Config::new().set("services.example.port", 5432))
+                NixosModule::new(Config::new().set_dynamic("services.example.port", 5432))
                     .priority(DefinitionPriority::Default),
             )
-            .add(Config::new().set("environment.command", text)),
+            .add(Config::new().set_dynamic("environment.command", text)),
     )
     .unwrap();
     let source = artifact.module.source.clone();
@@ -274,7 +274,7 @@ fn unused_interpolation_does_not_force_a_throwing_final_option() {
             .import_ref(fixture.module("schema"))
             .import_ref(fixture.module("failing"))
             .add(
-                Config::new().set(
+                Config::new().set_dynamic(
                     "environment.result",
                     NixValue::record([
                         ("safe", true.into()),

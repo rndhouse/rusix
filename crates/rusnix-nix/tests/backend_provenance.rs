@@ -231,7 +231,7 @@ fn real_package_handoffs_do_not_recover_delayed_dependency_origins() {
                 "curl.drvPath"
             };
             let mut generated = rusnix_nix::compile(
-                &Config::new().set("result", graph.as_expression().select(path)),
+                &Config::new().set_dynamic("result", graph.as_expression().select(path)),
             )
             .unwrap();
             // Historical context-only experiment: correlation is tested separately.
@@ -352,7 +352,7 @@ fn real_child_package_validation_loses_context_across_composed_edges() {
                 "mariadb.drvPath"
             };
             let mut generated = rusnix_nix::compile(
-                &Config::new().set("result", graph.as_expression().select(path)),
+                &Config::new().set_dynamic("result", graph.as_expression().select(path)),
             )
             .unwrap();
             // Historical context-only experiment: correlation is tested separately.
@@ -481,7 +481,7 @@ fn real_package_handoffs_leave_excluded_and_partial_graph_branches_lazy() {
         let bad = NixValue::builtin("throw").call("excluded graph node");
         let graph = package_graph(placement, None, Some(bad.clone()));
         let git = graph.as_expression().select("git.drvPath");
-        let generated = rusnix_nix::compile(&Config::new().set("result", git)).unwrap();
+        let generated = rusnix_nix::compile(&Config::new().set_dynamic("result", git)).unwrap();
         session.evaluate_interop(&generated).unwrap();
 
         let graph = package_graph(placement, Some(bad), None);
@@ -490,7 +490,7 @@ fn real_package_handoffs_leave_excluded_and_partial_graph_branches_lazy() {
             .select("curl.override")
             .call(NixValue::record([("opensslSupport", false.into())]))
             .select("drvPath");
-        let generated = rusnix_nix::compile(&Config::new().set("result", curl)).unwrap();
+        let generated = rusnix_nix::compile(&Config::new().set_dynamic("result", curl)).unwrap();
         session.evaluate_interop(&generated).unwrap();
     }
 }

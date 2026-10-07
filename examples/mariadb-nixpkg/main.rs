@@ -7,19 +7,28 @@ pub mod model;
 
 mod scripts;
 
-use rusnix_ir::{Config, interop::Nixpkgs};
+use rusnix_ir::{
+    IntoConfig,
+    interop::{NixAttrs, Nixpkgs, Package, PackageFunction},
+};
+
+#[derive(IntoConfig)]
+struct Output {
+    factory: PackageFunction<Package>,
+    family: NixAttrs<Package>,
+    mariadb: Package,
+}
 
 fn main() {
     let factory = lowering::factory();
     let mariadb = Nixpkgs::new()
         .try_call_package(&factory, model::Release::V1011.arguments())
         .expect("fixed authoring arguments");
-    let generated = rusnix_nix::compile(
-        &Config::new()
-            .set("factory", factory)
-            .set("family", lowering::family())
-            .set("mariadb", mariadb),
-    )
+    let generated = rusnix_nix::compile(Output {
+        factory,
+        family: lowering::family(),
+        mariadb,
+    })
     .unwrap();
     println!("{}", generated.source);
 }

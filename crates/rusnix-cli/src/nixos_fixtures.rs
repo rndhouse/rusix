@@ -10,14 +10,14 @@ pub fn module(name: &str) -> Option<NixosModule> {
             OpenSsh::new()
                 .enable(false)
                 .into_config()
-                .set("services.openssh.ports", vec!["twenty-two"]),
+                .set_dynamic("services.openssh.ports", vec!["twenty-two"]),
         )
         .import(ExistingModule::OpenSsh),
         "unknown" => NixosModule::new(
             OpenSsh::new()
                 .enable(false)
                 .into_config()
-                .set("services.openssh.rusnixMissing", true),
+                .set_dynamic("services.openssh.rusnixMissing", true),
         )
         .import(ExistingModule::OpenSsh),
         "assertion" => NixosModule::new(OpenSsh::new().enable(false).ports(vec![22]).into_config())
@@ -31,10 +31,14 @@ pub fn module(name: &str) -> Option<NixosModule> {
         "external" => NixosModule::new(OpenSsh::new().enable(false).into_config())
             .import(ExistingModule::OpenSsh)
             .import(ExistingModule::NixosLabel),
-        "lazy" => NixosModule::new(Config::new().set("services.openssh.enable", false).set(
-            "services.openssh.ports",
-            vec![Expr::int(22), Expr::int(44).divide(Expr::int(0))],
-        ))
+        "lazy" => NixosModule::new(
+            Config::new()
+                .set_dynamic("services.openssh.enable", false)
+                .set_dynamic(
+                    "services.openssh.ports",
+                    vec![Expr::int(22), Expr::int(44).divide(Expr::int(0))],
+                ),
+        )
         .import(ExistingModule::OpenSsh),
         _ => return None,
     })

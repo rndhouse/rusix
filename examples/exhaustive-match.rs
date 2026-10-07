@@ -5,7 +5,7 @@
 //! demo = { mode = "client"; firewall.allowedPorts = []; service.acceptsConnections = false; };
 //! ```
 
-use rusnix_ir::{self as rusnix, IntoConfig};
+use rusnix_ir::{self as rusnix};
 
 // The enum, policy consumers and local configuration tree share one boundary.
 #[rusnix::config]
@@ -87,6 +87,6 @@ pub use config::{Mode, firewall_policy, model, service_policy};
 
 fn main() {
     // Rust checks that both matches are exhaustive; lowering emits their chosen values.
-    let generated = rusnix_nix::compile(&model().into_config()).unwrap();
+    let generated = rusnix_nix::compile(model()).unwrap();
     println!("{}", generated.source);
 }

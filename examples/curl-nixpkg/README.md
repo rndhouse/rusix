@@ -145,6 +145,6 @@ let curl: Package = Nixpkgs::new().try_call_package(&factory, model::model().arg
 Argument records implement `IntoRusnixValue` and lower only at the call boundary.
 Dependency accessors return `Package`, sources return through `Overridable<NixCallable<Package>>`,
 phase text uses `Expr<String>`, and package/flag lists retain their element types.
-`Config::set` accepts the factory and package directly. Dynamic fields remain
+A typed output root exports the factory and package directly. Dynamic fields remain
 available through `as_expression`; Nix validates external expectations lazily.
 See [typed package authoring](../../docs/typed-package-values.md).

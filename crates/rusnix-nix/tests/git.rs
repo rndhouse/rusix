@@ -43,7 +43,7 @@ fn artifact_with_options(
     )
     .function("compare")
     .call(NixValue::record(args));
-    compile_with_options(&Config::new().set("result", comparison), options).unwrap()
+    compile_with_options(&Config::new().set_dynamic("result", comparison), options).unwrap()
 }
 
 fn session() -> &'static Mutex<NixSession> {
@@ -127,7 +127,7 @@ fn normal_and_inspection_git_factories_have_identical_complete_projections() {
 
 #[test]
 fn generated_git_factory_does_not_reconstruct_native_argument_records() {
-    let generated = compile(&Config::new().set("factory", lowering::factory())).unwrap();
+    let generated = compile(&Config::new().set_dynamic("factory", lowering::factory())).unwrap();
     let compact: String = generated.source.split_whitespace().collect();
 
     // Check the entire factory, including all dependent defaults and callbacks.
@@ -150,7 +150,7 @@ fn generated_git_factory_does_not_reconstruct_native_argument_records() {
 
 #[test]
 fn generated_git_contexts_cover_boundaries_not_routine_expression_structure() {
-    let generated = compile(&Config::new().set("factory", lowering::factory())).unwrap();
+    let generated = compile(&Config::new().set_dynamic("factory", lowering::factory())).unwrap();
     let boundaries: Vec<_> = generated
         .spans
         .iter()
@@ -481,7 +481,7 @@ fn rust_native_model_matches_ordinary_nix_consumers() {
         .try_call_package(&lowering::factory(), inputs::arguments(model::model()))
         .expect("fixed authoring arguments")
         .field::<Expr<String>>("drvPath");
-    let artifact = compile(&Config::new().set("result", value)).unwrap();
+    let artifact = compile(&Config::new().set_dynamic("result", value)).unwrap();
     let session = session().lock().unwrap_or_else(|p| p.into_inner());
     let rust = session.evaluate_interop(&artifact).unwrap().value;
     let reference = artifact_for_model();
@@ -505,7 +505,7 @@ fn rust_native_model_matches_ordinary_nix_consumers() {
         .field::<Expr<String>>("pname");
     assert_eq!(
         session
-            .evaluate_interop(&compile(&Config::new().set("result", full)).unwrap())
+            .evaluate_interop(&compile(&Config::new().set_dynamic("result", full)).unwrap())
             .unwrap()
             .value["result"],
         "git-with-svn"
@@ -691,10 +691,15 @@ fn unused_package_and_unused_dependency_remain_lazy() {
     let unused = lowering::factory()
         .as_expression()
         .call(NixValue::record([] as [(&str, NixValue); 0]));
-    let generated = compile(&Config::new().set("good", true).set("unused", unused)).unwrap();
+    let generated = compile(
+        &Config::new()
+            .set_dynamic("good", true)
+            .set_dynamic("unused", unused),
+    )
+    .unwrap();
     let session = session().lock().unwrap_or_else(|p| p.into_inner());
     session
-        .evaluate_interop(&compile(&Config::new().set("staged", true)).unwrap())
+        .evaluate_interop(&compile(&Config::new().set_dynamic("staged", true)).unwrap())
         .unwrap();
     assert_eq!(
         session
@@ -727,7 +732,8 @@ fn rust_call_package_preserves_the_exact_default_derivation() {
         .try_call_package(&factory, inputs::arguments(model::Git::defaults()))
         .expect("fixed authoring arguments");
     let generated =
-        compile(&Config::new().set("result", git.field::<Expr<String>>("drvPath"))).unwrap();
+        compile(&Config::new().set_dynamic("result", git.field::<Expr<String>>("drvPath")))
+            .unwrap();
     let reference = artifact([]);
     let session = session().lock().unwrap_or_else(|p| p.into_inner());
     let value = session.evaluate_interop(&generated).unwrap().value;

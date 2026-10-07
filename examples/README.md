@@ -39,7 +39,7 @@ opinionated catalogue of service, networking, account or TLS types.
 **Rusnix does not try to generate or maintain Rust bindings for the whole Nix
 ecosystem.** User-defined Rust models are optional higher-level models used where
 they provide useful invariants. Existing Nix objects cross an explicit opaque
-boundary; arbitrary NixOS options remain reachable through `Config::set`.
+boundary; arbitrary NixOS options remain reachable through `Config::set_dynamic`.
 
 NixOS already validates enums and structured options and enforces assertions.
 These examples do not claim otherwise, or claim that every option needs a Rust
@@ -215,9 +215,9 @@ priorities and two-origin conflicts. The
 [module tests](../crates/rusnix-nix/tests/config_module.rs) also cover external
 reusable values, explicit/manual conversions and multiple roots. The older
 [authoring tests](../crates/rusnix-nix/tests/authoring.rs) still verify handwritten
-adapter compatibility. Nix-interop uses Config::set for its labelled dynamic
-escape hatch; curl uses it to export the factory and selected package. It remains
-available for unsupported/dynamic paths.
+adapter compatibility. Nix-interop uses Config::set_dynamic for its labelled dynamic
+escape hatch; package examples export factories and selected packages through
+typed roots. Dynamic assignments remain available for unsupported/runtime paths.
 
 OptionRef declares a typed dependency resolved after NixOS merging, with no Rust
 read operation. [Symbolic option](symbolic-option.rs) shows the dependency in generated Nix;
@@ -364,7 +364,7 @@ module for SshContribution<T>, Services<T> and options, plus a reusable Port val
 then prints generated Nix.
 [typed_examples.rs](../crates/rusnix-nix/tests/typed_examples.rs) assembles two port
 records that collide inside one flattened contribution and verifies the IR error.
-It separately uses Config::set to introduce an unsupported option and verifies
+It separately uses Config::set_dynamic to introduce an unsupported option and verifies
 NixOS rejects it. Those deliberate invalid assemblies and diagnostic assertions
 belong in tests. Independent add contributions retain normal NixOS merge semantics.
 The [valid comparison](../tests/comparisons/layered-validation.nix) imports the
@@ -382,7 +382,7 @@ let uppercase: NixFunction = pkgs.function("toUpper");
 
 The executable shows three authoring choices: its own Transport model, opaque
 package/module/function/overlay/input handles, and a runtime-computed NixOS option
-path through the labelled Config::set escape hatch. PackageContribution maps
+path through the labelled Config::set_dynamic escape hatch. PackageContribution maps
 `Vec<PackageRef>` structurally to `environment.systemPackages`; no package-specific
 bindings are needed. One config module lowers the independent rooted
 contributions automatically. The program prints generated Nix, without resolving packages

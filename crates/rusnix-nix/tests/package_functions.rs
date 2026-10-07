@@ -11,7 +11,7 @@ use rusnix_nix::{NixSession, compile};
 fn evaluate(value: NixValue) -> serde_json::Value {
     NixSession::new()
         .unwrap()
-        .evaluate_interop(&compile(&Config::new().set("result", value)).unwrap())
+        .evaluate_interop(&compile(&Config::new().set_dynamic("result", value)).unwrap())
         .unwrap()
         .value["result"]
         .clone()
@@ -55,7 +55,7 @@ fn native_argument_defaults_remain_lazy_and_support_introspection() {
         let value = function.clone().call(NixValue::record(fields));
         let error = NixSession::new()
             .unwrap()
-            .evaluate_interop(&compile(&Config::new().set("result", value)).unwrap())
+            .evaluate_interop(&compile(&Config::new().set_dynamic("result", value)).unwrap())
             .unwrap_err();
         assert_eq!(error.primary.unwrap().line, call_line);
         assert!(!error.raw_nix.is_empty());
@@ -107,7 +107,7 @@ fn argument_interfaces_reject_invalid_bindings_defaults_and_escaped_parameters()
         let value =
             NixValue::function_attrs(names, |_| (Vec::<(&str, NixValue)>::new(), true.into()));
         assert!(
-            compile(&Config::new().set("result", value))
+            compile(&Config::new().set_dynamic("result", value))
                 .unwrap_err()
                 .reason
                 .contains("argument")
@@ -119,7 +119,7 @@ fn argument_interfaces_reject_invalid_bindings_defaults_and_escaped_parameters()
     ] {
         let value = NixValue::function_attrs(["known"], |_| (defaults, true.into()));
         assert!(
-            compile(&Config::new().set("result", value))
+            compile(&Config::new().set_dynamic("result", value))
                 .unwrap_err()
                 .reason
                 .contains("default")
@@ -131,7 +131,7 @@ fn argument_interfaces_reject_invalid_bindings_defaults_and_escaped_parameters()
         (Vec::<(&str, NixValue)>::new(), true.into())
     });
     assert!(
-        compile(&Config::new().set("result", escaped.unwrap()))
+        compile(&Config::new().set_dynamic("result", escaped.unwrap()))
             .unwrap_err()
             .reason
             .contains("escaped")
@@ -149,7 +149,10 @@ fn pinned_paths_remain_paths_and_validate_traversal() {
     let text = Nixpkgs::new().function("fileContents").call(path);
     assert!(evaluate(text).as_str().unwrap().contains("ssh"));
     for path in ["../host", "", "/absolute", "a\0b"] {
-        assert!(compile(&Config::new().set("result", Nixpkgs::new().source_path(path))).is_err());
+        assert!(
+            compile(&Config::new().set_dynamic("result", Nixpkgs::new().source_path(path)))
+                .is_err()
+        );
     }
 }
 
@@ -182,7 +185,7 @@ mod arguments {
 }
 
 fn generated(value: NixValue) -> rusnix_nix::Generated {
-    compile(&Config::new().set("result", value)).unwrap()
+    compile(&Config::new().set_dynamic("result", value)).unwrap()
 }
 
 // Ignore indentation and line wrapping when checking compiler-owned let bindings.
@@ -555,7 +558,7 @@ fn selected_argument_references_cannot_escape_their_function_scope() {
         escaped = Some(args.select("known.nested"));
         (Vec::<(&str, NixValue)>::new(), true.into())
     });
-    let diagnostic = compile(&Config::new().set("result", escaped.unwrap())).unwrap_err();
+    let diagnostic = compile(&Config::new().set_dynamic("result", escaped.unwrap())).unwrap_err();
     assert!(diagnostic.reason.contains("escaped"));
     assert!(
         diagnostic
@@ -583,14 +586,14 @@ fn typed_package_function_emits_and_composes_as_an_ordinary_value() {
             args.select("label"),
         )
     });
-    let config = Config::new().set("factory", factory.clone());
+    let config = Config::new().set_dynamic("factory", factory.clone());
     let artifact = compile(&config).unwrap();
     assert!(artifact.spans.iter().any(|span| {
         span.origin.line == definition_line && span.origin.purpose == "Nix argument-set function"
     }));
     assert_eq!(
         artifact.source,
-        compile(&Config::new().set("factory", factory.as_expression()))
+        compile(&Config::new().set_dynamic("factory", factory.as_expression()))
             .unwrap()
             .source
     );
@@ -688,7 +691,7 @@ fn override_helpers_use_supplied_functions_and_retain_call_and_child_origins() {
     for (value, line) in calls {
         let error = NixSession::new()
             .unwrap()
-            .evaluate_interop(&compile(&Config::new().set("result", value)).unwrap())
+            .evaluate_interop(&compile(&Config::new().set_dynamic("result", value)).unwrap())
             .unwrap_err();
         assert_eq!(error.primary.as_ref().unwrap().file, file!());
         assert_eq!(error.primary.as_ref().unwrap().line, line);
@@ -704,7 +707,7 @@ fn override_helpers_use_supplied_functions_and_retain_call_and_child_origins() {
     ] {
         let error = NixSession::new()
             .unwrap()
-            .evaluate_interop(&compile(&Config::new().set("result", value)).unwrap())
+            .evaluate_interop(&compile(&Config::new().set_dynamic("result", value)).unwrap())
             .unwrap_err();
         assert_eq!(error.reason, "division by zero");
         assert_eq!(error.primary.as_ref().unwrap().line, child_line);

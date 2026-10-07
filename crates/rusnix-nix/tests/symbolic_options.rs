@@ -39,7 +39,7 @@ fn base(command: Expr<String>) -> NixosModule {
     NixosModule::empty()
         .import_ref(fixtures().module("schema"))
         .module(
-            NixosModule::new(Config::new().set("services.example.port", 5432))
+            NixosModule::new(Config::new().set_dynamic("services.example.port", 5432))
                 .priority(DefinitionPriority::Default),
         )
         .add(example::service(command))
@@ -160,7 +160,7 @@ fn symbolic_text_also_passes_a_real_upstream_nixos_option_type() {
     let module = base(command())
         .import("nixos/modules/services/networking/ssh/sshd.nix")
         .import_ref(fixtures().module("ordinary"))
-        .add(Config::new().set("services.openssh.banner", command()));
+        .add(Config::new().set_dynamic("services.openssh.banner", command()));
     assert_eq!(
         NixSession::new()
             .unwrap()
@@ -300,11 +300,11 @@ fn boolean_string_and_list_values_use_the_same_scoped_reference() {
         )
         .add(
             Config::new()
-                .set(
+                .set_dynamic(
                     "environment.ports",
                     vec![OptionRef::<i64>::new("services.example.port").into_expr()],
                 )
-                .set(
+                .set_dynamic(
                     "environment.command",
                     OptionRef::<String>::new("systemd.services.example.serviceConfig.ExecStart")
                         .into_expr(),
@@ -336,7 +336,7 @@ fn invalid_paths_and_use_outside_nixos_are_validation_errors() {
                 .starts_with("NixOS option reference")
         );
     }
-    let config = Config::new().set("output", command());
+    let config = Config::new().set_dynamic("output", command());
     let error = compile(&config).unwrap_err();
     assert_eq!(error.kind, DiagnosticKind::Validation);
     assert!(error.reason.contains("NixosModule"));

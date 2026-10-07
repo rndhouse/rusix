@@ -4,7 +4,7 @@
 
 use rusnix_ir::interop::raw::NixFunctionExt;
 use rusnix_ir::{
-    self as rusnix, Config, IntoConfig, IntoRusnixValue, RusnixValue,
+    self as rusnix, Config, IntoRusnixValue, RusnixValue,
     interop::{InputRef, ModuleRef, NixFunction, Nixpkgs, OverlayRef, PackageRef, raw::NixValue},
     nix_record,
     nixos::NixosModule,
@@ -113,9 +113,9 @@ pub fn module(local: InputRef) -> NixosModule {
     let overlaid = pkgs.with_overlay(overlay).get("rusnixOverlayHello");
     let external = local.package("packages.example");
 
-    // Config::set is the escape hatch for an option path chosen at runtime.
+    // Config::set_dynamic is the escape hatch for an option path chosen at runtime.
     let arbitrary_path = ["services", "rusnixExternal", "enable"].join(".");
-    let arbitrary = Config::new().set(arbitrary_path, true);
+    let arbitrary = Config::new().set_dynamic(arbitrary_path, true);
 
     // Each add remains an independent contribution, retaining NixOS merge and priority rules.
     // Imports reuse upstream modules and retain a Rust boundary if their Nix code fails.
@@ -131,10 +131,7 @@ fn main() {
     let owned = OwnedContribution {
         demo: Transport::Plain,
     };
-    println!(
-        "{}",
-        rusnix_nix::compile(&owned.into_config()).unwrap().source
-    );
+    println!("{}", rusnix_nix::compile(owned).unwrap().source);
 
     // The input file is needed when Nix evaluates the output, not when Rust lowers it.
     let local = InputRef::local("example", "input.nix");
@@ -145,7 +142,7 @@ fn main() {
     // Nix checks this opaque function's arguments and result when it evaluates the call.
     let uppercase: NixFunction = Nixpkgs::new().function("toUpper");
     let value: NixValue = uppercase.call("rusnix");
-    let generated = rusnix_nix::compile(&FunctionResult { result: value }.into_config()).unwrap();
+    let generated = rusnix_nix::compile(FunctionResult { result: value }).unwrap();
     println!("{}", generated.source);
 
     // Mixed records cross the same opaque boundary; Nix owns the builder's schema.
@@ -157,6 +154,6 @@ fn main() {
         "passthru": nix_record! { "package": pkgs.get("hello") },
     };
     let file = pkgs.pkgs_function("writeTextFile").call(args);
-    let generated = rusnix_nix::compile(&FunctionResult { result: file }.into_config()).unwrap();
+    let generated = rusnix_nix::compile(FunctionResult { result: file }).unwrap();
     println!("{}", generated.source);
 }

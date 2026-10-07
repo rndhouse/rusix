@@ -90,7 +90,7 @@ fn input() -> NixValue {
 }
 
 fn artifact(value: NixValue) -> Generated {
-    compile(&Config::new().set("result", value)).unwrap()
+    compile(&Config::new().set_dynamic("result", value)).unwrap()
 }
 
 fn evaluate(value: NixValue) -> serde_json::Value {
@@ -221,7 +221,7 @@ fn leaf_and_subtree_origins_belong_to_the_accessor_call_not_construction() {
     let input = args::from_value(input());
     let line = line!() + 1;
     let reference = input.platform.count();
-    let config = Config::new().set("result", reference);
+    let config = Config::new().set_dynamic("result", reference);
     let node = &config.assignments[0].value;
     assert_eq!(node.origin.line, line);
     assert_eq!(node.origin.file, file!());
@@ -232,7 +232,7 @@ fn leaf_and_subtree_origins_belong_to_the_accessor_call_not_construction() {
 
     let line = line!() + 1;
     let subtree = input.platform.as_value();
-    let config = Config::new().set("result", subtree);
+    let config = Config::new().set_dynamic("result", subtree);
     assert_eq!(config.assignments[0].value.origin.line, line);
 }
 
@@ -284,8 +284,8 @@ fn unused_views_and_unselected_leaves_do_not_force_argument_values() {
     let result = factory.call(NixValue::record([("platform", platform(42))]));
     let artifact = compile(
         &Config::new()
-            .set("good", result.clone().select("good"))
-            .set("bad", result.select("bad")),
+            .set_dynamic("good", result.clone().select("good"))
+            .set_dynamic("bad", result.select("bad")),
     )
     .unwrap();
     let session = NixSession::new().unwrap();

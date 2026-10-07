@@ -166,9 +166,10 @@ fn lazy_unused_dependencies_and_final_attrs_keep_original_semantics() {
         )],
     );
     assert!(value["sourceUrls"][0].as_str().unwrap().contains("3.3.2"));
-    let generated =
-        rusnix_nix::compile(&Config::new().set("factory", lowering::factory(Release::Preview)))
-            .unwrap();
+    let generated = rusnix_nix::compile(
+        &Config::new().set_dynamic("factory", lowering::factory(Release::Preview)),
+    )
+    .unwrap();
     assert!(!generated.source.contains("deepSeq"));
     assert!(!generated.source.contains("let __rusnix_arg_"));
 }

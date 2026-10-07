@@ -11,8 +11,8 @@ use std::{
 fn ssh(port: i64) -> NixosModule {
     NixosModule::new(
         Config::new()
-            .set("services.openssh.enable", false)
-            .set("services.openssh.ports", vec![port]),
+            .set_dynamic("services.openssh.enable", false)
+            .set_dynamic("services.openssh.ports", vec![port]),
     )
     .import("nixos/modules/services/networking/ssh/sshd.nix")
 }
@@ -28,8 +28,8 @@ fn concurrent_calls_keep_values_and_diagnostics_with_their_artifacts() {
             thread::spawn(move || {
                 let failure = Expr::int(index).divide(Expr::int(0));
                 let config = Config::new()
-                    .set("good", index)
-                    .set(format!("bad{index}"), failure);
+                    .set_dynamic("good", index)
+                    .set_dynamic(format!("bad{index}"), failure);
                 let expected = config.assignments[1].value.origin.clone();
                 let generated = compile(&config).unwrap();
                 let module = compile_module(&ssh(22 + index)).unwrap();

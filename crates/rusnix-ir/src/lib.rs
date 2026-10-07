@@ -317,7 +317,8 @@ mod sealed {
     pub trait Sealed {}
 }
 
-/// A supported value that can be used directly in [`Config::set`] or a Nix call.
+/// A supported value that can be used directly in a derived configuration field,
+/// [`Config::set_dynamic`] or a Nix call.
 /// Built-in Rust literals, supported [`Expr`] types and Nix references implement
 /// this trait. It is sealed, so users cannot add implementations. For your own
 /// configuration types, derive or implement [`IntoRusnixValue`] instead.
@@ -406,7 +407,7 @@ expression_value!(String);
 /// that Nix will evaluate later; constructing Config does not run Nix.
 ///
 /// Prefer [`config`] or the [`IntoConfig`] derive for ordinary Rust authoring.
-/// [`Self::set`] is the general escape hatch for explicitly named paths.
+/// [`Self::set_dynamic`] is the escape hatch for paths chosen at runtime.
 ///
 /// A NixOS module supplies settings to a larger system configuration. Combine
 /// independent groups with [`nixos::NixosModule::add`] so NixOS can merge them.
@@ -453,6 +454,13 @@ impl IntoConfig for Config {
     }
 }
 
+/// Reuse an already lowered contribution without consuming it.
+impl IntoConfig for &Config {
+    fn into_config(self) -> Config {
+        self.clone()
+    }
+}
+
 impl Config {
     /// Start an empty contribution, capturing its caller for provenance.
     #[track_caller]
@@ -464,13 +472,15 @@ impl Config {
         }
     }
 
-    /// Assign a value at a dotted configuration path, such as `services.example.port`.
-    /// Use this escape hatch when a typed configuration struct is inconvenient.
+    /// Assign a value at a dotted configuration path chosen at runtime.
+    /// Prefer a struct deriving [`IntoConfig`] for statically known fields: Rust
+    /// cannot check this path or its expected value type. This escape hatch also
+    /// supports deliberately invalid configurations in diagnostic fixtures.
     /// The value is described now and evaluated by Nix later. [`Self::validate`]
     /// checks paths and duplicates; NixOS checks option existence and actual types.
     /// Use structural authoring for a literal field name containing a dot.
     #[track_caller]
-    pub fn set(mut self, path: impl Into<String>, value: impl ConfigValue) -> Self {
+    pub fn set_dynamic(mut self, path: impl Into<String>, value: impl ConfigValue) -> Self {
         let path = path.into();
         let origin = Origin::caller(format!("set {path}"));
         let value_origin = Origin::caller(format!("value of {path}"));
@@ -481,6 +491,14 @@ impl Config {
             value: value.into_node(value_origin),
         });
         self
+    }
+
+    /// Assign a value through the legacy dynamic-path API.
+    /// Prefer an [`IntoConfig`] struct; use [`Self::set_dynamic`] for runtime paths.
+    #[deprecated(note = "Prefer an IntoConfig struct; use set_dynamic for runtime paths.")]
+    #[track_caller]
+    pub fn set(self, path: impl Into<String>, value: impl ConfigValue) -> Self {
+        self.set_dynamic(path, value)
     }
 
     /// Check that this contribution can be represented unambiguously in generated Nix.
@@ -686,7 +704,7 @@ mod tests {
     #[test]
     fn caller_and_ids_are_deterministic() {
         fn make() -> Config {
-            Config::new().set("a", true)
+            Config::new().set_dynamic("a", true)
         }
 
         let first = make();
@@ -702,16 +720,16 @@ mod tests {
         for paths in [["a", "a"], ["a", "a.b"], ["a.b", "a"], ["a..b", "x"]] {
             assert!(
                 Config::new()
-                    .set(paths[0], true)
-                    .set(paths[1], 1)
+                    .set_dynamic(paths[0], true)
+                    .set_dynamic(paths[1], 1)
                     .validate()
                     .is_err()
             );
         }
         assert!(
             Config::new()
-                .set("a.b", true)
-                .set("a.c", vec![22])
+                .set_dynamic("a.b", true)
+                .set_dynamic("a.c", vec![22])
                 .validate()
                 .is_ok()
         );
@@ -719,7 +737,7 @@ mod tests {
 
     #[test]
     fn unsupported_nul_is_rejected_at_its_origin() {
-        let config = Config::new().set("strings", vec!["valid", "bad\0string"]);
+        let config = Config::new().set_dynamic("strings", vec!["valid", "bad\0string"]);
         let error = config.validate().unwrap_err();
 
         let ValueKind::List(items) = &config.assignments[0].value.kind else {
@@ -727,10 +745,15 @@ mod tests {
         };
 
         assert_eq!(error.origin, items[1].origin);
-        assert!(Config::new().set("bad\0path", true).validate().is_err());
         assert!(
             Config::new()
-                .set("number", Expr::int(1).in_range(0, 2, "bad\0message"))
+                .set_dynamic("bad\0path", true)
+                .validate()
+                .is_err()
+        );
+        assert!(
+            Config::new()
+                .set_dynamic("number", Expr::int(1).in_range(0, 2, "bad\0message"))
                 .validate()
                 .is_err()
         );

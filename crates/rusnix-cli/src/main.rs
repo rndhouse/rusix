@@ -215,7 +215,7 @@ mod tests {
             fs::write(out.path().join(name), "stale").unwrap();
         }
         prepare_output(out.path()).unwrap();
-        let module = NixosModule::new(Config::new().set("", true));
+        let module = NixosModule::new(Config::new().set_dynamic("", true));
         assert!(retain_compilation(out.path(), compile_module(&module)).is_err());
 
         let diagnostic: serde_json::Value =

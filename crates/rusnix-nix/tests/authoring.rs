@@ -13,13 +13,13 @@ struct ListenPorts(Vec<u16>);
 // defined by the component; Rusnix does not supply a user or port domain model.
 impl IntoConfig for AuthorizedUser {
     fn into_config(self) -> Config {
-        Config::new().set("services.openssh.authorizedKeysCommandUser", self.0)
+        Config::new().set_dynamic("services.openssh.authorizedKeysCommandUser", self.0)
     }
 }
 
 impl IntoConfig for ListenPorts {
     fn into_config(self) -> Config {
-        Config::new().set("services.openssh.ports", self.0)
+        Config::new().set_dynamic("services.openssh.ports", self.0)
     }
 }
 
@@ -189,7 +189,7 @@ fn priorities_remain_local_to_contributions_and_discarded_values_stay_lazy() {
                 .priority(DefinitionPriority::Override(40)),
         )
         .module(
-            NixosModule::new(Config::new().set(
+            NixosModule::new(Config::new().set_dynamic(
                 "services.openssh.authorizedKeysCommandUser",
                 Expr::int(44).divide(Expr::int(0)),
             ))
@@ -214,7 +214,7 @@ struct CalculatedPorts(Expr<i64>);
 
 impl IntoConfig for CalculatedPorts {
     fn into_config(self) -> Config {
-        Config::new().set("services.openssh.ports", vec![self.0])
+        Config::new().set_dynamic("services.openssh.ports", vec![self.0])
     }
 }
 
@@ -254,7 +254,7 @@ fn direct_conversion_tracks_its_caller_and_one_config_still_validates_duplicates
     let conversion_line = line!() + 1;
     let config = user("root").into_config();
     assert_eq!(config.assignments[0].origin.line, conversion_line);
-    let config = config.set("services.openssh.authorizedKeysCommandUser", "nobody");
+    let config = config.set_dynamic("services.openssh.authorizedKeysCommandUser", "nobody");
     let expected = config.assignments[1].origin.clone();
 
     let diagnostic = compile_module(&base().add(config)).unwrap_err();
@@ -285,11 +285,11 @@ fn per_value_priorities_leave_selection_to_nixos() {
         ),
     ] {
         let module = base()
-            .add(Config::new().set(
+            .add(Config::new().set_dynamic(
                 "services.openssh.authorizedKeysCommandUser",
                 NixValue::from("root").priority(left),
             ))
-            .add(Config::new().set(
+            .add(Config::new().set_dynamic(
                 "services.openssh.authorizedKeysCommandUser",
                 NixValue::from("nobody").priority(right),
             ));
@@ -316,7 +316,7 @@ fn deferred_merge_orders_list_definitions_using_nixos_before_and_after() {
         NixValue::list([3333.into()]).after(),
         NixValue::list([1111.into()]).before(),
     ]);
-    let module = base().add(Config::new().set("services.openssh.ports", definitions));
+    let module = base().add(Config::new().set_dynamic("services.openssh.ports", definitions));
     assert_eq!(
         NixSession::new()
             .unwrap()
@@ -337,7 +337,7 @@ fn deferred_when_discards_inactive_definitions_without_evaluating_their_values()
 
     let discarded = NixValue::list([Expr::int(1).divide(Expr::int(0)).into()])
         .when(OptionRef::<bool>::new("services.openssh.enable").into_expr());
-    let module = base().add(Config::new().set("services.openssh.ports", discarded));
+    let module = base().add(Config::new().set_dynamic("services.openssh.ports", discarded));
 
     let artifact = compile_module(&module).unwrap();
     assert!(!artifact.module.source.contains("deepSeq"));
@@ -357,7 +357,7 @@ fn active_deferred_definition_keeps_the_failing_operation_origin() {
 
     let divide_line = line!() + 1;
     let invalid = Expr::int(1).divide(Expr::int(0));
-    let module = base().add(Config::new().set(
+    let module = base().add(Config::new().set_dynamic(
         "services.openssh.ports",
         NixValue::list([invalid.into()]).when(true),
     ));
@@ -400,11 +400,11 @@ fn standard_assertions_follow_final_options_with_verbatim_deferred_messages() {
     let record_line = line!() + 1;
     let rule = nixos::assertion(condition, message);
     let config = Config::new()
-        .set(
+        .set_dynamic(
             "services.example.port",
             NixValue::from(5432).priority(DefinitionPriority::Default),
         )
-        .set("assertions", NixValue::list([rule]));
+        .set_dynamic("assertions", NixValue::list([rule]));
     let ValueKind::List(rules) = &config.assignments[1].value.kind else {
         panic!("assertion list")
     };
@@ -460,7 +460,7 @@ fn standard_assertion_messages_and_unused_conditions_remain_lazy() {
     let session = NixSession::new().unwrap();
 
     // A true condition does not demand its error message, even when assertions are checked.
-    let artifact = compile_module(&base().add(Config::new().set(
+    let artifact = compile_module(&base().add(Config::new().set_dynamic(
         "assertions",
         NixValue::list([nixos::assertion(true, message)]),
     )))
@@ -474,7 +474,7 @@ fn standard_assertion_messages_and_unused_conditions_remain_lazy() {
     );
 
     // Selecting an unrelated option does not check the assertion's missing dependency.
-    let artifact = compile_module(&base().add(Config::new().set(
+    let artifact = compile_module(&base().add(Config::new().set_dynamic(
         "assertions",
         NixValue::list([nixos::assertion(unused_condition, "missing dependency")]),
     )))
@@ -495,7 +495,7 @@ fn deferred_assertion_condition_failures_keep_the_child_operation_origin() {
     let operation_line = line!() + 1;
     let invalid = Expr::int(44).divide(Expr::int(0));
     let condition = NixValue::from(invalid).equals(22);
-    let artifact = compile_module(&base().add(Config::new().set(
+    let artifact = compile_module(&base().add(Config::new().set_dynamic(
         "assertions",
         NixValue::list([nixos::assertion(condition, "invalid condition")]),
     )))
@@ -519,7 +519,7 @@ fn deferred_assertion_message_failures_keep_the_child_operation_origin() {
     let operation_line = line!() + 1;
     let invalid = Expr::int(44).divide(Expr::int(0));
     let message = nix_text!("invalid result: {value}", value = invalid);
-    let artifact = compile_module(&base().add(Config::new().set(
+    let artifact = compile_module(&base().add(Config::new().set_dynamic(
         "assertions",
         NixValue::list([nixos::assertion(false, message)]),
     )))

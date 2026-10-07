@@ -6,7 +6,7 @@
 //! demo.endpoint = { host = "service.internal"; port = 443; };
 //! ```
 
-use rusnix_ir::{self as rusnix, IntoConfig, IntoRusnixValue};
+use rusnix_ir::{self as rusnix, IntoRusnixValue};
 
 /// An ordinary Rust domain type; its inner value lowers to a Nix string.
 /// This separates names from other strings without adding hostname validation.
@@ -59,6 +59,6 @@ pub use config::model;
 
 fn main() {
     // Prints source only; evaluating it as NixOS needs declarations for the fictional demo options.
-    let generated = rusnix_nix::compile(&model().into_config()).unwrap();
+    let generated = rusnix_nix::compile(model()).unwrap();
     println!("{}", generated.source);
 }

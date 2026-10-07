@@ -126,8 +126,8 @@ fn ordinary_openssl_also_composes_and_unused_graph_stays_lazy() {
     let bad = NixValue::builtin("throw").call("unused OpenSSL");
     let generated = rusnix_nix::compile(
         &Config::new()
-            .set("good", true)
-            .set("graph", graph::with_openssl(Package::from_expression(bad))),
+            .set_dynamic("good", true)
+            .set_dynamic("graph", graph::with_openssl(Package::from_expression(bad))),
     )
     .unwrap();
     let session = support::session().lock().unwrap_or_else(|p| p.into_inner());
@@ -142,7 +142,8 @@ fn ordinary_openssl_also_composes_and_unused_graph_stays_lazy() {
 
 #[test]
 fn generated_graph_shares_factories_and_dependencies_lexically() {
-    let generated = rusnix_nix::compile(&Config::new().set("graph", graph::graph())).unwrap();
+    let generated =
+        rusnix_nix::compile(&Config::new().set_dynamic("graph", graph::graph())).unwrap();
     assert_eq!(generated.source.matches("openssl-3.3.2.tar.gz").count(), 0); // version is lexical interpolation
     assert_eq!(
         generated
@@ -172,7 +173,7 @@ fn generated_graph_shares_factories_and_dependencies_lexically() {
 #[test]
 fn curl_consuming_invalid_supplied_openssl_keeps_child_boundary() {
     let generated = rusnix_nix::compile(
-        &Config::new().set(
+        &Config::new().set_dynamic(
             "result",
             graph::with_openssl(Package::from_expression(1_i64.into()))
                 .as_expression()
@@ -202,7 +203,7 @@ fn disabled_openssl_is_not_forced_by_composition_or_overrides() {
         .select("curl.override")
         .call(NixValue::record([("opensslSupport", false.into())]));
     let generated =
-        rusnix_nix::compile(&Config::new().set("result", curl.select("drvPath"))).unwrap();
+        rusnix_nix::compile(&Config::new().set_dynamic("result", curl.select("drvPath"))).unwrap();
     assert!(
         support::session()
             .lock()
@@ -223,7 +224,7 @@ fn child_openssl_definition_failure_survives_the_full_graph() {
         NixValue::record([("fetchurl", 1_i64.into())]),
     );
     let generated = rusnix_nix::compile(
-        &Config::new().set(
+        &Config::new().set_dynamic(
             "result",
             graph::with_openssl(openssl)
                 .as_expression()
@@ -260,7 +261,7 @@ fn mariadb_consuming_failing_rust_curl_keeps_child_definition() {
         graph::mariadb::model::Release::V1011.arguments(),
     );
     let generated = rusnix_nix::compile(
-        &Config::new().set("result", graph.as_expression().select("mariadb.drvPath")),
+        &Config::new().set_dynamic("result", graph.as_expression().select("mariadb.drvPath")),
     )
     .unwrap();
     let error = failure("mariadb-consuming-curl", &generated);
@@ -284,7 +285,7 @@ fn delayed_stdenv_dependency_validation_recovers_supplied_child() {
         graph::mariadb::model::Release::V1011.arguments(),
     );
     let generated = rusnix_nix::compile(
-        &Config::new().set("result", graph.as_expression().select("mariadb.drvPath")),
+        &Config::new().set_dynamic("result", graph.as_expression().select("mariadb.drvPath")),
     )
     .unwrap();
     let error = failure("backend-invalid-dependency", &generated);

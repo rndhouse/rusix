@@ -325,8 +325,8 @@ fn shallow_error_context_loses_nested_failure_context() {
 fn string_and_attribute_escaping_and_integer_edges_survive_nix() {
     let text = "Unicode λ, \"quote\", \\ slash, ${builtins.throw \"injection\"}\n\t\r";
     let config = Config::new()
-        .set("a\"${injection}.λ", text)
-        .set("numbers", vec![i64::MIN, -22, 0, i64::MAX]);
+        .set_dynamic("a\"${injection}.λ", text)
+        .set_dynamic("numbers", vec![i64::MIN, -22, 0, i64::MAX]);
 
     let generated = compile(&config).unwrap();
     let value = session().evaluate(&generated).unwrap().value;
@@ -432,7 +432,7 @@ fn selecting_bad_maps_to_divide_and_retains_static_path() {
 fn selected_list_child_keeps_operation_origin_without_container_forcing() {
     use rusnix_ir::Expr;
 
-    let config = Config::new().set("good", 42).set(
+    let config = Config::new().set_dynamic("good", 42).set_dynamic(
         "bad",
         vec![Expr::int(22), Expr::int(44).divide(Expr::int(0))],
     );
@@ -525,8 +525,8 @@ fn reused_operation_origin_recovers_the_selected_occurrence_path() {
 
     let operation = Expr::int(44).divide(Expr::int(0));
     let config = Config::new()
-        .set("first", operation.clone())
-        .set("second", operation);
+        .set_dynamic("first", operation.clone())
+        .set_dynamic("second", operation);
 
     let generated = compile(&config).unwrap();
     assert_eq!(
@@ -558,7 +558,7 @@ fn reused_operation_origin_recovers_the_selected_occurrence_path() {
 #[test]
 fn attribute_selection_is_literal_data_not_source_or_cli_flags() {
     let attribute = "--store /nix/store ${throw \"injection\"}";
-    let config = Config::new().set(attribute, 42);
+    let config = Config::new().set_dynamic(attribute, 42);
 
     let generated = compile(&config).unwrap();
     assert_eq!(
@@ -576,7 +576,7 @@ fn valid_range_constraints_preserve_values_including_bounds() {
 
     let ports =
         [1, 22, 65535].map(|port| Expr::int(port).in_range(1, 65535, "port must be in 1..=65535"));
-    let config = Config::new().set("ports", Vec::from(ports));
+    let config = Config::new().set_dynamic("ports", Vec::from(ports));
 
     let generated = compile(&config).unwrap();
     assert_eq!(

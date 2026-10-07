@@ -6,7 +6,7 @@
 //! demo = { port = 1000; host = "admin"; userId = 1000; owner = "admin"; };
 //! ```
 
-use rusnix_ir::{self as rusnix, IntoConfig, IntoRusnixValue};
+use rusnix_ir::{self as rusnix, IntoRusnixValue};
 
 /// A listening-port domain value; the inner u16 lowers to a Nix integer.
 /// The distinction from UserId is checked by Rust, not by a range validator.
@@ -77,6 +77,6 @@ pub use config::model;
 
 fn main() {
     // Nix receives primitive values; their semantic separation was enforced in Rust before lowering.
-    let generated = rusnix_nix::compile(&model().into_config()).unwrap();
+    let generated = rusnix_nix::compile(model()).unwrap();
     println!("{}", generated.source);
 }

@@ -6,23 +6,29 @@ use rusnix_ir::{
 
 // Separate functions give each contribution a distinct Rust call site.
 pub fn a() -> NixosModule {
-    NixosModule::new(Config::new().set("services.openssh.authorizedKeysCommandUser", "root"))
+    NixosModule::new(
+        Config::new().set_dynamic("services.openssh.authorizedKeysCommandUser", "root"),
+    )
 }
 
 pub fn b() -> NixosModule {
-    NixosModule::new(Config::new().set("services.openssh.authorizedKeysCommandUser", "nobody"))
+    NixosModule::new(
+        Config::new().set_dynamic("services.openssh.authorizedKeysCommandUser", "nobody"),
+    )
 }
 
 pub fn c() -> NixosModule {
-    NixosModule::new(Config::new().set("services.openssh.authorizedKeysCommandUser", "sshd"))
+    NixosModule::new(
+        Config::new().set_dynamic("services.openssh.authorizedKeysCommandUser", "sshd"),
+    )
 }
 
 pub fn ports_a() -> NixosModule {
-    NixosModule::new(Config::new().set("services.openssh.ports", vec![22]))
+    NixosModule::new(Config::new().set_dynamic("services.openssh.ports", vec![22]))
 }
 
 pub fn ports_b() -> NixosModule {
-    NixosModule::new(Config::new().set("services.openssh.ports", vec![2222]))
+    NixosModule::new(Config::new().set_dynamic("services.openssh.ports", vec![2222]))
 }
 
 pub fn module(name: &str) -> Option<NixosModule> {
@@ -35,23 +41,27 @@ pub fn module(name: &str) -> Option<NixosModule> {
             .module(a().priority(DefinitionPriority::Default))
             .module(b())
             .module(c().priority(DefinitionPriority::Force)),
-        "merge-mixed" => NixosModule::new(Config::new().set("system.nixos.version", "24.11"))
-            .import(ExistingModule::NixosLabel)
-            .module(
-                NixosModule::new(Config::new().set("system.nixos.label", "rusnix-label"))
+        "merge-mixed" => {
+            NixosModule::new(Config::new().set_dynamic("system.nixos.version", "24.11"))
+                .import(ExistingModule::NixosLabel)
+                .module(
+                    NixosModule::new(
+                        Config::new().set_dynamic("system.nixos.label", "rusnix-label"),
+                    )
                     .priority(DefinitionPriority::Default),
-            ),
+                )
+        }
         // mergeEqualOption reports only the first conflicting pair. A separate
         // real type error exercises NixOS reporting all three invalid definitions.
         "merge-three-type" => base
             .module(NixosModule::new(
-                Config::new().set("services.openssh.ports", "invalid-a"),
+                Config::new().set_dynamic("services.openssh.ports", "invalid-a"),
             ))
             .module(NixosModule::new(
-                Config::new().set("services.openssh.ports", "invalid-b"),
+                Config::new().set_dynamic("services.openssh.ports", "invalid-b"),
             ))
             .module(NixosModule::new(
-                Config::new().set("services.openssh.ports", "invalid-c"),
+                Config::new().set_dynamic("services.openssh.ports", "invalid-c"),
             )),
         _ => return None,
     })

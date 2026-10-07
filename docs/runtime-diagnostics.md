@@ -123,11 +123,16 @@ Normal compilation, CLI artifacts and examples use comment-free expression outpu
 There is still one compiler-owned header comment. Inspection is explicit:
 
 ```rust
-use rusnix_ir::Config;
+use rusnix_ir::IntoConfig;
 use rusnix_nix::{RenderOptions, compile_with_options};
 
+#[derive(IntoConfig)]
+struct Output {
+    enabled: bool,
+}
+
 let annotated = compile_with_options(
-    &Config::new().set("enabled", true),
+    Output { enabled: true },
     RenderOptions { origin_comments: true },
 ).unwrap();
 ```

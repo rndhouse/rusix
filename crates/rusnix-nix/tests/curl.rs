@@ -36,7 +36,7 @@ fn artifact(fields: impl IntoIterator<Item = (&'static str, NixValue)>) -> Gener
     .function("compare")
     .call(NixValue::record(arguments));
 
-    compile(&Config::new().set("result", comparison)).unwrap()
+    compile(&Config::new().set_dynamic("result", comparison)).unwrap()
 }
 
 fn session() -> &'static Mutex<NixSession> {
@@ -466,7 +466,7 @@ fn excluded_dependencies_passthru_and_unused_factory_remain_lazy() {
         )],
     );
     let generated = compile(
-        &Config::new().set("good", true).set(
+        &Config::new().set_dynamic("good", true).set_dynamic(
             "unused",
             lowering::factory()
                 .as_expression()
@@ -487,7 +487,7 @@ fn excluded_dependencies_passthru_and_unused_factory_remain_lazy() {
 
 #[test]
 fn generated_defaults_are_lexical_and_contexts_remain_selective() {
-    let generated = compile(&Config::new().set("factory", lowering::factory())).unwrap();
+    let generated = compile(&Config::new().set_dynamic("factory", lowering::factory())).unwrap();
     let compact: String = generated.source.split_whitespace().collect();
     assert!(!compact.contains("let__rusnix_arg_"));
     assert!(!compact.contains("deepSeq"));
@@ -776,11 +776,11 @@ fn rust_call_package_matches_exact_default_and_model_derivations() {
         .expect("fixed authoring arguments");
     let generated = compile(
         &Config::new()
-            .set(
+            .set_dynamic(
                 "default",
                 default_package.field::<rusnix_ir::Expr<String>>("drvPath"),
             )
-            .set(
+            .set_dynamic(
                 "model",
                 model_package.field::<rusnix_ir::Expr<String>>("drvPath"),
             ),

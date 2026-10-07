@@ -14,12 +14,18 @@
 //! Describe a value, compile it, then ask Nix to evaluate it:
 //!
 //! ```
-//! use rusnix_ir::{Config, Expr};
+//! use rusnix_ir::{Expr, IntoConfig};
 //! use rusnix_nix::{NixSession, compile};
 //! use std::path::Path;
 //!
-//! let config = Config::new().set("answer", Expr::from(84_i64).divide(2.into()));
-//! let generated = compile(&config).expect("valid Rust configuration");
+//! #[derive(IntoConfig)]
+//! struct Output {
+//!     answer: Expr<i64>,
+//! }
+//!
+//! let generated = compile(Output {
+//!     answer: Expr::from(84_i64).divide(2.into()),
+//! }).expect("valid Rust configuration");
 //! // generated.source contains Nix; no Nix process has run yet.
 //!
 //! let session = NixSession::new().expect("temporary evaluation workspace");
@@ -87,15 +93,18 @@ use ast::{BinaryOp, Builtin, NixExpr, NixKind};
 pub use diagnostic::{Diagnostic, DiagnosticKind, DiagnosticOrigin, OriginRole, Provenance};
 pub use isolated::{Evaluation, NixSession};
 pub use render::{Generated, RenderOptions, SourceSpan, render, render_with_options};
-use rusnix_ir::{Config, backend::Node, backend::ValueKind};
+use rusnix_ir::{Config, IntoConfig, backend::Node, backend::ValueKind};
 use std::{cell::Cell, rc::Rc};
 
-/// Generate Nix source for a group of settings described by [`Config`].
+/// Generate Nix source directly from a typed root implementing [`IntoConfig`].
+/// Prefer a struct deriving `IntoConfig` or a root in a `#[rusnix_ir::config]`
+/// module. An already lowered [`Config`] or `&Config` is also accepted.
 /// This validates the Rust description and returns source plus the information
 /// needed to map generated error locations back to Rust. It does not run Nix.
 /// References to final NixOS options or the system’s supplied package set require
 /// [`nixos::compile_module`] and are rejected by this standalone compiler.
-pub fn compile(config: &Config) -> Result<Generated, Box<Diagnostic>> {
+#[track_caller]
+pub fn compile(config: impl IntoConfig) -> Result<Generated, Box<Diagnostic>> {
     compile_with_options(config, RenderOptions::default())
 }
 
@@ -104,18 +113,26 @@ pub fn compile(config: &Config) -> Result<Generated, Box<Diagnostic>> {
 /// origins, ancestry and runtime boundaries, with spans for their own text.
 ///
 /// ```
-/// use rusnix_ir::Config;
+/// use rusnix_ir::IntoConfig;
 /// use rusnix_nix::{RenderOptions, compile_with_options};
+///
+/// #[derive(IntoConfig)]
+/// struct Output {
+///     enabled: bool,
+/// }
+///
 /// let annotated = compile_with_options(
-///     &Config::new().set("enabled", true),
+///     Output { enabled: true },
 ///     RenderOptions { origin_comments: true },
 /// ).unwrap();
 /// assert!(annotated.source.contains("# rn-"));
 /// ```
+#[track_caller]
 pub fn compile_with_options(
-    config: &Config,
+    config: impl IntoConfig,
     options: RenderOptions,
 ) -> Result<Generated, Box<Diagnostic>> {
+    let config = config.into_config();
     config
         .validate()
         .map_err(|error| Box::new(Diagnostic::validation(error.origin, error.message)))?;
@@ -130,8 +147,8 @@ pub fn compile_with_options(
         }
     }
 
-    let mut generated = render_with_options(&lower(config), options);
-    generated.backend_metadata = backend::collect(config);
+    let mut generated = render_with_options(&lower(&config), options);
+    generated.backend_metadata = backend::collect(&config);
     Ok(generated)
 }
 

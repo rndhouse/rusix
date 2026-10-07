@@ -62,7 +62,7 @@ fn input() -> InputRef {
 fn module(value: impl rusnix_ir::ConfigValue) -> NixosModule {
     NixosModule::empty()
         .import_ref(input().module("schema"))
-        .add(Config::new().set("environment.result", value))
+        .add(Config::new().set_dynamic("environment.result", value))
 }
 
 #[test]
@@ -81,7 +81,7 @@ fn one_root_generates_expected_scalar_and_opaque_types() {
 
     let call_line = line!() + 1;
     let all_settings = pg.settings.as_value();
-    let config = Config::new().set("environment.result", all_settings);
+    let config = Config::new().set_dynamic("environment.result", all_settings);
     assert_eq!(config.assignments[0].value.origin.line, call_line);
     assert_eq!(config.assignments[0].value.origin.file, file!());
 }
@@ -96,7 +96,7 @@ fn nested_paths_are_bound_to_placement_without_capturing_navigation_origins() {
     ] {
         let accessor_line = line!() + 1;
         let reference = view.data_dir();
-        let config = Config::new().set("environment.result", reference);
+        let config = Config::new().set_dynamic("environment.result", reference);
         let node = &config.assignments[0].value;
         assert_eq!(node.origin.file, file!());
         assert_eq!(node.origin.line, accessor_line);
@@ -232,7 +232,7 @@ fn same_artifact_follows_ordinary_nix_overrides_and_priorities() {
         &module(command)
             .import_ref(InputRef::local("downstream", &downstream).module("module"))
             .module(
-                NixosModule::new(Config::new().set("services.example.port", 5432))
+                NixosModule::new(Config::new().set_dynamic("services.example.port", 5432))
                     .priority(DefinitionPriority::Default),
             ),
     )
@@ -350,7 +350,7 @@ fn reusable_record_and_nullable_option_views_follow_final_nixos_overrides() {
     );
     let changed = compile_module(
         &module(example.settings().port())
-            .add(Config::new().set("services.example.settings.port", 4321_i64)),
+            .add(Config::new().set_dynamic("services.example.settings.port", 4321_i64)),
     )
     .unwrap();
     assert_eq!(

@@ -149,8 +149,8 @@ Both commands compile the same Rust fixture:
 
 ```rust
 Config::new()
-    .set("good", Expr::int(42))
-    .set("bad", Expr::int(44).divide(Expr::int(0)))
+    .set_dynamic("good", Expr::int(42))
+    .set_dynamic("bad", Expr::int(44).divide(Expr::int(0)))
 ```
 
 Selecting `good` returns `42` without encountering the failure in `bad`.
@@ -189,12 +189,18 @@ let module = NixosModule::empty().add(config::model());
 Struct nesting defines Nix attribute nesting: this contribution defines
 `services.example.enable` and `services.example.port`. The fictional service
 needs an ordinary NixOS option declaration for module evaluation. Plain-data
-examples can also use `rusnix_nix::compile(&config::model().into_config())`
-with the IntoConfig trait imported.
+examples can also use `rusnix_nix::compile(config::model())` directly.
 No prefix strings are needed. Rust `snake_case` fields lower to Nix-style
 `lowerCamelCase` by default. Struct-level `#[rusnix(rename_all = "PascalCase")]`
 selects a convention for schemas such as systemd; explicit field renames are
 reserved for exceptions. Each nested struct names its own fields independently.
+
+Use typed roots for statically known fields. `Config` is the lowered contribution;
+`compile` and `compile_with_options` accept `IntoConfig` roots directly, as well
+as an existing `Config` or `&Config`. `Config::set_dynamic` is reserved for paths
+chosen at runtime and deliberately invalid diagnostic fixtures. Rust cannot
+check those paths or their expected value types. The legacy `Config::set` is
+deprecated in favor of typed roots or explicit dynamic assignments.
 
 The module attribute is reexported as `rusnix_ir::config` (aliased above). It adds
 the existing derives to immediate local structs and IntoConfig to explicitly
@@ -244,13 +250,14 @@ Captured operation/reference locations survive; ordinary primitive field
 initializers do not acquire separate source spans. Contributions are never
 flattened across NixosModule::add calls, preserving NixOS priorities and
 multi-origin conflicts. Handwritten IntoConfig remains available for custom
-adapters, and Config::set remains the explicit generic escape hatch.
+adapters, and Config::set_dynamic remains the explicit generic escape hatch.
 The [examples](examples/README.md) use `#[rusnix::config]` for local trees,
 fine-grained derives for reusable values, and explicit implementations for
 semantic conversions. The nine small examples contain no handwritten IntoConfig
 impls; PostgreSQL adds one semantic adapter for optional inputs and ownership.
-Nix-interop uses Config::set for its dynamic escape hatch, and curl uses it to
-export its factory and package. Layered-validation failure assemblies live in tests.
+Nix-interop uses Config::set_dynamic for its dynamic escape hatch; package examples
+export factories and packages through typed roots. Layered-validation failure
+assemblies live in tests.
 
 `Expr<i64>` and `Expr<bool>` are distinct Rust types. Passing a boolean
 expression to integer division fails Rust type checking. Ordinary Rust vectors
@@ -278,7 +285,7 @@ The library crates warn on missing public docs. Documentation verification uses
 
 Every semantic node, assignment, and configuration root has an origin. Public
 constructors and operations propagate `#[track_caller]`; primitives supplied to
-`.set()` inherit that call's location. Explicit expression constructors capture
+`.set_dynamic()` inherit that call's location. Explicit expression constructors capture
 their own location, so the nested failure identifies `.divide()`, rather than
 the list or its assignment. Rust validation rejects duplicate/prefix-conflicting
 paths, empty path segments, and unsupported NUL bytes before lowering.
@@ -488,12 +495,30 @@ and module-specific diagnostic translation live in `rusnix-nix/nixos.rs`.
 The existing IR, AST, renderer, source maps, and subprocess boundary are reused.
 
 ```rust
-use rusnix_ir::{Config, nixos::NixosModule};
-// Explicit generic access, without a Rust wrapper for the service.
+use rusnix_ir::{IntoConfig, IntoRusnixValue, nixos::NixosModule};
+
+#[derive(IntoConfig)]
+struct Machine {
+    services: Services,
+}
+
+#[derive(IntoRusnixValue)]
+struct Services {
+    openssh: OpenSsh,
+}
+
+#[derive(IntoRusnixValue)]
+struct OpenSsh {
+    enable: bool,
+    ports: Vec<u16>,
+}
+
 let module = NixosModule::empty()
-    .add(Config::new()
-        .set("services.openssh.enable", false)
-        .set("services.openssh.ports", vec![22]))
+    .add(Machine {
+        services: Services {
+            openssh: OpenSsh { enable: false, ports: vec![22] },
+        },
+    })
     .import("nixos/modules/services/networking/ssh/sshd.nix");
 ```
 
@@ -502,7 +527,7 @@ let module = NixosModule::empty()
 General ecosystem objects use `.import_ref(ModuleRef)`. Core does not enumerate
 upstream modules. The legacy test fixtures define their own tiny OpenSsh helper;
 its `enable` takes `bool` and `ports` takes `Vec<u16>`. The generic
-`Config::set` remains an explicit escape; the type fixture uses it to supply
+`Config::set_dynamic` remains an explicit escape; the type fixture uses it to supply
 strings to the genuine upstream integer-list option. Local typed setters capture
 caller locations through to their semantic assignments. IR module imports and
 assertions have their own origins; no Nix syntax is exposed by this API.
@@ -565,7 +590,7 @@ The compiler therefore emits **one inline imported module per assignment**:
 ```
 
 NixOS carries `_file` into definition error messages. Rusnix resolves its marker
-to the exact Rust `.set()` and option path. The actual raw type error includes:
+to the exact Rust `.set_dynamic()` and option path. The actual raw type error includes:
 
 ```text
 A definition for option `services.openssh.ports."[definition 1-entry 1]"' is not of type `16 bit unsigned integer; between 0 and 65535 (both inclusive)'. Definition values:
@@ -640,15 +665,15 @@ The final provenance experiment composes independent `NixosModule` values:
 
 ```rust
 pub fn a() -> NixosModule {
-    NixosModule::new(Config::new().set("services.openssh.authorizedKeysCommandUser", "root"))
+    NixosModule::new(Config::new().set_dynamic("services.openssh.authorizedKeysCommandUser", "root"))
 }
 
 pub fn b() -> NixosModule {
-    NixosModule::new(Config::new().set("services.openssh.authorizedKeysCommandUser", "nobody"))
+    NixosModule::new(Config::new().set_dynamic("services.openssh.authorizedKeysCommandUser", "nobody"))
 }
 
 pub fn c() -> NixosModule {
-    NixosModule::new(Config::new().set("services.openssh.authorizedKeysCommandUser", "sshd"))
+    NixosModule::new(Config::new().set_dynamic("services.openssh.authorizedKeysCommandUser", "sshd"))
 }
 let config = NixosModule::new(Config::new())
     .import("nixos/modules/services/networking/ssh/sshd.nix").module(a()).module(b());
@@ -711,7 +736,7 @@ and reasons, live in `tests/snapshots/merge-*.txt`.
 | `merge-ok` | ports A=`[22]`, B=`[2222]`; result `[2222,22]` | successful merge, no error invented |
 | `merge-three` | command user A=root, B=nobody, C=sshd; conflict | C and B only, exactly as NixOS reports |
 | `merge-three-type` | ports=`"invalid-a"`, `"invalid-b"`, `"invalid-c"`; type failure | all three reported definition origins |
-| `merge-mixed` | generated default label=`"rusnix-label"`, upstream default label=`"24.11"`; conflict | generated `.set()` plus Rust `.import(NixosLabel)` and upstream `label.nix` filename |
+| `merge-mixed` | generated default label=`"rusnix-label"`, upstream default label=`"24.11"`; conflict | generated `.set_dynamic()` plus Rust `.import(NixosLabel)` and upstream `label.nix` filename |
 | `merge-priority` | A=mkDefault(root), B=nobody, C=mkForce(sshd) | success: `"sshd"`; NixOS chooses the winner |
 
 **Three-definition limit:** pinned `lib/options.nix:284` folds definitions until
@@ -904,7 +929,13 @@ arguments are dependencies and feature options. Construct it with
 named defaults and body construction as `NixValue::function_attrs`.
 
 ```rust
-use rusnix_ir::{Config, Expr, interop::{raw::NixValue, Nixpkgs, PackageFunction}};
+use rusnix_ir::{Expr, IntoConfig, interop::{raw::NixValue, Nixpkgs, PackageFunction}};
+
+#[derive(IntoConfig)]
+struct Output {
+    factory: PackageFunction<Expr<String>>,
+    result: Expr<String>,
+}
 
 let factory: PackageFunction<Expr<String>> =
     PackageFunction::from_function_attrs(["curl", "label"], |args| {
@@ -914,7 +945,7 @@ let factory: PackageFunction<Expr<String>> =
         )
     });
 let result = Nixpkgs::new().call_package(&factory, NixValue::record([] as [(&str, NixValue); 0]));
-let config = Config::new().set("factory", factory).set("result", result);
+let generated = rusnix_nix::compile(Output { factory, result })?;
 ```
 
 `call_package<R>(&PackageFunction<R>, impl Into<NixValue>) -> R` represents the
@@ -954,7 +985,7 @@ unmarked `NixValue` expressions fail at Rust compile time.
 `From<PackageFunction<R>> for raw::NixValue` conversions provide escape hatches for dynamic inspection such as `functionArgs`. Ordinary calls,
 records and bindings accept the typed factory directly. The existing
 `ConfigValue` and `IntoRusnixValue` conversions also accept package functions in
-`Config::set` and derived configuration fields. The wrapper and `call_package`
+derived configuration fields and explicit `Config::set_dynamic` assignments. The wrapper and `call_package`
 forward source locations into the existing function and application machinery:
 construction, missing-dependency call boundaries, body operations, and caller
 argument failures retain the current diagnostic policy. External nixpkgs frames

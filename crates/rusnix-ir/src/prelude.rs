@@ -9,7 +9,12 @@
 //! let format = NixCallable::from_function(|name: Expr<String>| {
 //!     nix_text!("name={name}", name = name)
 //! });
-//! let config = Config::new().set("message", format.call("openssl"));
+//! #[derive(IntoConfig)]
+//! struct Output {
+//!     message: Expr<String>,
+//! }
+//!
+//! let output = Output { message: format.call("openssl") };
 //! // Typed calls construct deferred Nix expressions; they do not evaluate them.
 //! ```
 pub use crate::interop::{

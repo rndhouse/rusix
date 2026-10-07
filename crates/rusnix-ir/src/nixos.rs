@@ -408,7 +408,9 @@ impl NixosModule {
     /// ```
     #[track_caller]
     pub fn system_packages(mut self, packages: Vec<PackageRef>) -> Self {
-        self.config = self.config.set("environment.systemPackages", packages);
+        self.config = self
+            .config
+            .set_dynamic("environment.systemPackages", packages);
         self
     }
 

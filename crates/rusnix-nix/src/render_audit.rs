@@ -27,27 +27,27 @@ fn base() -> NixosModule {
 fn both_renderings_persist_the_same_origins_with_their_own_correct_spans() {
     let number = Expr::int(22);
     let config = Config::new()
-        .set("primitive", true)
-        .set(
+        .set_dynamic("primitive", true)
+        .set_dynamic(
             "list",
             NixValue::list([number.clone().into(), 42_i64.into()]),
         )
-        .set(
+        .set_dynamic(
             "nested",
             NixValue::record([(
                 "record",
                 NixValue::record([("number", number.clone().into())]),
             )]),
         )
-        .set("arithmetic", number.clone().divide(Expr::int(2)))
-        .set("conditional", NixValue::if_else(true, 1_i64, 2_i64))
-        .set(
+        .set_dynamic("arithmetic", number.clone().divide(Expr::int(2)))
+        .set_dynamic("conditional", NixValue::if_else(true, 1_i64, 2_i64))
+        .set_dynamic(
             "selection",
             NixValue::record([("key", true.into())]).select("key"),
         )
-        .set("application", NixValue::function(|value| value).call(true))
-        .set("package", Nixpkgs::new().get("hello"))
-        .set("text", nix_text!("number={number}", number = number));
+        .set_dynamic("application", NixValue::function(|value| value).call(true))
+        .set_dynamic("package", Nixpkgs::new().get("hello"))
+        .set_dynamic("text", nix_text!("number={number}", number = number));
     let normal = compile(&config).unwrap();
     let debug = compile_with_options(&config, INSPECT).unwrap();
 
@@ -98,7 +98,7 @@ fn both_renderings_persist_the_same_origins_with_their_own_correct_spans() {
 
 #[test]
 fn source_map_only_failures_are_equivalent_without_any_runtime_contexts() {
-    let config = Config::new().set(
+    let config = Config::new().set_dynamic(
         "nested",
         vec![Expr::int(1), Expr::int(44).divide(Expr::int(0))],
     );
@@ -122,9 +122,9 @@ fn source_map_only_failures_are_equivalent_without_any_runtime_contexts() {
 fn cloned_origins_keep_selected_occurrence_ancestry_and_lazy_siblings_in_both_modes() {
     let failure = Expr::int(44).divide(Expr::int(0));
     let config = Config::new()
-        .set("good", 42_i64)
-        .set("first", failure.clone())
-        .set("second", failure);
+        .set_dynamic("good", 42_i64)
+        .set_dynamic("first", failure.clone())
+        .set_dynamic("second", failure);
     let normal = compile(&config).unwrap();
     let debug = compile_with_options(&config, INSPECT).unwrap();
     let session = NixSession::new().unwrap();
@@ -180,14 +180,14 @@ fn module_metadata_and_final_option_diagnostics_are_identical_in_both_modes() {
     let cases = [
         ModuleCase {
             name: "unknown",
-            module: base().add(Config::new().set("services.openssh.rusnixMissing", true)),
+            module: base().add(Config::new().set_dynamic("services.openssh.rusnixMissing", true)),
             selection: &["services", "openssh", "ports"],
             kind: DiagnosticKind::NixosModule,
             causes: 1,
         },
         ModuleCase {
             name: "type",
-            module: base().add(Config::new().set(ports, vec!["wrong"])),
+            module: base().add(Config::new().set_dynamic(ports, vec!["wrong"])),
             selection: &["services", "openssh", "ports"],
             kind: DiagnosticKind::NixosType,
             causes: 1,
@@ -195,8 +195,8 @@ fn module_metadata_and_final_option_diagnostics_are_identical_in_both_modes() {
         ModuleCase {
             name: "merge",
             module: base()
-                .add(Config::new().set(owner, "root"))
-                .add(Config::new().set(owner, "nobody")),
+                .add(Config::new().set_dynamic(owner, "root"))
+                .add(Config::new().set_dynamic(owner, "nobody")),
             selection: &["services", "openssh", "authorizedKeysCommandUser"],
             kind: DiagnosticKind::NixosMerge,
             causes: 2,
@@ -204,9 +204,9 @@ fn module_metadata_and_final_option_diagnostics_are_identical_in_both_modes() {
         ModuleCase {
             name: "three-origin type",
             module: base()
-                .add(Config::new().set(ports, "wrong-a"))
-                .add(Config::new().set(ports, "wrong-b"))
-                .add(Config::new().set(ports, "wrong-c")),
+                .add(Config::new().set_dynamic(ports, "wrong-a"))
+                .add(Config::new().set_dynamic(ports, "wrong-b"))
+                .add(Config::new().set_dynamic(ports, "wrong-c")),
             selection: &["services", "openssh", "ports"],
             kind: DiagnosticKind::NixosType,
             causes: 3,
@@ -227,7 +227,7 @@ fn module_metadata_and_final_option_diagnostics_are_identical_in_both_modes() {
         },
         ModuleCase {
             name: "final option",
-            module: base().add(Config::new().set(
+            module: base().add(Config::new().set_dynamic(
                 ports,
                 vec![OptionRef::<i64>::new("services.openssh.rusnixMissing").into_expr()],
             )),
@@ -272,10 +272,10 @@ fn discarded_definitions_and_lazy_guard_branches_remain_unforced_in_both_modes()
     let failure: NixValue = Expr::int(44).divide(Expr::int(0)).into();
     let module = base()
         .module(
-            NixosModule::new(Config::new().set("services.openssh.ports", failure.clone()))
+            NixosModule::new(Config::new().set_dynamic("services.openssh.ports", failure.clone()))
                 .priority(DefinitionPriority::Default),
         )
-        .add(Config::new().set("services.openssh.ports", vec![22]));
+        .add(Config::new().set_dynamic("services.openssh.ports", vec![22]));
     let session = NixSession::new().unwrap();
 
     for artifact in module_pair(&module) {
@@ -299,11 +299,11 @@ fn discarded_definitions_and_lazy_guard_branches_remain_unforced_in_both_modes()
         ),
     );
     let config = Config::new()
-        .set(
+        .set_dynamic(
             "good",
             lib.throw_if_not(true, failure.into_expr::<String>(), 42_i64),
         )
-        .set("bad", guarded);
+        .set_dynamic("bad", guarded);
     let normal = compile(&config).unwrap();
     let debug = compile_with_options(&config, INSPECT).unwrap();
 

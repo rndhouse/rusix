@@ -419,16 +419,20 @@ impl Overlay {
     /// or external field names are checked during Rust construction.
     ///
     /// ```
-    /// use rusnix_ir::{Config, interop::{NixAttrs, Nixpkgs, Overlay, Package}};
+    /// use rusnix_ir::{IntoConfig, interop::{NixAttrs, Nixpkgs, Overlay, Package, PackageRef}};
+    ///
+    /// #[derive(IntoConfig)]
+    /// struct Output {
+    ///     overlay: Overlay,
+    ///     package: PackageRef,
+    /// }
     ///
     /// let overlay = Overlay::from_function(|_final_pkgs, prev_pkgs| {
     ///     let curl: Package = prev_pkgs.field("curl");
     ///     NixAttrs::new([("myCurl", curl.into())])
     /// });
     /// let pkgs = Nixpkgs::new().with_overlay(overlay.clone());
-    /// let config = Config::new()
-    ///     .set("overlay", overlay)
-    ///     .set("package", pkgs.get("myCurl"));
+    /// let output = Output { overlay, package: pkgs.get("myCurl") };
     /// // Like Nix: final: prev: { myCurl = prev.curl; }.
     /// ```
     #[track_caller]

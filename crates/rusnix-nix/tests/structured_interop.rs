@@ -707,7 +707,7 @@ fn module_package_handles_are_scoped_and_follow_module_package_arguments() {
     assert!(artifact.module.source.contains("pkgs"));
 
     // This selection belongs to the existing minimal module harness's namespaces.
-    let artifact = compile_module(&NixosModule::empty().add(Config::new().set(
+    let artifact = compile_module(&NixosModule::empty().add(Config::new().set_dynamic(
         "environment.result",
         pkgs.get("hello").as_value().select("pname"),
     )))
@@ -855,8 +855,8 @@ fn mixed_macros_retain_symbolic_references_and_unused_fields_stay_lazy() {
             .import_ref(schema.module("schema"))
             .add(
                 Config::new()
-                    .set("services.example.port", 5432)
-                    .set("environment.result", value),
+                    .set_dynamic("services.example.port", 5432)
+                    .set_dynamic("environment.result", value),
             ),
     )
     .unwrap();

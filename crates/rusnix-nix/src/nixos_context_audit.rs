@@ -58,10 +58,10 @@ fn postgresql_foreign_overrides_preserve_child_diagnostics_and_schema_blame() {
     let module = schema::module()
         .module(lowering::implementation())
         .module(
-            NixosModule::new(Config::new().set("services.postgresql.settings.port", 5432))
+            NixosModule::new(Config::new().set_dynamic("services.postgresql.settings.port", 5432))
                 .priority(DefinitionPriority::Default),
         )
-        .add(Config::new().set("environment.variables.RUSNIX_PORT", derived.to_text()));
+        .add(Config::new().set_dynamic("environment.variables.RUSNIX_PORT", derived.to_text()));
     let artifacts = artifacts(&module);
     let session = NixSession::new().unwrap();
     let driver = Generated {
@@ -142,8 +142,8 @@ fn merged_rust_value_failure_outranks_a_separate_final_option_reader() {
         .with_prefix("connections=");
     let module = schema::module()
         .module(lowering::implementation())
-        .add(Config::new().set("services.postgresql.settings.max_connections", failure))
-        .add(Config::new().set("environment.variables.RUSNIX_DIAGNOSTIC", reader));
+        .add(Config::new().set_dynamic("services.postgresql.settings.max_connections", failure))
+        .add(Config::new().set_dynamic("environment.variables.RUSNIX_DIAGNOSTIC", reader));
     let session = NixSession::new().unwrap();
     let driver = Generated {
         source: r#"

@@ -25,7 +25,7 @@ mod args {
 fn evaluate(value: NixValue) -> serde_json::Value {
     NixSession::new()
         .unwrap()
-        .evaluate_interop(&compile(&Config::new().set("result", value)).unwrap())
+        .evaluate_interop(&compile(&Config::new().set_dynamic("result", value)).unwrap())
         .unwrap()
         .value["result"]
         .clone()
@@ -398,7 +398,7 @@ fn helper_failures_capture_the_public_call_site_and_keep_the_nix_trace() {
     for (value, line) in cases {
         let diagnostic = NixSession::new()
             .unwrap()
-            .evaluate_interop(&compile(&Config::new().set("result", value)).unwrap())
+            .evaluate_interop(&compile(&Config::new().set_dynamic("result", value)).unwrap())
             .unwrap_err();
         let origin = diagnostic.primary.as_ref().unwrap();
         assert_eq!(origin.line, line);
@@ -452,7 +452,7 @@ fn child_expression_failures_remain_more_precise_than_helper_boundaries() {
     for value in values {
         let diagnostic = NixSession::new()
             .unwrap()
-            .evaluate_interop(&compile(&Config::new().set("result", value)).unwrap())
+            .evaluate_interop(&compile(&Config::new().set_dynamic("result", value)).unwrap())
             .unwrap_err();
         assert_eq!(diagnostic.primary.as_ref().unwrap().line, line);
         assert_eq!(diagnostic.primary.as_ref().unwrap().file, file!());
@@ -487,7 +487,7 @@ fn throw_if_not_preserves_lazy_branches_and_reports_the_validation_call() {
 
     let diagnostic = NixSession::new()
         .unwrap()
-        .evaluate_interop(&compile(&Config::new().set("result", rejected)).unwrap())
+        .evaluate_interop(&compile(&Config::new().set_dynamic("result", rejected)).unwrap())
         .unwrap_err();
     assert!(diagnostic.reason.contains("feature combination rejected"));
     assert!(!diagnostic.reason.contains("division by zero"));
@@ -532,7 +532,9 @@ fn ordered_guards_stop_at_the_first_failure_without_forcing_later_values() {
         });
         let guarded = ordered_guards(&lib, checks, unused.clone());
         let diagnostic = session
-            .evaluate_interop(&compile(&Config::new().set("result", guarded.clone())).unwrap())
+            .evaluate_interop(
+                &compile(&Config::new().set_dynamic("result", guarded.clone())).unwrap(),
+            )
             .unwrap_err();
         assert!(
             diagnostic
@@ -584,7 +586,7 @@ fn ordered_guards_retain_failing_condition_and_message_origins() {
             failure,
         );
         let diagnostic = session
-            .evaluate_interop(&compile(&Config::new().set("result", guarded)).unwrap())
+            .evaluate_interop(&compile(&Config::new().set_dynamic("result", guarded)).unwrap())
             .unwrap_err();
         assert_eq!(diagnostic.reason, "division by zero");
         assert_eq!(diagnostic.primary.as_ref().unwrap().file, file!());
@@ -622,7 +624,7 @@ fn symbolic_negation_reports_its_caller_for_invalid_backend_boolean_types() {
     let value = !NixValue::from("not a boolean");
     let diagnostic = NixSession::new()
         .unwrap()
-        .evaluate_interop(&compile(&Config::new().set("result", value)).unwrap())
+        .evaluate_interop(&compile(&Config::new().set_dynamic("result", value)).unwrap())
         .unwrap_err();
     assert_eq!(diagnostic.primary.as_ref().unwrap().line, line);
     assert_eq!(diagnostic.primary.as_ref().unwrap().file, file!());
@@ -650,7 +652,7 @@ fn boolean_conjunction_short_circuits_and_reports_operand_and_call_origins() {
     let failure = Expr::boolean(true).and(failure.into_expr());
     let diagnostic = NixSession::new()
         .unwrap()
-        .evaluate_interop(&compile(&Config::new().set("result", failure)).unwrap())
+        .evaluate_interop(&compile(&Config::new().set_dynamic("result", failure)).unwrap())
         .unwrap_err();
     assert_eq!(diagnostic.primary.as_ref().unwrap().line, failure_line);
     assert_eq!(diagnostic.reason, "division by zero");
@@ -665,7 +667,7 @@ fn boolean_conjunction_short_circuits_and_reports_operand_and_call_origins() {
         let opaque = NixValue::from(left).and(right);
         let cases = [(typed, typed_line), (opaque, opaque_line)];
         for (invalid, call_line) in cases {
-            let artifact = compile(&Config::new().set("result", invalid)).unwrap();
+            let artifact = compile(&Config::new().set_dynamic("result", invalid)).unwrap();
             let result = NixSession::new().unwrap().evaluate_interop(&artifact);
 
             if left {
@@ -813,9 +815,9 @@ fn boolean_or_and_implication_check_demanded_operands_and_short_circuit() {
                 (value, call_line)
             };
             for (value, line) in [(typed, typed_line), (opaque, opaque_line)] {
-                let result = NixSession::new()
-                    .unwrap()
-                    .evaluate_interop(&compile(&Config::new().set("result", value)).unwrap());
+                let result = NixSession::new().unwrap().evaluate_interop(
+                    &compile(&Config::new().set_dynamic("result", value)).unwrap(),
+                );
                 if left == implication {
                     let error = result.unwrap_err();
                     assert!(error.reason.to_lowercase().contains("boolean"));
@@ -849,7 +851,7 @@ fn native_helpers_report_type_errors_at_the_public_call_site() {
     for (value, expected_type, line) in cases {
         let diagnostic = NixSession::new()
             .unwrap()
-            .evaluate_interop(&compile(&Config::new().set("result", value)).unwrap())
+            .evaluate_interop(&compile(&Config::new().set_dynamic("result", value)).unwrap())
             .unwrap_err();
         assert_eq!(diagnostic.primary.as_ref().unwrap().file, file!());
         assert_eq!(diagnostic.primary.as_ref().unwrap().line, line);

@@ -161,7 +161,8 @@ fn ir_failure() -> Config {
 
 fn nixos_failure() -> NixosModule {
     // Intentional generic escape hatch: NixOS owns the option schema.
-    layered_validation::module().add(Config::new().set("services.openssh.exampleUnsupported", true))
+    layered_validation::module()
+        .add(Config::new().set_dynamic("services.openssh.exampleUnsupported", true))
 }
 
 #[test]

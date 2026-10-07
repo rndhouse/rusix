@@ -16,7 +16,7 @@ fn backend_metadata_has_zero_generated_cost() {
     let cases = [
         (
             "git",
-            Config::new().set(
+            Config::new().set_dynamic(
                 "package",
                 pkgs.try_call_package(&graph::git::factory(), graph::git::arguments())
                     .unwrap(),
@@ -24,7 +24,7 @@ fn backend_metadata_has_zero_generated_cost() {
         ),
         (
             "curl",
-            Config::new().set(
+            Config::new().set_dynamic(
                 "package",
                 pkgs.try_call_package(
                     &graph::curl::factory(),
@@ -35,7 +35,7 @@ fn backend_metadata_has_zero_generated_cost() {
         ),
         (
             "openssl",
-            Config::new().set(
+            Config::new().set_dynamic(
                 "package",
                 pkgs.call_package(
                     &graph::openssl::factory(graph::openssl::model::Release::Preview),
@@ -45,7 +45,7 @@ fn backend_metadata_has_zero_generated_cost() {
         ),
         (
             "mariadb",
-            Config::new().set(
+            Config::new().set_dynamic(
                 "package",
                 pkgs.try_call_package(
                     &graph::mariadb::factory(),
@@ -56,7 +56,7 @@ fn backend_metadata_has_zero_generated_cost() {
         ),
         (
             "graph",
-            Config::new().set(
+            Config::new().set_dynamic(
                 "result",
                 graph::graph().as_expression().select("mariadb.drvPath"),
             ),
@@ -117,7 +117,7 @@ fn compact_lexical_lists_cannot_expand_metadata_without_bound() {
             ("name", "bounded-list".into()),
             ("buildInputs", inputs),
         ]));
-    let config = Config::new().set("result", pkg.select("drvPath"));
+    let config = Config::new().set_dynamic("result", pkg.select("drvPath"));
     let generated = compile(&config).unwrap();
     let metadata = backend::read(&generated.backend_metadata).unwrap();
     let field = &metadata.boundaries[0].fields[0];

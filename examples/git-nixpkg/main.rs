@@ -8,10 +8,7 @@ pub mod model;
 pub use inputs::Arguments;
 
 use rusnix_ir as rusnix;
-use rusnix_ir::{
-    IntoConfig,
-    interop::{Nixpkgs, Package as PackageValue, PackageFunction},
-};
+use rusnix_ir::interop::{Nixpkgs, Package as PackageValue, PackageFunction};
 
 #[rusnix::config]
 mod output {
@@ -32,6 +29,6 @@ fn main() {
     let git = Nixpkgs::new()
         .try_call_package(&factory, inputs::arguments(model::model()))
         .expect("fixed authoring arguments");
-    let artifact = rusnix_nix::compile(&output::Package { factory, git }.into_config()).unwrap();
+    let artifact = rusnix_nix::compile(output::Package { factory, git }).unwrap();
     println!("{}", artifact.source);
 }

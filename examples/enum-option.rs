@@ -6,7 +6,7 @@
 //! demo = { mode = "server"; acceptsConnections = true; };
 //! ```
 
-use rusnix_ir::{self as rusnix, IntoConfig};
+use rusnix_ir::{self as rusnix};
 
 // Local structs and unit enums lower automatically through one module boundary.
 #[rusnix::config]
@@ -58,6 +58,6 @@ pub use config::{Mode, accepts_connections, model};
 
 fn main() {
     // IntoConfig lowers the tree; compilation emits Nix without evaluating it.
-    let generated = rusnix_nix::compile(&model().into_config()).unwrap();
+    let generated = rusnix_nix::compile(model()).unwrap();
     println!("{}", generated.source);
 }

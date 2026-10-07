@@ -6,7 +6,7 @@
 //! demo = { endpoint = { host = "service.internal"; port = 8080; }; transport.tls = false; };
 //! ```
 
-use rusnix_ir::{self as rusnix, IntoConfig, IntoRusnixValue, RusnixValue};
+use rusnix_ir::{self as rusnix, IntoRusnixValue, RusnixValue};
 
 /// A reusable hostname-domain string; no hostname syntax check is implied.
 #[derive(IntoRusnixValue)]
@@ -115,6 +115,6 @@ impl IntoRusnixValue for Transport {
 
 fn main() {
     // Compilation emits the typed function's result; NixOS schema checks happen during evaluation.
-    let generated = rusnix_nix::compile(&model().into_config()).unwrap();
+    let generated = rusnix_nix::compile(model()).unwrap();
     println!("{}", generated.source);
 }

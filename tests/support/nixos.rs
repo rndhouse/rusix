@@ -15,13 +15,13 @@ impl OpenSsh {
 
     #[track_caller]
     pub fn enable(mut self, enabled: bool) -> Self {
-        self.config = self.config.set("services.openssh.enable", enabled);
+        self.config = self.config.set_dynamic("services.openssh.enable", enabled);
         self
     }
 
     #[track_caller]
     pub fn ports(mut self, ports: Vec<u16>) -> Self {
-        self.config = self.config.set("services.openssh.ports", ports);
+        self.config = self.config.set_dynamic("services.openssh.ports", ports);
         self
     }
 }

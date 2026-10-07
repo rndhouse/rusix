@@ -42,7 +42,7 @@ fn stdenv(build: NixValue, host: NixValue) -> NixValue {
 }
 
 fn artifact(value: impl Into<NixValue>) -> Generated {
-    compile(&Config::new().set("result", value.into())).unwrap()
+    compile(&Config::new().set_dynamic("result", value.into())).unwrap()
 }
 
 fn evaluate(value: impl Into<NixValue>) -> serde_json::Value {
@@ -256,7 +256,7 @@ fn missing_platforms_map_to_the_helper_call_through_source_spans() {
     for environment in environments {
         let call_line = line!() + 1;
         let comparison = build_host_equal(environment);
-        let config = Config::new().set("result", comparison);
+        let config = Config::new().set_dynamic("result", comparison);
         let node = &config.assignments[0].value;
         assert_eq!(node.origin.file, file!());
         assert_eq!(node.origin.line, call_line);
