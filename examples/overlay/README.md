@@ -20,7 +20,8 @@ final: prev: {
 }
 ```
 
-[authoring.rs](authoring.rs) uses nested `NixValue::function` callbacks for
+[authoring.rs](authoring.rs) explicitly imports `interop::raw::{NixValue, NixFunctionExt}`
+and uses nested `NixValue::function` callbacks for
 `final` and `prev`, the existing `override_attrs` operation, and `nix_record!`.
 `Nixpkgs::new().pkgs_function("extend").call(overlay())` asks ordinary nixpkgs to
 apply the function. Selecting `curl` from the returned set observes the modified

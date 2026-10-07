@@ -104,7 +104,7 @@ the four `inputs.rs` views as follows:
 These counts include root arguments and nested view fields. Remaining dynamic
 leaves primarily describe mixed metadata, test/package scopes and path-like values.
 
-Verification with these stronger interfaces passed 507 workspace tests and
+Verification with these stronger interfaces passed 513 workspace tests and
 23 doctests. The UI harness checks 83 compile-fail fixtures, including nine authoring-surface cases and seven new
 rejections for callable parameters, bypass attempts, library conditions, text
 coercion, nullable fallbacks, paths and external-view contracts. Nineteen typed
@@ -170,9 +170,9 @@ interface; explicit annotations include it as `NixCallable<R, A>`. Flexible Nix
 argument records retain the dynamic default. Code using a template or path at an
 explicit raw boundary converts there with `.into()` rather than erasing earlier.
 
-Final checks also passed `cargo fmt --all --check`, structural spacing over 190
+Final checks also passed `cargo fmt --all --check`, structural spacing over 193
 Rust files, all-target Clippy with warnings denied, strict rustdoc, the complete
-fixture workflow and all 15 examples. The PostgreSQL full suite and all 99 Git,
+fixture workflow and all 16 examples. The PostgreSQL full suite and all 99 Git,
 curl, OpenSSL, MariaDB and composed-graph tests pass. Verification artifacts are
 retained under `target/surfaces-*.log` (and earlier `target/typed-operations-*.log`). The nixpkgs pin remains
 `8b27c1239e5c421a2bbc2c65d52e4a6fbf2ff296`; all Nix evaluations use fresh isolated
@@ -255,3 +255,10 @@ separation makes this boundary visible and removes representation/extension
 methods from normal concrete handles unless their traits are imported. Future
 typed interfaces can continue reducing those dynamic results as their contracts
 become known; custom adapters remain supported.
+
+Rebasing onto the curl overlay work also migrated that adapter to the opt-in raw
+imports. All six overlay tests retain exact curl/downstream recipes, fixed-point
+ordering, lazy unused values and Rust error provenance. The integrated branch
+passed 513 workspace tests and 23 doctests, 83 compile-fail cases, all 16 examples,
+the full fixture workflow, formatting, structural spacing, all-target Clippy and
+strict rustdoc. Rebase verification logs use `target/rebase-*.log`.

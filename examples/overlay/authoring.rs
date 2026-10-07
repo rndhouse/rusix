@@ -1,6 +1,9 @@
 //! Author an ordinary nixpkgs overlay; keep the upstream curl package definition.
 use rusnix_ir::{
-    interop::{NixValue, Nixpkgs},
+    interop::{
+        Nixpkgs,
+        raw::{NixFunctionExt, NixValue},
+    },
     nix_record,
 };
 

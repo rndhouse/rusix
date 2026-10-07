@@ -4,7 +4,10 @@ mod authoring;
 
 use rusnix_ir::{
     Config, Expr,
-    interop::{InputRef, NixValue, Nixpkgs},
+    interop::{
+        InputRef, Nixpkgs,
+        raw::{AsNixValue, NixFunctionExt, NixValue, NixpkgsExt},
+    },
 };
 use rusnix_nix::{DiagnosticKind, Generated, NixSession, compile};
 use std::{fs, path::Path};
