@@ -56,8 +56,8 @@ fn audit_additional_delayed_backend_clues() {
     .unwrap();
 }
 
-#[path = "../../../examples/composed-packages/graph.rs"]
-pub mod graph;
+#[path = "../../../examples/composed-packages/composition.rs"]
+pub mod composition;
 
 use rusnix_ir::{
     Config,
@@ -69,7 +69,7 @@ use rusnix_ir::{
 
 fn real_case(case: &str, supplied: NixValue) -> (rusnix_nix::Generated, String) {
     let pkgs = Nixpkgs::new();
-    let mut openssl_args = graph::arguments();
+    let mut openssl_args = composition::arguments();
     if case.starts_with("openssl-build") {
         openssl_args = NixAttrs::new([
             ("withCryptodev", true.into()),
@@ -80,26 +80,26 @@ fn real_case(case: &str, supplied: NixValue) -> (rusnix_nix::Generated, String) 
         Package::from_expression(supplied.clone())
     } else {
         pkgs.call_package(
-            &graph::openssl::factory(graph::openssl::model::Release::Preview),
+            &composition::openssl::factory(composition::openssl::model::Release::Preview),
             openssl_args,
         )
     };
-    let graph = graph::compose(
+    let graph = composition::compose(
         openssl,
         |pkgs, openssl| {
             if case.starts_with("mariadb-curl") {
                 return Package::from_expression(supplied.clone());
             }
-            let args = graph::curl_arguments(pkgs, openssl.clone());
+            let args = composition::curl_arguments(pkgs, openssl.clone());
             let args = if case.starts_with("curl-native") {
                 args.with_overrides(NixAttrs::new([("pkg-config", supplied.clone())]))
             } else {
                 args
             };
-            pkgs.try_call_package(&graph::curl::factory(), args)
+            pkgs.try_call_package(&composition::curl::factory(), args)
                 .unwrap()
         },
-        graph::mariadb::model::Release::V1011.arguments(),
+        composition::mariadb::model::Release::V1011.arguments(),
     );
     let path = if case == "git-openssl-int" || case.ends_with("git") {
         "git.drvPath"
@@ -330,7 +330,7 @@ fn unused_defaults_optional_fields_and_partial_graph_stay_lazy() {
             ),
         )
     });
-    let good = factory.call(graph::arguments());
+    let good = factory.call(composition::arguments());
     let partial = NixValue::record([("good", good), ("unused", broken)]);
     let generated =
         rusnix_nix::compile(&Config::new().set_dynamic("result", partial.select("good.drvPath")))
@@ -633,7 +633,7 @@ fn call_package_auto_arguments_are_not_mistaken_for_authored_defaults() {
     let automatic = pkgs
         .value("callPackage")
         .call(factory.clone())
-        .call(graph::arguments());
+        .call(composition::arguments());
     let automatic =
         rusnix_nix::compile(&Config::new().set_dynamic("result", automatic.select("drvPath")))
             .unwrap();
@@ -682,7 +682,7 @@ fn unresolved_automatic_default_cannot_hide_a_competing_package_owner() {
     let package = pkgs
         .value("callPackage")
         .call(factory)
-        .call(graph::arguments());
+        .call(composition::arguments());
     let generated =
         rusnix_nix::compile(&Config::new().set_dynamic("result", package.select("drvPath")))
             .unwrap();

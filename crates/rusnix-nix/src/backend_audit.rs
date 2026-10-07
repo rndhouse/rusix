@@ -1,7 +1,7 @@
 //! Compilation must change only artifact metadata, never generated Nix.
 #[allow(dead_code, unused_imports)] // This audit uses only a subset of the shared package models.
-#[path = "../../../examples/composed-packages/graph.rs"]
-pub mod graph;
+#[path = "../../../examples/composed-packages/composition.rs"]
+pub mod composition;
 
 use super::*;
 use rusnix_ir::interop::{
@@ -18,7 +18,7 @@ fn backend_metadata_has_zero_generated_cost() {
             "git",
             Config::new().set_dynamic(
                 "package",
-                pkgs.try_call_package(&graph::git::factory(), graph::git::arguments())
+                pkgs.try_call_package(&composition::git::factory(), composition::git::arguments())
                     .unwrap(),
             ),
         ),
@@ -27,8 +27,8 @@ fn backend_metadata_has_zero_generated_cost() {
             Config::new().set_dynamic(
                 "package",
                 pkgs.try_call_package(
-                    &graph::curl::factory(),
-                    graph::curl::model::model().arguments(),
+                    &composition::curl::factory(),
+                    composition::curl::model::model().arguments(),
                 )
                 .unwrap(),
             ),
@@ -38,8 +38,8 @@ fn backend_metadata_has_zero_generated_cost() {
             Config::new().set_dynamic(
                 "package",
                 pkgs.call_package(
-                    &graph::openssl::factory(graph::openssl::model::Release::Preview),
-                    graph::arguments(),
+                    &composition::openssl::factory(composition::openssl::model::Release::Preview),
+                    composition::arguments(),
                 ),
             ),
         ),
@@ -48,8 +48,8 @@ fn backend_metadata_has_zero_generated_cost() {
             Config::new().set_dynamic(
                 "package",
                 pkgs.try_call_package(
-                    &graph::mariadb::factory(),
-                    graph::mariadb::model::Release::V1011.arguments(),
+                    &composition::mariadb::factory(),
+                    composition::mariadb::model::Release::V1011.arguments(),
                 )
                 .unwrap(),
             ),
@@ -58,7 +58,9 @@ fn backend_metadata_has_zero_generated_cost() {
             "graph",
             Config::new().set_dynamic(
                 "result",
-                graph::graph().as_expression().select("mariadb.drvPath"),
+                composition::packages()
+                    .as_expression()
+                    .select("mariadb.drvPath"),
             ),
         ),
     ];

@@ -3,7 +3,7 @@
 This example connects four Rust-authored package recipes: OpenSSL supplies curl
 and Git, and curl supplies MariaDB. A dependency is another package a recipe needs;
 the Rust code supplies selected dependencies explicitly and lets nixpkgs supply
-the rest. Start with [graph.rs](graph.rs) to change those connections.
+the rest. Start with [composition.rs](composition.rs) to change those connections.
 
 Rusnix does not require a whole dependency closure to be rewritten. A package can
 first be rewritten while all dependencies remain normal pinned nixpkgs. Rewritten
@@ -11,8 +11,8 @@ dependency values can then be supplied one by one through explicit callPackage
 override records. Nix still evaluates the resulting expressions; nixpkgs supplies
 fetchers, stdenv, builders, hooks and the unreplaced dependency graph.
 
-`graph.rs` is the authoring example. It constructs OpenSSL from the Rust factory,
-then supplies that deferred value explicitly to both Rust curl and Rust Git.
+`composition.rs` is the authoring example. It constructs OpenSSL from the Rust
+factory, then supplies that deferred value explicitly to both Rust curl and Rust Git.
 The resulting Rust curl value is explicitly supplied to Rust MariaDB. It
 uses `NixExpression::bind` to share typed `Package` dependencies
 lazily in the generated expression. No package factory or source recipe is copied
@@ -36,14 +36,14 @@ let mariadb: Package = pkgs.call_package(
 );
 ```
 
-The full assembly in `graph.rs` returns `NixAttrs<Package>` and binds OpenSSL and
-curl once, retaining `Package` on the lexical parameters. Typed argument records
+The full assembly in `composition.rs` returns `NixAttrs<Package>` and binds OpenSSL
+and curl once, retaining `Package` on the lexical parameters. Typed argument records
 lower at calls; neither packages nor factories need `as_value` conversions.
 See [typed package authoring](../../docs/typed-package-values.md).
 
 From the repository root, run `cargo run --locked -p rusnix-nix --example composed-packages`.
-It prints generated Nix containing the four connected package expressions;
-Rust does not evaluate Nix or build the packages.
+It prints generated Nix with a `packages` field containing the four connected
+package expressions; Rust does not evaluate Nix or build the packages.
 
 ## Verification
 

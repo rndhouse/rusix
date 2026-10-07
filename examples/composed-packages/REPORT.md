@@ -77,7 +77,7 @@ examples/openssl-nixpkg/       examples/mariadb-nixpkg/
 
 examples/composed-packages/
 ├── main.rs
-├── graph.rs
+├── composition.rs
 ├── README.md
 └── REPORT.md
 ```
@@ -156,7 +156,7 @@ while matching the equivalently wired upstream graph.
 
 ## Composition evidence and boundaries
 
-The readable authoring implementation is [graph.rs](graph.rs), rather than a
+The readable authoring implementation is [composition.rs](composition.rs), rather than a
 test-only graph constructor. It instantiates the Rust OpenSSL factory using
 Nixpkgs::call_package; explicit records supply that value to Rust curl and Git.
 Another explicit curl record supplies the constructed Rust curl to Rust MariaDB.

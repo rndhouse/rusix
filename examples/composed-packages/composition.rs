@@ -21,7 +21,7 @@ pub fn arguments() -> NixAttrs {
     NixAttrs::new([] as [(&str, NixValue); 0])
 }
 
-pub fn graph() -> NixAttrs<Package> {
+pub fn packages() -> NixAttrs<Package> {
     let pkgs = Nixpkgs::new();
     let openssl = pkgs.call_package(
         &openssl::factory(openssl::model::Release::Preview),

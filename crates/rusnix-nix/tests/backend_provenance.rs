@@ -1,6 +1,6 @@
 //! Evidence for the limits of lazy contexts at opaque backend argument handoffs.
-#[path = "../../../examples/composed-packages/graph.rs"]
-pub mod graph;
+#[path = "../../../examples/composed-packages/composition.rs"]
+pub mod composition;
 
 #[path = "support/packages.rs"]
 mod support;
@@ -157,7 +157,7 @@ fn package_graph(
         .map(Package::from_expression)
         .unwrap_or_else(|| {
             pkgs.call_package(
-                &graph::openssl::factory(graph::openssl::model::Release::Preview),
+                &composition::openssl::factory(composition::openssl::model::Release::Preview),
                 NixAttrs::new([("stdenv", stdenv.clone())]),
             )
         });
@@ -166,22 +166,22 @@ fn package_graph(
             .map(Package::from_expression)
             .unwrap_or_else(|| {
                 pkgs.try_call_package(
-                    &graph::curl::factory(),
-                    graph::curl_arguments(&pkgs, openssl.clone())
+                    &composition::curl::factory(),
+                    composition::curl_arguments(&pkgs, openssl.clone())
                         .with_overrides(NixAttrs::new([("stdenv", stdenv.clone())])),
                 )
                 .unwrap()
             });
         let git = pkgs.call_package(
-            &graph::git::factory(),
-            NixAttrs::try_from_record(graph::git::arguments().with_openssl(openssl.clone()))
+            &composition::git::factory(),
+            NixAttrs::try_from_record(composition::git::arguments().with_openssl(openssl.clone()))
                 .unwrap()
                 .merge(NixAttrs::new([("stdenv", stdenv.clone())])),
         );
         curl.bind(|curl| {
             let mariadb = pkgs.call_package(
-                &graph::mariadb::factory(),
-                NixAttrs::try_from_record(graph::mariadb::model::Release::V1011.arguments())
+                &composition::mariadb::factory(),
+                NixAttrs::try_from_record(composition::mariadb::model::Release::V1011.arguments())
                     .unwrap()
                     .merge(NixAttrs::new([
                         ("curl", curl.clone().into()),
@@ -332,7 +332,7 @@ fn real_child_package_validation_loses_context_across_composed_edges() {
                 ]));
             }
             let openssl = pkgs.call_package(
-                &graph::openssl::factory(graph::openssl::model::Release::Preview),
+                &composition::openssl::factory(composition::openssl::model::Release::Preview),
                 openssl_args,
             );
             let mut curl_args = NixAttrs::new([("stdenv", stdenv)]);
@@ -341,8 +341,8 @@ fn real_child_package_validation_loses_context_across_composed_edges() {
             }
             let curl = pkgs
                 .try_call_package(
-                    &graph::curl::factory(),
-                    graph::curl_arguments(&pkgs, openssl.clone()).with_overrides(curl_args),
+                    &composition::curl::factory(),
+                    composition::curl_arguments(&pkgs, openssl.clone()).with_overrides(curl_args),
                 )
                 .unwrap();
             let graph = package_graph(placement, Some(openssl.into()), Some(curl.into()));
