@@ -8,9 +8,10 @@ mod views {
     };
 
     /// Packages needed by the overlay, from either the final or preceding set.
+    /// This declares lookup accessors for nixpkgs entries, not their implementations.
     #[rusnix(root)]
     struct Packages {
-        /// Curl's build recipe, including its existing override methods.
+        /// Curl's recipe in the selected nixpkgs set, including its override methods.
         curl: Package,
     }
 

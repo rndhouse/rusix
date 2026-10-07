@@ -1,4 +1,4 @@
-//! Print a Rust-authored overlay and the lookup of curl from its extended package set.
+//! Print an overlay customizing nixpkgs' existing curl recipe and a lookup of its build-recipe path.
 mod authoring;
 
 mod inputs;
@@ -6,9 +6,13 @@ mod inputs;
 mod model;
 
 fn main() {
-    // An overlay replaces selected packages while keeping the rest of nixpkgs.
-    // These views describe deferred lookups; Rust does not load the packages.
+    // Describe importing the pinned nixpkgs package collection with our overlay.
+    // Curl comes from that collection; the overlay customizes its existing recipe.
+    // Nix performs the import later, when the generated expression is evaluated.
     let pkgs = authoring::package_set().view::<inputs::Packages>();
+
+    // Select the customized curl entry, then give its metadata named Rust accessors.
+    // PackageMetadata describes fields to read; it does not provide a curl implementation.
     let curl_metadata = pkgs.curl().view::<inputs::PackageMetadata>();
 
     // Export the overlay function and the customized curl build-recipe path.
