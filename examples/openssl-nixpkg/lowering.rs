@@ -95,7 +95,7 @@ fn common(i: &Inputs, release: Release) -> Package {
     };
     // Upstream's version/hash are lexically captured by common, not finalAttrs.
     i.stdenv().mk_derivation(
-        NixCallable::<NixAttrs>::try_from_function(|final_attrs: NixAttrs| {
+        NixCallable::<NixAttrs, NixAttrs>::try_from_function(|final_attrs: NixAttrs| {
             attributes(
                 i,
                 &lib,

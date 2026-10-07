@@ -646,5 +646,25 @@
       "NixOverridable",
       "NixCallable"
     ]
+  },
+  {
+    "file": "callable-parameter.rs",
+    "code": "E0277",
+    "count": 1,
+    "source": "Expr::int(3)",
+    "reason_tokens": [
+      "Expr<std::string::String>",
+      "Expr<i64>"
+    ]
+  },
+  {
+    "file": "callable-parameter-bypass.rs",
+    "code": "E0599",
+    "count": 1,
+    "source": "try_call",
+    "reason_tokens": [
+      "NixCallable",
+      "try_call"
+    ]
   }
 ]

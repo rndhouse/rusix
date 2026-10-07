@@ -121,25 +121,25 @@ impl Expr<String> {
 }
 
 macro_rules! expression_handle {
-    ($name:ident $(<$parameter:ident>)?) => {
-        impl$(<$parameter: NixExpression>)? sealed::Sealed for $name$(<$parameter>)? {}
+    ($name:ident $(<$($parameter:ident),+>)?) => {
+        impl$(<$($parameter: NixExpression),+>)? sealed::Sealed for $name$(<$($parameter),+>)? {}
 
-        impl$(<$parameter: NixExpression>)? ConfigValue for $name$(<$parameter>)? {
+        impl$(<$($parameter: NixExpression),+>)? ConfigValue for $name$(<$($parameter),+>)? {
             fn into_node(self, origin: Origin) -> Node {
                 self.value.into_node(origin)
             }
         }
 
-        impl$(<$parameter: NixExpression>)? IntoRusnixValue for $name$(<$parameter>)? {
+        impl$(<$($parameter: NixExpression),+>)? IntoRusnixValue for $name$(<$($parameter),+>)? {
             #[track_caller]
             fn into_value(self) -> RusnixValue {
                 RusnixValue::leaf(self)
             }
         }
 
-        impl$(<$parameter: NixExpression>)? NixExpression for $name$(<$parameter>)? {
+        impl$(<$($parameter: NixExpression),+>)? NixExpression for $name$(<$($parameter),+>)? {
             fn from_expression(value: NixValue) -> Self {
-                Self { value, $(_type: PhantomData::<$parameter>,)? }
+                Self { value, $(_type: PhantomData::<($($parameter,)+)>,)? }
             }
 
             fn as_expression(&self) -> NixValue {
@@ -147,8 +147,8 @@ macro_rules! expression_handle {
             }
         }
 
-        impl$(<$parameter: NixExpression>)? From<$name$(<$parameter>)?> for NixValue {
-            fn from(value: $name$(<$parameter>)?) -> Self {
+        impl$(<$($parameter: NixExpression),+>)? From<$name$(<$($parameter),+>)?> for NixValue {
+            fn from(value: $name$(<$($parameter),+>)?) -> Self {
                 value.value
             }
         }
@@ -242,7 +242,7 @@ impl Package {
 #[derive(Clone, Debug)]
 pub struct Overridable<T: NixExpression> {
     value: NixValue,
-    _type: PhantomData<T>,
+    _type: PhantomData<(T,)>,
 }
 
 expression_handle!(Overridable<T>);
@@ -263,13 +263,15 @@ impl<T: NixExpression> Overridable<T> {
     }
 }
 
-impl<R: NixExpression> Overridable<NixCallable<R>> {
+impl<R: NixExpression, A: NixExpression> Overridable<NixCallable<R, A>> {
     /// Apply the wrapped callable, retaining its declared result interface.
     #[track_caller]
-    pub fn call(&self, argument: impl ConfigValue) -> R {
+    pub fn call(&self, argument: impl Into<A>) -> R {
         self.inner().call(argument)
     }
+}
 
+impl<R: NixExpression> Overridable<NixCallable<R>> {
     /// Lower a structured argument only at this call boundary.
     #[track_caller]
     pub fn try_call(&self, argument: impl IntoRusnixValue) -> Result<R, ValidationError> {
@@ -277,20 +279,22 @@ impl<R: NixExpression> Overridable<NixCallable<R>> {
     }
 }
 
-/// A deferred callable expression with a declared result interface.
+/// A deferred callable with result and parameter interfaces.
+/// `A = NixValue` explicitly retains dynamic inputs for flexible external schemas.
+/// Constructed callbacks retain their parameter type, including through binding.
 /// Unlike NixFunction, this can represent constructed callbacks and lexical parameters.
 #[derive(Clone, Debug)]
-pub struct NixCallable<R: NixExpression = NixValue> {
+pub struct NixCallable<R: NixExpression = NixValue, A: NixExpression = NixValue> {
     value: NixValue,
-    _type: PhantomData<R>,
+    _type: PhantomData<(R, A)>,
 }
 
-expression_handle!(NixCallable<R>);
+expression_handle!(NixCallable<R, A>);
 
-impl<R: NixExpression> NixCallable<R> {
+impl<R: NixExpression, A: NixExpression> NixCallable<R, A> {
     /// Construct a callback whose parameter and result preserve their interfaces.
     #[track_caller]
-    pub fn from_function<A: NixExpression>(build: impl FnOnce(A) -> R) -> Self {
+    pub fn from_function(build: impl FnOnce(A) -> R) -> Self {
         Self::from_expression(NixValue::function(|parameter| {
             build(A::from_expression(parameter)).as_expression()
         }))
@@ -300,7 +304,7 @@ impl<R: NixExpression> NixCallable<R> {
     /// Conversion happens inside this boundary; an invalid flatten returns an error.
     /// R is the expected symbolic result interface, not a check of external Nix types.
     #[track_caller]
-    pub fn try_from_function<A: NixExpression, V: IntoRusnixValue>(
+    pub fn try_from_function<V: IntoRusnixValue>(
         build: impl FnOnce(A) -> V,
     ) -> Result<Self, ValidationError> {
         let mut error = None;
@@ -321,10 +325,12 @@ impl<R: NixExpression> NixCallable<R> {
 
     /// Describe a call; lowering happens inside this operation.
     #[track_caller]
-    pub fn call(&self, argument: impl ConfigValue) -> R {
-        R::from_expression(self.value.clone().call(argument))
+    pub fn call(&self, argument: impl Into<A>) -> R {
+        R::from_expression(self.value.clone().call(argument.into().as_expression()))
     }
+}
 
+impl<R: NixExpression> NixCallable<R> {
     /// Accept a user-defined record without requiring caller-side type erasure.
     /// Invalid structural flattening is returned as a Rust validation error.
     #[track_caller]
@@ -338,7 +344,7 @@ impl<R: NixExpression> NixCallable<R> {
 #[derive(Clone, Debug)]
 pub struct NixAttrs<T: NixExpression = NixValue> {
     value: NixValue,
-    _type: PhantomData<T>,
+    _type: PhantomData<(T,)>,
 }
 
 expression_handle!(NixAttrs<T>);
@@ -386,7 +392,7 @@ impl NixAttrs {
 #[derive(Clone, Debug)]
 pub struct NixList<T: NixExpression> {
     value: NixValue,
-    _type: PhantomData<T>,
+    _type: PhantomData<(T,)>,
 }
 
 expression_handle!(NixList<T>);
@@ -440,7 +446,7 @@ impl Stdenv {
     /// Describe mkDerivation, accepting existing supported expression values.
     #[track_caller]
     pub fn mk_derivation(&self, attributes: impl ConfigValue) -> Package {
-        self.builder().call(attributes)
+        self.builder().call(NixValue::literal(attributes))
     }
 
     /// Accept a structured recipe directly, lowering it inside the builder call.

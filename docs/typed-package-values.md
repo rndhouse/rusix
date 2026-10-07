@@ -7,7 +7,10 @@ or binding them does not evaluate Nix, fetch sources, or build packages.
 - `Package` represents an instantiated package, whether authored in Rust or Nix.
 - `PackageFunction<R>` describes named package arguments and a result interface.
   The default result remains `NixValue`; families can return `NixAttrs<Package>`.
-- `NixCallable<R>` represents an external, constructed, or bound callable.
+- `NixCallable<R, A>` retains both result and parameter interfaces for an external,
+  constructed, or bound callable. Its default `A = NixValue` explicitly permits
+  dynamic inputs; structured `try_call` is available only on that interface.
+  `NixFunction::signature` attaches a known external contract.
 - `NixAttrs<T>` and `NixList<T>` preserve member and element interfaces.
 - `Overridable<T>` explicitly adds the expected argument-override capability to
   external callables. Plain `NixCallable<R>` does not implement `NixOverridable`.

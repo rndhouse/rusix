@@ -64,7 +64,7 @@ pub fn factory() -> PackageFunction<Package> {
         ]);
         let valid = !NixValue::builtin("lessThan").apply([1_i64.into(), count]);
         let derivation = i.stdenv.mk_derivation().call(
-            NixCallable::<NixAttrs>::try_from_function(|final_attrs: NixAttrs| {
+            NixCallable::<NixAttrs, NixAttrs>::try_from_function(|final_attrs: NixAttrs| {
                 attributes(&i, final_attrs)
             })
             .expect("fixed curl recipe"),

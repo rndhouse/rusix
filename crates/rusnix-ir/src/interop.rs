@@ -898,6 +898,13 @@ impl NixFunction {
         NixCallable::from_expression(self.as_value())
     }
 
+    /// State both parameter and result expectations for an external callable.
+    /// This does not inspect or eagerly validate the external Nix function.
+    #[track_caller]
+    pub fn signature<A: NixExpression, R: NixExpression>(&self) -> NixCallable<R, A> {
+        NixCallable::from_expression(self.as_value())
+    }
+
     /// Describe a call to this Nix function with one argument.
     /// Nix executes the call later and checks the argument. If the result is another
     /// function, continue with [`NixValue::call`] or use [`Self::apply`].

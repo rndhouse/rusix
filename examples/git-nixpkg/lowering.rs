@@ -42,7 +42,7 @@ pub fn factory() -> PackageFunction<Package> {
         // already rules out the Perl-dependent invalid combinations. Implication
         // stays native, independent of any caller-supplied library predicates.
         let derivation = inputs.stdenv.mk_derivation().call(
-            NixCallable::<NixAttrs>::try_from_function(|final_attrs: NixAttrs| {
+            NixCallable::<NixAttrs, NixAttrs>::try_from_function(|final_attrs: NixAttrs| {
                 attributes(&inputs, final_attrs)
             })
             .expect("fixed Git recipe"),

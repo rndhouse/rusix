@@ -78,7 +78,12 @@ fn bindings_and_callbacks_keep_custom_finite_views() {
     assert_eq!(evaluate(result), "kept");
     let callable = NixCallable::from_function(|recipe: views::Recipe| recipe.name());
     assert_eq!(
-        evaluate(callable.call(NixValue::record([("name", "callback".into())]))),
+        evaluate(
+            callable.call(views::Recipe::from_expression(NixValue::record([(
+                "name",
+                "callback".into()
+            )])))
+        ),
         "callback"
     );
 }
@@ -112,7 +117,8 @@ struct InvalidArguments {
 
 #[test]
 fn structured_arguments_lower_only_at_calls_and_return_conversion_errors() {
-    let callable = NixCallable::from_function(|args: NixAttrs| args.field::<Expr<String>>("name"));
+    let callable =
+        NixCallable::from_function(|args: NixValue| args.select("name").into_expr::<String>());
     assert_eq!(
         evaluate(
             callable
@@ -236,21 +242,22 @@ fn typed_argument_accessors_keep_packages_callables_scopes_and_lists() {
 
 #[test]
 fn structured_callback_results_lower_inside_the_function_boundary() {
-    let function: NixCallable<NixAttrs> = NixCallable::try_from_function(|name: Expr<String>| {
-        #[derive(IntoRusnixValue)]
-        struct ResultRecord {
-            name: Expr<String>,
-        }
+    let function: NixCallable<NixAttrs, Expr<String>> =
+        NixCallable::try_from_function(|name: Expr<String>| {
+            #[derive(IntoRusnixValue)]
+            struct ResultRecord {
+                name: Expr<String>,
+            }
 
-        ResultRecord { name }
-    })
-    .unwrap();
+            ResultRecord { name }
+        })
+        .unwrap();
     assert_eq!(
         evaluate(function.call("typed").field::<Expr<String>>("name")),
         "typed"
     );
     assert!(
-        NixCallable::<NixAttrs>::try_from_function(|_: Expr<String>| {
+        NixCallable::<NixAttrs, Expr<String>>::try_from_function(|_: Expr<String>| {
             InvalidArguments {
                 name: "invalid".into(),
             }
@@ -412,4 +419,18 @@ fn explicit_override_capabilities_survive_binding_and_calling_fetchers() {
         evaluate(dependency.field::<Expr<bool>>("typedDependency")),
         true
     );
+}
+
+#[test]
+fn callable_parameter_contracts_survive_binding_currying_and_external_references() {
+    let function = NixCallable::from_function(|prefix: Expr<String>| {
+        NixCallable::from_function(move |suffix: Expr<String>| Expr::concat([prefix, suffix]))
+    });
+    let text = function.bind(|function| function.call("left:").call("right"));
+    assert_eq!(evaluate(text), "left:right");
+
+    let identity = Nixpkgs::new()
+        .function("id")
+        .signature::<Expr<String>, Expr<String>>();
+    assert_eq!(evaluate(identity.call("external")), "external");
 }
