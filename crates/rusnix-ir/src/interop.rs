@@ -940,8 +940,9 @@ impl NixFunction {
 }
 
 /// Build text containing values that Nix will evaluate later.
-/// This resembles named Rust formatting, but returns a [`NixValue`] rather
-/// than a Rust `String`. Each hole uses Nix’s `builtins.toString`, so a hole
+/// This resembles named Rust formatting, but returns a [`crate::Expr<String>`]
+/// rather than a Rust `String`. Each hole uses [`ToNixText`] and Nix’s
+/// `builtins.toString`, so a hole
 /// can contain a Rust literal, a symbolic option reference or a package.
 ///
 /// Nix strings can carry dependencies on package outputs. Interpolation keeps
@@ -980,7 +981,9 @@ impl NixFunction {
 /// ```
 ///
 /// The comma-separated fragment form remains available for dynamic assembly.
-/// Its parts must already be strings; use [`NixValue::to_text`] to convert them.
+/// Its parts must already be string expressions or string literals; use
+/// [`ToNixText::to_nix_text`] for supported coercion or an explicit
+/// [`NixValue::into_expr`] expectation for dynamic fragments.
 #[macro_export]
 macro_rules! nix_text {
     ($template:literal $(, $name:ident = $value:expr)* $(,)?) => {

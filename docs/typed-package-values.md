@@ -16,6 +16,10 @@ or binding them does not evaluate Nix, fetch sources, or build packages.
   external callables. Plain `NixCallable<R>` does not implement `NixOverridable`.
   `Package` and `Overridable<T>` implement that trait, retaining their interfaces.
 - `Stdenv` retains the supplied builder and exact build/host comparison.
+- `Platform` and `FinalAttrs` provide shared finite record views.
+- `NixNullable<T>` distinguishes a deferred null-or-value choice from Rust Option.
+- `NixPath` retains actual path expressions until explicit text coercion.
+- `IntoNixExpression` and `ToNixText` preserve interfaces at literal and text boundaries.
 - `Expr<bool>`, `Expr<String>`, and `Expr<i64>` retain scalar expectations.
 
 Core handles implement `ConfigValue` for direct placement and `IntoRusnixValue`
@@ -86,7 +90,8 @@ interfaces are unspecified. Deferred family member names, output availability,
 function schemas and override methods still receive their authoritative checks in
 Nix. The types describe authoring contracts rather than proving external schemas.
 
-Across the four `inputs.rs` views, explicit `NixValue` leaves changed as follows:
+The earlier package-interface migration changed explicit `NixValue` leaves in
+the four `inputs.rs` views as follows:
 
 | Example | Before | After |
 | --- | ---: | ---: |
@@ -99,12 +104,13 @@ Across the four `inputs.rs` views, explicit `NixValue` leaves changed as follows
 These counts include root arguments and nested view fields. Remaining dynamic
 leaves primarily describe mixed metadata, test/package scopes and path-like values.
 
-Verification after integration with the shared core helpers passed 496 workspace
-tests and 23 doctests. The
-UI harness checks 67 compile-fail fixtures, including five new typed-interface
-rejections. Twelve new evaluator tests cover typed bindings, record conversion,
-package overrides, library dispatch/output fallbacks, excluded dependencies,
-string context and child diagnostics. The existing package suites also pass:
+Verification with these stronger interfaces passed 505 workspace tests and
+23 doctests. The UI harness checks 74 compile-fail fixtures, including seven new
+rejections for callable parameters, bypass attempts, library conditions, text
+coercion, nullable fallbacks, paths and external-view contracts. Nineteen typed
+evaluator tests cover bindings, record conversion, overrides, caller library
+dispatch, excluded dependencies, string context, nullable values, paths and child
+diagnostics. NixOS tests also cover reused record views and nullable final options. The existing package suites also pass:
 OpenSSL 8, curl 23, Git 44, MariaDB 8 and composition 16 tests. Those suites include
 many configurations per test and compare exact derivation recipes and identities.
 
@@ -157,3 +163,17 @@ view; OpenSSL, curl and Git use `FinalAttrs` for lazy version/final-package acce
 Ordinary attribute interop remains available for other fields. Nested selections
 may retain parentheses around their lexical source; no renderer optimization is
 needed to preserve sharing, laziness, or derivation recipes.
+
+The callable result parameter remains first for compatibility with existing
+`NixCallable<R>` external references. Constructed functions infer their parameter
+interface; explicit annotations include it as `NixCallable<R, A>`. Flexible Nix
+argument records retain the dynamic default. Code using a template or path at an
+explicit raw boundary converts there with `.into()` rather than erasing earlier.
+
+Final checks also passed `cargo fmt --all --check`, structural spacing over 177
+Rust files, all-target Clippy with warnings denied, strict rustdoc, the complete
+fixture workflow and all 15 examples. The PostgreSQL full suite and all 99 Git,
+curl, OpenSSL, MariaDB and composed-graph tests pass. Verification artifacts are
+retained under `target/typed-operations-*.log`. The nixpkgs pin remains
+`8b27c1239e5c421a2bbc2c65d52e4a6fbf2ff296`; all Nix evaluations use fresh isolated
+local stores, with no package builds or network fetches.

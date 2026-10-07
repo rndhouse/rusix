@@ -949,7 +949,7 @@ Nix still checks function arguments and NixOS option types during evaluation.
 or parenthesized dynamic key expressions, never raw Nix source.
 
 `nix_text!("postgres --port={port}", port = port)` interpolates named values into
-a deferred Nix string. Arguments may be Rust literals, Expr/OptionRef expressions,
+an `Expr<String>`. Arguments implement `ToNixText`: supported Rust literals, Expr/OptionRef expressions,
 opaque Nix values or package/derivation handles. Each argument is constructed once
 and coerced with Nix `builtins.toString`; repeated holes reuse its graph. This is
 symbolic interpolation, not Rust `format!`. Nix string dependency contexts and
@@ -980,9 +980,11 @@ arguments and formatting syntax produce compile-time errors. Width, precision,
 debug formatting, positional arguments and expressions inside holes are unsupported.
 
 The original `nix_text!(part, other_part, ...)` fragment form remains available;
-its parts must already be strings, with explicit `.to_text()` for other values.
+its parts must already be string expressions or literals, with explicit
+`ToNixText::to_nix_text()` for other supported values.
 A single string literal is now a template and follows the brace-escaping rules.
-`NixValue::concat_text(parts)` is the iterator form, and
+`Expr<String>::concat(parts)` retains typed strings; the dynamic
+`NixValue::concat_text(parts)` form remains available, and
 `NixValue::join_text(separator, opaque_list)` also accepts lists produced by
 deferred Nix callbacks. None of these operations evaluates deferred values in Rust.
 
@@ -1115,8 +1117,9 @@ The macro generates public navigation fields and tracked accessor methods inside
 the annotated module. Its declarations are reference descriptions, not concrete
 Rust data structs. The enclosing module controls visibility. Scalar leaves
 `bool`, `String`, and `i64` return their existing Expr types. Core expression
-handles such as `Package`, `Stdenv`, `NixLibrary`, `NixCallable<R>`,
-`Overridable<T>`, `NixAttrs<T>`, `NixList<T>` and `PackageFunction<R>` retain
+handles such as `Package`, `Stdenv`, `NixLibrary`, `NixCallable<R, A>`,
+`Overridable<T>`, `NixAttrs<T>`, `NixList<T>`, `NixNullable<T>`, `NixPath` and
+`PackageFunction<R>` retain
 their declared Rust interfaces. NixValue, Option<T>,
 Vec<T>, BTreeMap<K, V> and HashMap<K, V> return opaque NixValue references; Rust
 never receives their deferred contents. A nested local struct creates a view;
@@ -1130,8 +1133,9 @@ Leaf calls capture their caller, not root construction or navigation. Subsequent
 operations retain their own origins. NixOS owns actual option existence, types,
 merging and priorities. The first version supports one explicit root in an inline
 module containing named view structs and imports. Generic, conditional, recursive
-or ambiguous views, unsupported types and external aliases are rejected; aliases
-and one-off references can use OptionRef directly. Container derives, skip and
+or ambiguous views and unsupported types are rejected. External aliases and
+finite views can use `#[rusnix(expression)]` fields when they implement
+`NixExpression`; one-off references can still use OptionRef directly. Container derives, skip and
 flatten are intentionally unsupported in reference declarations. There is no
 runtime traversal or whole-config handle. The [view tests](crates/rusnix-nix/tests/options.rs)
 exercise opaque/typed leaves, exact keys, provenance, lazy evaluation and ordinary
@@ -1142,6 +1146,9 @@ language's `builtins`. Bind its supported Rust helpers to a caller's library wit
 `NixLibrary::from_value(inputs.lib.as_value())`. The `optional`, `optionals`,
 `optional_text`, `all`, `concat_lists`, version comparisons, output selection and
 text replacement methods call that exact library, including caller overrides.
+Conditions and version/text inputs retain scalar types; optional lists and
+concatenation retain element types. `IntoNixExpression` maps literals to their
+natural expression interfaces.
 `throw_if_not(condition, message, value)`
 validates an expression when Nix evaluates it; it is separate from the NixOS
 assertion collection. Arbitrary functions remain accessible through
@@ -1180,7 +1187,9 @@ or validates the external function's schema. Roots have no dynamic traversal or
 whole-root accessor; retain the raw NixValue for advanced access. An argument
 subtree marked `#[rusnix(value)]` also implements `NixExpression`, allowing typed
 bindings and `as_attrs()` for deferred shallow record union. External aliases
-and reusable views use explicit lower-level selection rather than source inspection.
+and reusable views use `#[rusnix(expression)]` to retain their interface without
+source inspection. The shared `Platform` and `FinalAttrs` views use this machinery
+across the four package examples.
 
 Generated `args::argument_names()` returns the mapped names of the root's direct
 fields in declaration order. The Git, curl, OpenSSL and MariaDB examples declare
