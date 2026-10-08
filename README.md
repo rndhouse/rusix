@@ -37,6 +37,21 @@ Use `rusix` to write package and configuration definitions in your own Rust crat
 Definitions can be shared through libraries and tested with Cargo. Tests can
 evaluate the generated Nix and check its results.
 
+Rusix can identify both Rust definitions in a NixOS merge conflict. An excerpt
+from the `merge-two` fixture:
+
+```text
+error[nixos-merge]: conflicting definitions for a NixOS option
+  --> crates/rusix/src/bin/cli/merge_fixtures.rs:16:23
+   = conflicting definition
+  --> crates/rusix/src/bin/cli/merge_fixtures.rs:10:23
+   = conflicting definition
+   = option: services.openssh.authorizedKeysCommandUser
+```
+
+[Error reporting](docs/error-reporting.md) shows complete diagnostics and their
+original Nix errors.
+
 Rusix is experimental, and some Nix errors cannot be traced to a Rust source
 location.
 

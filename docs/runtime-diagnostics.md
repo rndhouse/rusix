@@ -5,6 +5,8 @@ expression. It retains the original Nix reason and stderr alongside the recovere
 Rust location. Some upstream failures have only a broad boundary or no Rust
 origin; diagnostics preserve that limitation.
 
+See [error reporting](error-reporting.md) for examples of the user-facing output.
+
 ## Mapping failures to Rust
 
 Source maps record generated UTF-8 byte spans, Rust origins and enclosing semantic
