@@ -141,6 +141,53 @@ The harness checks diagnostic codes and useful source locations. Diagnostic
 snapshots live in [tests/snapshots/](../tests/snapshots/). Change an expected result
 only after understanding the behavior that changed.
 
+## Releases
+
+The two crates release together. `rusix` pins the exact `rusix-derive` version;
+normal users need only the main dependency. Public IR and AST APIs are intentional
+extension points. Macro expansion hooks remain hidden from documentation.
+
+Before a release:
+
+1. Run the verification commands above, including CLI tests with `--all-features`.
+2. Check Rust 1.88 and compilation without evaluation. CI also checks Windows.
+3. Build strict rustdoc with and without default features.
+4. Verify the crate archives and independent consumers:
+
+```bash
+python3 scripts/check-release.py
+```
+
+The release script uses current stable Cargo and Python 3.11 or newer. Cargo
+dependencies must already be cached. It packages both crates and tests ordinary
+and renamed dependencies against their unpacked contents. It also runs compilation
+with an empty PATH and evaluates through `NixSession` using the pinned checkout.
+Use `--allow-dirty` while developing or `--skip-evaluation` for packaging-only work.
+
+Update both crate versions through the workspace manifest and keep the exact macro
+dependency in sync. Review package contents and record changes in
+[CHANGELOG.md](../CHANGELOG.md). Before 1.0, minor releases may change public APIs;
+patch releases should preserve compatibility. Serialized diagnostics and source
+maps are version-specific; read them with the version that produced them.
+Optional serialized fields retain defaults for absent metadata, without promising
+compatibility with earlier development artifacts.
+
+Publish `rusix-derive` first, then `rusix`, after both dry-runs pass:
+
+```bash
+cargo publish -p rusix-derive --dry-run --locked
+cargo publish -p rusix --dry-run --locked
+cargo publish -p rusix-derive --locked
+cargo publish -p rusix --locked
+```
+
+Before the first macro publication, the dependent crate's individual dry-run
+cannot resolve it from crates.io. Workspace packaging verifies the pair locally;
+repeat the main crate's dry-run once the macro version is available.
+Tag the published commit as `v<version>` and use the changelog for release notes.
+The `dev-cli` executable is a fixture harness; `dev-tools` enables the repository
+spacing checker, whose source is excluded from the macro crate archive.
+
 ## Diagnostic fixtures
 
 The `rusix` executable exposes fixed demonstration fixtures. Their Rust
