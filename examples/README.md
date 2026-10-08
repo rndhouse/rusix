@@ -35,7 +35,12 @@ single Rust file.
 | [Layered validation](layered-validation.rs) | Separate Rust model constraints from Rusix and NixOS validation. |
 
 The `demo` settings in the small models illustrate configuration structure.
-Their Rust types are defined in the example files.
+Their Rust types are defined in the example files. These models constrain how
+configuration is assembled; they do not validate hostnames or check that TLS
+files exist.
+
+Independent module contributions retain NixOS merging. Rusix checks structural
+conversion within each contribution, including duplicate flattened fields.
 
 ## Nix interoperability
 
@@ -71,11 +76,12 @@ Integration tests import the example code and evaluate its generated Nix. Packag
 and module tests also compare it with the corresponding pinned nixpkgs definitions.
 
 See the [verification instructions](../docs/development.md#verification) for the
-required tooling and commands. [Coverage and limits](../docs/example-notes.md#verification-and-limits)
-describes what the tests check.
+required tooling and commands. [Model tests](../crates/rusix/tests/typed_examples.rs)
+check the configuration examples; [symbolic option tests](../crates/rusix/tests/symbolic_options.rs)
+check that generated expressions follow final NixOS values. The package and module
+READMEs link their compatibility tests.
 
 ## Further reading
 
-- [Example notes](../docs/example-notes.md) explain the models and their Nix behavior.
 - [Typed package authoring](../docs/typed-package-values.md) describes deferred package interfaces.
 - [Developing Rusix](../docs/development.md) covers repository setup and verification.

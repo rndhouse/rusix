@@ -1,22 +1,15 @@
-# Incrementally replacing package authoring
+# Composed packages
 
-This example connects four Rust-authored package recipes: OpenSSL supplies curl
-and Git, and curl supplies MariaDB. A dependency is another package a recipe needs;
-the Rust code supplies selected dependencies explicitly and lets nixpkgs supply
-the rest. Start with [composition.rs](composition.rs) to change those connections.
+This example connects four Rust package definitions: OpenSSL supplies curl and
+Git, then curl supplies MariaDB. The remaining dependencies come from nixpkgs.
+Each definition can also be used independently with ordinary nixpkgs dependencies.
 
-Rusix does not require a whole dependency closure to be rewritten. A package can
-first be rewritten while all dependencies remain normal pinned nixpkgs. Rewritten
-dependency values can then be supplied one by one through explicit callPackage
-override records. Nix still evaluates the resulting expressions; nixpkgs supplies
-fetchers, stdenv, builders, hooks and the unreplaced dependency graph.
+## Source layout
 
-`composition.rs` is the authoring example. It constructs OpenSSL from the Rust
-factory, then supplies that deferred value explicitly to both Rust curl and Rust Git.
-The resulting Rust curl value is explicitly supplied to Rust MariaDB. It
-uses `NixExpression::bind` to share typed `Package` dependencies
-lazily in the generated expression. No package factory or source recipe is copied
-per dependent edge. Each package's `mod.rs` exposes its ordinary Rust factory.
+[composition.rs](composition.rs) defines the connections. It uses
+`NixExpression::bind` to share deferred `Package` values without evaluating them.
+Each package's `mod.rs` exposes its factory; composition supplies selected
+arguments through nixpkgs `callPackage`.
 
 ```rust
 let pkgs = Nixpkgs::new();
@@ -36,77 +29,60 @@ let mariadb: Package = pkgs.call_package(
 );
 ```
 
-The full assembly in `composition.rs` returns `NixAttrs<Package>` and binds OpenSSL
-and curl once, retaining `Package` on the lexical parameters. Typed argument records
-lower at calls; neither packages nor factories need `as_value` conversions.
-See [typed package authoring](../../docs/typed-package-values.md).
+The full assembly returns `NixAttrs<Package>` and binds OpenSSL and curl once.
+Rust argument records convert at the call boundary. See
+[typed package authoring](../../docs/typed-package-values.md) for the interfaces.
 
-From the repository root, run `cargo run --locked -p rusix --example composed-packages`.
-It prints generated Nix with a `packages` field containing the four connected
-package expressions; Rust does not evaluate Nix or build the packages.
+## Running
 
-## Verification
+From the repository root:
 
-See the [verified report](REPORT.md) for the source matrix, exact derivation
-identities, source attribution results and full verification.
+```bash
+cargo run --locked -p rusix --example composed-packages
+```
 
-`cargo test --locked -p rusix --test composed` compares exact ATerm recipe
-bytes, derivation identities and all output paths. Tags attached through the
-OpenSSL factory result's normal `overrideAttrs` interface must be observable in
-curl's OpenSSL passthru and Git's actual buildInputs;
-a curl tag must also appear in MariaDB's actual buildInputs; ordinary pkgs.openssl lacks
-these tags. Changing OpenSSL's `withZlib` through `.override` changes curl, Git and both MariaDB
-derivations and continues to match the equivalently wired upstream graph.
+The command prints Nix with a `packages` field containing the connected package
+expressions. It does not evaluate or build them.
 
-An ordinary nixpkgs OpenSSL also works in the same assembly function. Excluded
-OpenSSL and an unused graph stay lazy; an invalid supplied OpenSSL maps to curl's
-Rust consuming operation and retains the original Nix diagnostic. Evaluation is
-offline in fresh disposable stores. Nothing is fetched, built or installed.
+## Compatibility
 
+[Composition tests](../../crates/rusix/tests/composed.rs) compare the graph with
+an equivalently connected graph from pinned nixpkgs. They compare exact derivation
+recipes and every output path, without normalizing anything that affects a hash.
+Tags added with `overrideAttrs` prove that dependents receive the supplied Rust
+packages. Changing OpenSSL's `withZlib` argument changes the downstream recipes
+and continues to match the upstream graph.
 
-The default graph uses the normal **pkgs.curl** flavour (IDN, PSL, Zstd and
-non-static Brotli) because that is MariaDB's actual upstream dependency. The
-independent curl suite still covers curlMinimal's native default recipe. Both
-flavours come from the same complete Rust-authored curl factory.
+The default graph uses `pkgs.curl`'s feature choices because that is MariaDB's
+upstream dependency. The standalone curl example defaults to `curlMinimal`.
+Both come from the same Rust factory, but their derivation identities differ.
 
-The default graph has three explicit rewritten edges. MariaDB's *other*, direct
-OpenSSL input and Git's curl input retain normal nixpkgs injection, as do transitive
-dependencies, bootstrap fetchers and existing test graphs. Equal recipes mean
-these normal and rewritten instances have identical default store identities.
-This is selective edge substitution, rather than a global package-set overlay.
+These are three explicit dependency substitutions. MariaDB's direct OpenSSL
+input and Git's curl input still come from nixpkgs. Composition leaves the rest
+of the package set unchanged.
 
-Generated Nix contains one OpenSSL, one curl and one MariaDB factory body/source
-recipe; common MariaDB attributes are shared between client and server. The
-suite checks source-hash occurrence counts, lexical bindings and absence of
-broad deepSeq forcing.
+The tests cover both directions of interoperability:
 
-Child failures in OpenSSL's fetcher operation, curl consuming supplied OpenSSL,
-and MariaDB demanding a supplied, failing Rust curl retain the relevant package
-operation origin and original Nix trace. A literal integer supplied as curl is
-a separate backend-validation case: stdenv reports the precise buildInput
-index without a generated child frame. Compiler-owned dependency metadata now
-recovers the supplied Rust child instead of the outer
-`mariadb.drvPath` demand. See the correlation test and saved diagnostic.
+| Connections |
+| --- |
+| nixpkgs OpenSSL → Rust curl → Rust MariaDB |
+| Rust OpenSSL → Rust curl → Rust MariaDB |
+| Rust OpenSSL → Rust Git |
+| nixpkgs curl → Rust MariaDB |
+| Rust OpenSSL → Nix curl |
+| Rust curl, using Rust OpenSSL → Nix MariaDB |
+| Rust OpenSSL → Nix Git |
 
+They also cross OpenSSL and MariaDB releases and check that argument overrides
+remain effective. Excluded dependencies and unused graph branches stay lazy.
+Generated source shares factories and dependencies rather than duplicating them.
 
-The stress suite covers seven distinct boundary configurations:
+Failures in supplied Rust dependencies retain their operation origins and the
+original Nix trace. The tests include delayed stdenv validation, where dependency
+metadata connects the error to the supplied Rust child. See
+[error reporting](../../docs/error-reporting.md) for examples and mapping limits.
 
-| Configuration | Authoring boundary |
-| --- | --- |
-| A | nixpkgs OpenSSL → Rust curl → Rust MariaDB |
-| B | Rust OpenSSL → Rust curl → Rust MariaDB |
-| C | Rust OpenSSL → Rust Git, with curl/MariaDB unforced |
-| D | nixpkgs curl → Rust MariaDB |
-| E | Rust OpenSSL → ordinary Nix curl |
-| F | Rust curl (itself consuming Rust OpenSSL) → ordinary Nix MariaDB |
-| G | Rust OpenSSL → ordinary Nix Git |
-
-The reverse consumers also expose the tags, so fallback is detectable in both
-directions. Two OpenSSL releases are crossed with all four MariaDB releases in
-the connected graph. Normal MariaDB `.override` remains live. A throwing OpenSSL
-node excluded by curl's TLS choice remains unforced even while MariaDB's server
-and client recipes are evaluated.
-
-The standalone assembly uses the existing `Nixpkgs::new()` x86_64-linux scope.
-Independent factories are tested with caller-provided native/cross scopes. This
-experiment does not add a general package-set/platform configuration API.
+Evaluation runs offline in disposable stores. These comparisons establish
+recipe compatibility; they do not build or run packages. The standalone graph
+uses `Nixpkgs::new()`'s x86_64-linux scope. The individual package suites cover
+caller-supplied native and cross-compilation scopes.

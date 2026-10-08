@@ -224,4 +224,4 @@ Further documentation:
 - [Expression rendering](nix-expression-rendering.md) covers precedence rules.
 - [Generated Nix layout](generated-nix-layout.md) explains formatting and source spans.
 - [Typed package authoring](typed-package-values.md) describes the deferred interfaces.
-- [Example notes](example-notes.md) records example behavior and comparisons.
+- [Examples](../examples/README.md) introduces the models and package implementations.
