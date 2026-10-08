@@ -1,3 +1,5 @@
+#![cfg(feature = "evaluation")]
+
 //! Compile the actual example-owned types and check stable rustc codes and
 //! causal primary spans, not full wording. Example mains are never evaluated.
 use serde::Deserialize;

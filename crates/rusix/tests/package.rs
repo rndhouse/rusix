@@ -1,3 +1,5 @@
+#![cfg(feature = "evaluation")]
+
 //! Exact build/host equality uses supplied Nix values without platform-schema knowledge.
 use rusix::interop::raw::NixRepresentation;
 use rusix::{

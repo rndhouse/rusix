@@ -1,3 +1,5 @@
+#![cfg(feature = "evaluation")]
+
 use rusix::interop::raw::NixpkgsExt;
 
 #[path = "../../../examples/openssl-nixpkg/inputs.rs"]

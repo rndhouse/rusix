@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-cargo run --locked --quiet -p rusix-derive --bin check-rust-spacing
+cargo run --locked --quiet -p rusix-derive --features dev-tools --bin check-rust-spacing
 
 # Real evaluator round-trips compare the committed Rusix diagnostic snapshots.
 cargo test --locked -p rusix --lib context_audit
@@ -13,7 +13,7 @@ cargo test --locked -p rusix --test roundtrip
 cargo test --locked -p rusix --test nixos
 cargo test --locked -p rusix --test session
 cargo test --locked -p rusix --test consumers
-cargo test --locked -p rusix --test cli
+cargo test --locked -p rusix --features dev-cli --test cli
 cargo test --locked -p rusix --test merges
 cargo test --locked -p rusix --test authoring
 cargo test --locked -p rusix --test symbolic_options
@@ -34,13 +34,13 @@ for example in enum-option typed-submodule invalid-states function-contracts exh
 done
 
 # Preserve reviewable outputs from the executable harness as well.
-cargo run --locked --quiet -p rusix -- check good --out target/diagnostic-fixtures/good
-cargo run --locked --quiet -p rusix -- check selective --out target/diagnostic-fixtures/selective-good --select good
+cargo run --locked --quiet -p rusix --features dev-cli -- check good --out target/diagnostic-fixtures/good
+cargo run --locked --quiet -p rusix --features dev-cli -- check selective --out target/diagnostic-fixtures/selective-good --select good
 for fixture in bad-port nested conflict codegen-bug unmapped selective; do
     out="target/diagnostic-fixtures/$fixture"
     selection=()
     if [ "$fixture" = selective ]; then selection=(--select bad); fi
-    if cargo run --locked --quiet -p rusix -- check "$fixture" --out "$out" "${selection[@]}"; then
+    if cargo run --locked --quiet -p rusix --features dev-cli -- check "$fixture" --out "$out" "${selection[@]}"; then
         echo "Fixture $fixture unexpectedly succeeded" >&2
         exit 1
     else
@@ -61,11 +61,11 @@ for fixture in bad-port nested conflict codegen-bug unmapped selective; do
 done
 
 for fixture in merge-ok merge-priority; do
-    cargo run --locked --quiet -p rusix -- check-nixos "$fixture" --out "target/diagnostic-fixtures/$fixture"
+    cargo run --locked --quiet -p rusix --features dev-cli -- check-nixos "$fixture" --out "target/diagnostic-fixtures/$fixture"
 done
 for fixture in merge-two merge-three merge-mixed merge-three-type; do
     out="target/diagnostic-fixtures/$fixture"
-    if cargo run --locked --quiet -p rusix -- check-nixos "$fixture" --out "$out"; then
+    if cargo run --locked --quiet -p rusix --features dev-cli -- check-nixos "$fixture" --out "$out"; then
         echo "Merge fixture $fixture unexpectedly succeeded" >&2
         exit 1
     else
@@ -81,11 +81,11 @@ for fixture in merge-two merge-three merge-mixed merge-three-type; do
     esac
 done
 
-cargo run --locked --quiet -p rusix -- check-nixos good --out target/diagnostic-fixtures/nixos-good
-cargo run --locked --quiet -p rusix -- check-nixos lazy --out target/diagnostic-fixtures/nixos-lazy
+cargo run --locked --quiet -p rusix --features dev-cli -- check-nixos good --out target/diagnostic-fixtures/nixos-good
+cargo run --locked --quiet -p rusix --features dev-cli -- check-nixos lazy --out target/diagnostic-fixtures/nixos-lazy
 for fixture in type unknown assertion external; do
     out="target/diagnostic-fixtures/nixos-$fixture"
-    if cargo run --locked --quiet -p rusix -- check-nixos "$fixture" --out "$out"; then
+    if cargo run --locked --quiet -p rusix --features dev-cli -- check-nixos "$fixture" --out "$out"; then
         echo "NixOS fixture $fixture unexpectedly succeeded" >&2
         exit 1
     else

@@ -1,3 +1,5 @@
+#![cfg(feature = "evaluation")]
+
 //! Compare the actual public declarations and ordinary Nix consumers with pinned upstream.
 use rusix::{Generated, NixSession, nixos::compile_module};
 use std::{

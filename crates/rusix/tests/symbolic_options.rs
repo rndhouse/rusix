@@ -1,3 +1,5 @@
+#![cfg(feature = "evaluation")]
+
 //! Explicit dependencies resolve in NixOS, after ordinary Nix modules merge.
 use rusix::{
     Config, Expr,

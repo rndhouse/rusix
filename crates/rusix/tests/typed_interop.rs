@@ -1,3 +1,5 @@
+#![cfg(feature = "evaluation")]
+
 //! Typed authoring uses the same IR, lazy evaluator and diagnostic boundaries.
 use rusix::interop::raw::NixRepresentation;
 use rusix::interop::raw::{AsNixValue, NixFunctionExt, NixpkgsExt};

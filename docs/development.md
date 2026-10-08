@@ -34,6 +34,7 @@ cached, add `--offline` to Cargo commands. Nix evaluation itself runs offline.
 
 The workspace contains two crates. `rusix` provides the library and fixture CLI;
 `rusix-derive` implements the procedural macros re-exported by the library.
+The fixture CLI requires `dev-cli`; the spacing checker requires `dev-tools`.
 
 | Location | Responsibility |
 | --- | --- |
@@ -108,10 +109,10 @@ Choose checks based on the change, following [AGENTS.md](../AGENTS.md):
 For Rust or build changes:
 
 ```bash
-cargo test --workspace --locked
+cargo test --workspace --all-features --locked
 cargo fmt --all --check
 cargo clippy --workspace --all-targets --locked -- -D warnings
-cargo run --locked --quiet -p rusix-derive --bin check-rust-spacing
+cargo run --locked --quiet -p rusix-derive --features dev-tools --bin check-rust-spacing
 ```
 
 The spacing checker supplements rustfmt by requiring a blank line between
@@ -151,14 +152,14 @@ library directly.
 Generate plain Nix without evaluating it:
 
 ```bash
-cargo run --locked -p rusix -- emit good --out target/demo/good
+cargo run --locked -p rusix --features dev-cli -- emit good --out target/demo/good
 ```
 
 Evaluate a successful fixture and one that deliberately fails:
 
 ```bash
-cargo run --locked -p rusix -- check good --out target/demo/good
-cargo run --locked -p rusix -- check nested --out target/demo/nested
+cargo run --locked -p rusix --features dev-cli -- check good --out target/demo/good
+cargo run --locked -p rusix --features dev-cli -- check nested --out target/demo/nested
 ```
 
 `nested` exits with status 1 and maps a division-by-zero error back to Rust.
@@ -168,8 +169,8 @@ classification.
 The `selective` fixture checks lazy evaluation:
 
 ```bash
-cargo run --locked -p rusix -- check selective --out target/selective/good --select good
-cargo run --locked -p rusix -- check selective --out target/selective/bad --select bad
+cargo run --locked -p rusix --features dev-cli -- check selective --out target/selective/good --select good
+cargo run --locked -p rusix --features dev-cli -- check selective --out target/selective/bad --select bad
 ```
 
 Selecting `good` returns `42`; selecting `bad` reports a division failure.
@@ -178,8 +179,8 @@ Plain `check --select` takes one literal top-level attribute name.
 For NixOS module behavior:
 
 ```bash
-cargo run --locked -p rusix -- check-nixos good --out target/nixos/good
-cargo run --locked -p rusix -- check-nixos merge-two --out target/nixos/merge-two
+cargo run --locked -p rusix --features dev-cli -- check-nixos good --out target/nixos/good
+cargo run --locked -p rusix --features dev-cli -- check-nixos merge-two --out target/nixos/merge-two
 ```
 
 `merge-two` exits with status 1 and reports conflicting definitions.

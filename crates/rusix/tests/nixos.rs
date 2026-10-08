@@ -1,3 +1,5 @@
+#![cfg(feature = "evaluation")]
+
 use rusix::{
     Diagnostic, DiagnosticKind, Generated, NixSession, Provenance,
     nixos::{compile_module, evaluation_source},

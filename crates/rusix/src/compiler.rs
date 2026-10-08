@@ -2,7 +2,7 @@
 //!
 //! Nix evaluates configuration expressions and describes software builds. This
 //! crate compiles values authored with `rusix` into that language. Compilation
-//! happens in Rust; evaluation is a separate step using [`crate::NixSession`].
+//! happens in Rust; evaluation is a separate step using `crate::NixSession`.
 //!
 //! [`compile`] generates ordinary Nix configuration, while
 //! [`crate::nixos::compile_module`] generates a module that NixOS combines with other
@@ -15,7 +15,10 @@
 //!
 //! ```
 //! use rusix::{Expr, IntoConfig};
-//! use rusix::{NixSession, compile};
+//! use rusix::compile;
+//! # #[cfg(feature = "evaluation")]
+//! # {
+//! use rusix::NixSession;
 //! use std::path::Path;
 //!
 //! #[derive(IntoConfig)]
@@ -37,9 +40,10 @@
 //!         eprintln!("Original Nix output: {}", diagnostic.raw_nix);
 //!     }
 //! }
+//! # }
 //! ```
 //!
-//! [`crate::Evaluation::value`] holds the selected result as JSON. JSON conversion makes
+//! `Evaluation::value` holds the selected result as JSON. JSON conversion makes
 //! Nix compute the data being returned, including nested fields; selecting a small
 //! result can leave unrelated expressions unevaluated. Evaluation failures and
 //! compilation failures both return [`Diagnostic`]. Its [`Diagnostic::reason`]
@@ -48,23 +52,8 @@
 //! several causes or no known Rust location; [`Diagnostic::render`] displays the
 //! available information without requiring one culprit.
 //!
-//! Choose an evaluation method based on the inputs and result you need:
-//!
-//! | Method | Use it for |
-//! | --- | --- |
-//! | [`crate::NixSession::evaluate`] | Standalone expressions with no external nixpkgs inputs; return the whole result as JSON. |
-//! | [`crate::NixSession::evaluate_attribute`] | One literal top-level field of a standalone result; leave unrelated fields unevaluated. |
-//! | [`crate::NixSession::evaluate_interop`] | Expressions referring to the pinned local nixpkgs packages, library, or local Nix files. |
-//! | [`crate::NixSession::evaluate_nixos`] | A selected configuration path from a compiled module, using the minimal pinned NixOS harness. |
-//! | [`crate::NixSession::evaluate_nixos_interop`] | The same minimal module harness with the full pinned package set and module files available. |
-//! | [`crate::NixSession::evaluate_nixos_with_driver`] | A custom Nix evaluation expression, including complete NixOS evaluation or a comparison of selected data. |
-//!
-//! The module methods take a [`crate::nixos::NixosArtifact`] from
-//! [`crate::nixos::compile_module`], rather than standalone [`Generated`] configuration.
-//! The minimal harness checks only imported option declarations; making the full
-//! package set available does not load all NixOS modules or establish full-system
-//! validity. A custom driver controls which modules and data are evaluated.
-//! These methods evaluate offline through the same isolated session.
+//! With the default `evaluation` feature, `NixSession` evaluates generated values
+//! in an offline disposable store. See the crate README for evaluator setup.
 pub mod ast;
 
 pub(crate) mod interop;
@@ -73,23 +62,23 @@ pub(crate) mod provenance;
 
 pub(crate) mod render;
 
-#[cfg(test)]
+#[cfg(all(test, feature = "evaluation"))]
 mod backend_audit;
 
-#[cfg(test)]
+#[cfg(all(test, feature = "evaluation"))]
 pub(crate) mod context_audit;
 
-#[cfg(test)]
+#[cfg(all(test, feature = "evaluation"))]
 mod render_audit;
 
 use crate::Diagnostic;
 
-#[cfg(test)]
+#[cfg(all(test, feature = "evaluation"))]
 use crate::NixSession;
 
 use crate::{Config, IntoConfig, ir::Node, ir::ValueKind};
 
-#[cfg(test)]
+#[cfg(all(test, feature = "evaluation"))]
 use crate::{DiagnosticKind, Provenance};
 
 use ast::{BinaryOp, Builtin, NixExpr, NixKind};

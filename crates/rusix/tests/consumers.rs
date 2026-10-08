@@ -1,3 +1,5 @@
+#![cfg(feature = "evaluation")]
+
 //! Verify ordinary and renamed dependencies from a separate user's library.
 use std::{fs, path::Path, process::Command};
 

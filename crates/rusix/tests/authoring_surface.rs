@@ -1,3 +1,5 @@
+#![cfg(feature = "evaluation")]
+
 //! Normal authoring needs no raw or backend imports.
 use rusix::prelude::*;
 use rusix::{NixSession, compile};

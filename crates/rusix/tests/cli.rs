@@ -1,3 +1,5 @@
+#![cfg(feature = "dev-cli")]
+
 use std::{fs, process::Command};
 
 #[test]

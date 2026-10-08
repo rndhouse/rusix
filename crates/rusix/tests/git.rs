@@ -1,3 +1,5 @@
+#![cfg(feature = "evaluation")]
+
 //! Compares complete recipes and deferred package behavior without fetching or building.
 use rusix::interop::raw::{NixFunctionExt, NixpkgsExt};
 

@@ -1,3 +1,5 @@
+#![cfg(feature = "evaluation")]
+
 //! Generic library helpers preserve the caller's functions and deferred value semantics.
 use rusix::interop::raw::NixRepresentation;
 use rusix::interop::raw::{NixFunctionExt, NixpkgsExt};

@@ -1,3 +1,5 @@
+#![cfg(feature = "evaluation")]
+
 //! Finite structural views share OptionRef IR, laziness and NixOS composition.
 use rusix::{
     Config, Expr,

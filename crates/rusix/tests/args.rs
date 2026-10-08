@@ -1,3 +1,5 @@
+#![cfg(feature = "evaluation")]
+
 //! Argument views share existing selections, typed expressions and lazy native functions.
 use rusix::interop::raw::NixFunctionExt;
 use rusix::interop::raw::NixRepresentation;

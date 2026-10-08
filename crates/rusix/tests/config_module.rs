@@ -1,3 +1,5 @@
+#![cfg(feature = "evaluation")]
+
 //! Inline module sugar uses the same traits, IR, and evaluator as explicit derives.
 use rusix::interop::raw::NixFunctionExt;
 use rusix::ir::ReferencedExpression;

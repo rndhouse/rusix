@@ -1,3 +1,5 @@
+#![cfg(feature = "evaluation")]
+
 //! Evidence for the limits of lazy contexts at opaque backend argument handoffs.
 #[path = "../../../examples/composed-packages/composition.rs"]
 pub mod composition;

@@ -75,7 +75,7 @@ does not enforce it. Run the structural spacing check (also run by workspace
 tests and the fixture script):
 
 ```bash
-cargo run --locked --quiet -p rusix-derive --bin check-rust-spacing
+cargo run --locked --quiet -p rusix-derive --features dev-tools --bin check-rust-spacing
 ```
 
 After rustfmt, its `--fix` option inserts missing blank lines. The checker parses

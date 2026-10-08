@@ -1,3 +1,5 @@
+#![cfg(feature = "evaluation")]
+
 //! Native package function interfaces reuse scoped callbacks and the isolated evaluator.
 use rusix::interop::raw::NixRepresentation;
 use rusix::interop::raw::{NixFunctionExt, NixpkgsExt};

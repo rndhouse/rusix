@@ -1,3 +1,5 @@
+#![cfg(feature = "evaluation")]
+
 //! Compare the pinned curl factory's exact recipes, public interface and recursive tests.
 use rusix::interop::raw::{NixFunctionExt, NixpkgsExt};
 

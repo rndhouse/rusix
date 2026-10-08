@@ -1,3 +1,5 @@
+#![cfg(feature = "evaluation")]
+
 //! Compare the Rust implementation with real pinned NixOS, without building outputs.
 use rusix::{Generated, NixSession, nixos::compile_module};
 use std::{

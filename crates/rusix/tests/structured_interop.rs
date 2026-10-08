@@ -1,3 +1,5 @@
+#![cfg(feature = "evaluation")]
+
 //! Structured opaque arguments use real pinned functions; no outputs are built.
 use rusix::interop::raw::{AsNixValue, InputRefExt, NixFunctionExt};
 use rusix::ir::ReferencedExpression;

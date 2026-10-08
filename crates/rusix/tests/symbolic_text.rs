@@ -1,3 +1,5 @@
+#![cfg(feature = "evaluation")]
+
 //! Interpolation is authoring sugar: native Nix coercion, contexts and laziness.
 use rusix::interop::raw::{AsNixValue, NixFunctionExt};
 use rusix::{

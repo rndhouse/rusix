@@ -5,26 +5,33 @@
 //! those types and definition priorities. This backend generates ordinary modules
 //! and retains Rust locations for type, merge and expression errors.
 //!
-//! Compilation does not run NixOS. Evaluation uses [`NixSession`]’s disposable
+//! Compilation does not run NixOS. Evaluation uses `NixSession`’s disposable
 //! store and never builds packages or activates a system.
 use crate::compiler::{
     ast::{NixExpr, NixKind},
     lower_value, render_with_options,
 };
 use crate::ir::ReferencedExpression;
-use crate::{
-    Diagnostic, DiagnosticKind, DiagnosticOrigin, Evaluation, Generated, NixSession, OriginRole,
-    Provenance, RenderOptions, compiler::render::quote,
-};
+use crate::{Diagnostic, Generated, RenderOptions, compiler::render::quote};
+
+#[cfg(feature = "evaluation")]
+use crate::{DiagnosticKind, DiagnosticOrigin, Evaluation, NixSession, OriginRole, Provenance};
+
 use crate::{
     ir::{IntoNode, Origin},
     nixos::NixosModule,
 };
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
-use std::{fs, path::Path, sync::OnceLock};
 
-#[cfg(test)]
+#[cfg(feature = "evaluation")]
+use sha2::{Digest, Sha256};
+
+#[cfg(feature = "evaluation")]
+use std::fs;
+
+use std::{path::Path, sync::OnceLock};
+
+#[cfg(all(test, feature = "evaluation"))]
 #[path = "nixos_context_audit.rs"]
 mod context_audit;
 
@@ -35,7 +42,7 @@ pub const NIXPKGS_REVISION: &str = "8b27c1239e5c421a2bbc2c65d52e4a6fbf2ff296";
 /// Minimal module-evaluation driver for staged artifacts, not a full system evaluation.
 /// Accepts `nixpkgs`, `module`, literal `selection` segments and `checkAssertions`.
 /// Interop can supply `pkgs` and request package metadata with `packageSummary`.
-/// Exposed for backend/CLI artifact inspection; ordinary evaluation uses [`NixSession`].
+/// Exposed for backend/CLI artifact inspection; ordinary evaluation uses `NixSession`.
 pub const DRIVER: &str = include_str!("driver.nix");
 
 /// Render a wrapper using `nixos-driver.nix`, `module.nix` and the staged minimal tree.
@@ -380,6 +387,7 @@ pub(crate) struct Pin {
     /// Git revision required for the offline nixpkgs source checkout.
     pub(crate) revision: String,
     /// Expected content hashes keyed by relative paths of the minimal evaluator files.
+    #[cfg(feature = "evaluation")]
     files: std::collections::BTreeMap<String, String>,
     /// Checked upstream files whose contents identify supported backend diagnostics.
     pub(crate) diagnostic_files: std::collections::BTreeMap<String, String>,
@@ -402,8 +410,10 @@ pub(crate) fn pin() -> Result<&'static Pin, String> {
     .map_err(Clone::clone)
 }
 
+#[cfg(feature = "evaluation")]
 type PinnedFiles = Vec<(String, Vec<u8>)>;
 
+#[cfg(feature = "evaluation")]
 fn pinned_files(root: &Path) -> Result<&'static PinnedFiles, String> {
     static SNAPSHOT: OnceLock<Result<PinnedFiles, String>> = OnceLock::new();
 
@@ -432,6 +442,7 @@ fn pinned_files(root: &Path) -> Result<&'static PinnedFiles, String> {
         .map_err(Clone::clone)
 }
 
+#[cfg(feature = "evaluation")]
 impl NixSession {
     pub(crate) fn stage_pinned(&self) -> Result<std::path::PathBuf, Box<Diagnostic>> {
         let pin_root = self.root().join("nixpkgs");
@@ -596,6 +607,7 @@ impl NixSession {
     }
 }
 
+#[cfg(feature = "evaluation")]
 fn boundary_file(boundary: &Boundary, pin_root: &Path) -> std::path::PathBuf {
     match &boundary.file {
         Some(file) => pin_root.parent().unwrap().join(file),
@@ -603,6 +615,7 @@ fn boundary_file(boundary: &Boundary, pin_root: &Path) -> std::path::PathBuf {
     }
 }
 
+#[cfg(feature = "evaluation")]
 fn matches_file(reported: &str, path: &Path) -> bool {
     [
         path.to_owned(),
@@ -615,6 +628,7 @@ fn matches_file(reported: &str, path: &Path) -> bool {
     })
 }
 
+#[cfg(feature = "evaluation")]
 fn translate(mut diagnostic: Diagnostic, artifact: &NixosArtifact, pin_root: &Path) -> Diagnostic {
     let evidence = crate::diagnostic::nix_evidence(&diagnostic.raw_nix);
     let in_module_system = evidence.iter().any(|(file, _)| {

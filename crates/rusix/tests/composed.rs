@@ -1,3 +1,5 @@
+#![cfg(feature = "evaluation")]
+
 use rusix::interop::raw::NixRepresentation;
 
 #[path = "../../../examples/composed-packages/composition.rs"]

@@ -1,3 +1,5 @@
+#![cfg(feature = "evaluation")]
+
 //! Delayed backend clues and out-of-band Rust supplier correlation.
 use rusix::{Generated, NixSession};
 use std::{fs, path::Path};

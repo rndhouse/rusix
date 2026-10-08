@@ -1,3 +1,5 @@
+#![cfg(feature = "evaluation")]
+
 //! Structural declarations reuse existing traits and real NixOS evaluation.
 use rusix::interop::raw::NixFunctionExt;
 use rusix::{

@@ -1,5 +1,7 @@
 //! Read platform information and final build attributes supplied by nixpkgs.
 //! These views describe deferred field lookups, preserving the complete Nix records.
+// Only the nested views are instantiated; the root declares their structure.
+#[allow(dead_code)]
 #[crate::args]
 mod views {
     use crate::Expr;

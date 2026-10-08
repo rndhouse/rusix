@@ -1,3 +1,5 @@
+#![cfg(feature = "evaluation")]
+
 //! Shared sessions keep each evaluation's source, map and staged inputs together.
 use rusix::{Config, Expr, nixos::NixosModule};
 use rusix::{NixSession, compile, nixos::compile_module};

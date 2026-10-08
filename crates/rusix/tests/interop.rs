@@ -1,3 +1,5 @@
+#![cfg(feature = "evaluation")]
+
 use rusix::interop::raw::{InputRefExt, NixFunctionExt};
 use rusix::ir::ReferencedExpression;
 use rusix::{

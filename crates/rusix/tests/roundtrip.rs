@@ -1,3 +1,5 @@
+#![cfg(feature = "evaluation")]
+
 use rusix::{Config, ir::Origin, ir::ValueKind};
 use rusix::{Diagnostic, DiagnosticKind, Generated, NixSession, Provenance, SourceSpan, compile};
 use std::{

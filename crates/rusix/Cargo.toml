@@ -5,14 +5,34 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 description = "Typed Rust authoring, compilation and isolated evaluation for Nix"
-repository = "https://github.com/rndhouse/rusix"
+repository.workspace = true
+documentation = "https://docs.rs/rusix"
+keywords = ["nix", "nixos", "configuration", "code-generation"]
+categories = ["config", "development-tools::build-utils"]
+include = ["src/**", "README.md", "LICENSE", "LICENSE-NIXPKGS", "NOTICE"]
 readme = "README.md"
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[features]
+default = ["evaluation"]
+evaluation = ["dep:tempfile"]
+dev-cli = ["evaluation"]
+
+[[bin]]
+name = "rusix"
+path = "src/bin/rusix.rs"
+required-features = ["dev-cli"]
+
+[dev-dependencies]
+tempfile.workspace = true
 
 [dependencies]
 rusix-derive = { path = "../rusix-derive", version = "=0.1.0" }
 serde.workspace = true
 serde_json.workspace = true
-tempfile.workspace = true
+tempfile = { workspace = true, optional = true }
 sha2.workspace = true
 
 [[example]]

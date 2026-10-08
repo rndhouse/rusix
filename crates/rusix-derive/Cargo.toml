@@ -5,8 +5,20 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 description = "Procedural macros for Rusix configuration and symbolic values"
-repository = "https://github.com/rndhouse/rusix"
+repository.workspace = true
+documentation = "https://docs.rs/rusix-derive"
+keywords = ["nix", "nixos", "proc-macro", "derive"]
+categories = ["development-tools::procedural-macro-helpers"]
+include = ["src/*.rs", "README.md", "LICENSE"]
 readme = "README.md"
+
+[features]
+dev-tools = []
+
+[[bin]]
+name = "check-rust-spacing"
+path = "src/bin/check-rust-spacing.rs"
+required-features = ["dev-tools"]
 
 [lib]
 proc-macro = true

@@ -1,3 +1,5 @@
+#![cfg(feature = "evaluation")]
+
 //! Derive semantics exercised through real lowering and NixOS merges.
 use rusix::interop::raw::NixFunctionExt;
 use rusix::ir::ReferencedExpression;

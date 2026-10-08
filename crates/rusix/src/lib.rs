@@ -10,10 +10,18 @@
 //! [`nixos::NixosModule`] to combine configuration for NixOS. NixOS combines
 //! modules and checks configurable fields, called *options*, during evaluation.
 //!
-//! [`compile`] generates Nix source from a Rust description. [`NixSession`] can
+//! [`compile`] generates Nix source from a Rust description. With the default
+//! `evaluation` feature, `NixSession` can
 //! evaluate the generated source in an offline, disposable Nix store. Compilation
 //! does not launch Nix; evaluation never builds packages or activates a system.
+//! Disable default features to use authoring and compilation without the evaluator.
+//! Evaluation supports Linux; the fixture executable requires `dev-cli`.
 #![warn(missing_docs)]
+
+#[cfg(all(feature = "evaluation", not(unix)))]
+compile_error!(
+    "the evaluation feature requires Unix; use default-features = false for compilation only"
+);
 
 extern crate self as rusix;
 
@@ -27,6 +35,7 @@ mod authoring;
 /// Compile deferred Rust descriptions into Nix source and inspection syntax.
 pub mod compiler;
 
+#[cfg(feature = "evaluation")]
 mod evaluation;
 
 pub mod diagnostic;
@@ -208,7 +217,6 @@ pub use rusix_derive::options;
 /// an external type or alias implementing [`interop::NixExpression`]. Rust checks
 /// that trait contract; Nix checks the actual external value when demanded.
 /// Retain raw NixValue for dynamic selections.
-/// Roots do not expose whole-value access or arbitrary field traversal.
 /// Generated `argument_names()` returns the mapped names of the root's direct
 /// fields in declaration order. When the view declares the complete public
 /// interface, pass these names to [`interop::PackageFunction::from_function_attrs`]
@@ -226,4 +234,6 @@ pub(crate) use authoring::sealed;
 pub use authoring::{Config, ConfigValue, Expr, IntoConfig, ValidationError};
 pub use compiler::{Generated, RenderOptions, SourceSpan, compile, compile_with_options};
 pub use diagnostic::{Diagnostic, DiagnosticKind, DiagnosticOrigin, OriginRole, Provenance};
+
+#[cfg(feature = "evaluation")]
 pub use evaluation::{Evaluation, NixSession};

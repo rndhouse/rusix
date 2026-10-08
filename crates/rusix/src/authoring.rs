@@ -329,14 +329,6 @@ impl Config {
         self
     }
 
-    /// Assign a value through the legacy dynamic-path API.
-    /// Prefer an [`IntoConfig`] struct; use [`Self::set_dynamic`] for runtime paths.
-    #[deprecated(note = "Prefer an IntoConfig struct; use set_dynamic for runtime paths.")]
-    #[track_caller]
-    pub fn set(self, path: impl Into<String>, value: impl ConfigValue) -> Self {
-        self.set_dynamic(path, value)
-    }
-
     /// Check that this contribution can be represented unambiguously in generated Nix.
     /// This runs in Rust and rejects conflicting paths, invalid strings or float
     /// literals, and callback parameters used outside their functions. It does not

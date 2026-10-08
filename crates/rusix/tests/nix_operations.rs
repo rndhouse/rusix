@@ -1,3 +1,5 @@
+#![cfg(feature = "evaluation")]
+
 //! Native Nix operations remain lazy and preserve source locations without library substitution.
 use rusix::{Config, Expr, interop::raw::NixValue};
 use rusix::{NixSession, compile};

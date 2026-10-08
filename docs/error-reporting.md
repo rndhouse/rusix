@@ -179,11 +179,11 @@ Follow [repository setup](development.md#setup) to initialize the pinned sources
 From the repository root:
 
 ```bash
-cargo run --locked -p rusix -- check-nixos merge-two --out target/error-reporting/merge-two
-cargo run --locked -p rusix -- check-nixos type --out target/error-reporting/type
-cargo run --locked -p rusix -- check nested --out target/error-reporting/nested
-cargo run --locked -p rusix -- check-nixos external --out target/error-reporting/external
-cargo run --locked -p rusix -- check unmapped --out target/error-reporting/unmapped
+cargo run --locked -p rusix --features dev-cli -- check-nixos merge-two --out target/error-reporting/merge-two
+cargo run --locked -p rusix --features dev-cli -- check-nixos type --out target/error-reporting/type
+cargo run --locked -p rusix --features dev-cli -- check nested --out target/error-reporting/nested
+cargo run --locked -p rusix --features dev-cli -- check-nixos external --out target/error-reporting/external
+cargo run --locked -p rusix --features dev-cli -- check unmapped --out target/error-reporting/unmapped
 ```
 
 Each command deliberately exits with status 1. The output directory contains

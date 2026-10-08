@@ -1,12 +1,15 @@
 //! Opaque semantic references lower into ordinary AST imports/lookups/calls.
-use crate::{
-    Diagnostic, Evaluation, Generated, NixSession,
-    compiler::ast::{BinaryOp, Builtin, NixExpr, NixKind},
-};
+use crate::compiler::ast::{BinaryOp, Builtin, NixExpr, NixKind};
+
+#[cfg(feature = "evaluation")]
+use crate::{Diagnostic, Evaluation, Generated, NixSession};
+
 use crate::{
     interop::raw::AttrPath,
     ir::{Node, Reference, Source},
 };
+
+#[cfg(feature = "evaluation")]
 use std::{
     path::{Path, PathBuf},
     process::Command,
@@ -113,11 +116,13 @@ pub(crate) fn lower_reference_scoped<'a>(
 
 // Only the checked source checkout is shared; each NixSession still owns its
 // own store/eval-store. Revalidate when no sessions retain the source handle.
+#[cfg(feature = "evaluation")]
 pub(crate) struct FullSource {
     /// Filesystem root of the verified pinned nixpkgs checkout shared by live sessions.
     pub(crate) path: PathBuf,
 }
 
+#[cfg(feature = "evaluation")]
 impl FullSource {
     pub(crate) fn checked(path: &Path) -> Result<Arc<Self>, Box<Diagnostic>> {
         let pin = crate::nixos::pin().map_err(Diagnostic::tooling)?;
@@ -129,6 +134,7 @@ impl FullSource {
     }
 }
 
+#[cfg(feature = "evaluation")]
 fn check_source(path: &Path, revision: &str) -> Result<(), String> {
     if !path.join(".git").exists() || !path.join("default.nix").is_file() {
         return Err(
@@ -173,6 +179,7 @@ fn check_source(path: &Path, revision: &str) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(feature = "evaluation")]
 pub(crate) fn full_source() -> Result<Arc<FullSource>, Box<Diagnostic>> {
     static CACHE: OnceLock<Mutex<Weak<FullSource>>> = OnceLock::new();
 
@@ -192,6 +199,7 @@ pub(crate) fn full_source() -> Result<Arc<FullSource>, Box<Diagnostic>> {
     Ok(source)
 }
 
+#[cfg(feature = "evaluation")]
 impl NixSession {
     pub(crate) fn nixpkgs_source(&self) -> Result<Arc<FullSource>, Box<Diagnostic>> {
         if let Some(source) = self.full_source.get() {
@@ -288,7 +296,7 @@ pub(crate) fn module(reference: &Reference, origin: &rusix::ir::Origin) -> NixEx
     )
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "evaluation"))]
 mod source_tests {
     use super::*;
 

@@ -1,3 +1,5 @@
+#![cfg(feature = "evaluation")]
+
 //! A genuine overlay modifies upstream curl, using the ordinary nixpkgs fixed point.
 #[path = "../../../examples/overlay/authoring.rs"]
 mod authoring;

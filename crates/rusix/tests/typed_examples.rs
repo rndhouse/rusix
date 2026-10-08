@@ -1,3 +1,5 @@
+#![cfg(feature = "evaluation")]
+
 use rusix::{Config, IntoConfig, IntoRusixValue, nixos::NixosModule};
 
 use rusix::{

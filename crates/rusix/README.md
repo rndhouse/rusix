@@ -5,7 +5,7 @@ Rusix compiles those descriptions into Nix source, then optionally evaluates the
 offline in a disposable Nix store. It never builds packages or activates a system.
 This is an experimental library.
 
-After publication, add one dependency to your own library or executable:
+Add one dependency to your own library or executable:
 
 ```toml
 [dependencies]
@@ -31,8 +31,18 @@ let result = session.evaluate(&generated).expect("successful Nix evaluation");
 assert_eq!(result.value["answer"], 42);
 ```
 
-Compilation requires no Nix process. Evaluation requires `nix` and
-`nix-instantiate` on PATH. For expressions using nixpkgs or NixOS, supply an
+Compilation requires no Nix process. The default `evaluation` feature provides
+`NixSession`; evaluation is supported on Linux with Nix 2.34.8. It requires `nix`
+and `nix-instantiate` on PATH. Rust 1.88 or newer is required.
+
+For authoring and compilation alone, including on Windows:
+
+```toml
+[dependencies]
+rusix = { version = "0.1", default-features = false }
+```
+
+For expressions using nixpkgs or NixOS, supply an
 existing clean local checkout matching `rusix::nixos::NIXPKGS_REVISION`:
 
 ```rust
@@ -48,11 +58,13 @@ Start with `rusix::prelude` for authoring, `rusix::interop` for existing Nix val
 and `rusix::nixos` for system configuration. `rusix::ir` and
 `rusix::compiler::ast` support explicit inspection and compiler extensions.
 
-The same package contains the `rusix` executable. Its current commands are an
-experimental fixture harness, for example `rusix check good --out target/demo`.
-After publication, install it with `cargo install rusix`.
-For NixOS fixtures outside the repository, use
-`rusix --nixpkgs /path/to/nixpkgs check-nixos good --out target/demo`.
+The `dev-cli` feature enables the repository's diagnostic fixture executable.
+It runs fixed examples for repository verification. For example, `cargo run --features dev-cli -- check good --out target/demo`
+evaluates a fixture and saves its artifacts.
+
+The public IR and compiler AST APIs support compiler extensions. Rusix is
+experimental: minor releases before 1.0 may change APIs. Saved diagnostics and
+source maps should be read with the same Rusix version that produced them.
 
 The repository contains runnable examples, comparison fixtures and full
 development instructions: <https://github.com/rndhouse/rusix>.

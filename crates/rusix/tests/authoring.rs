@@ -1,3 +1,5 @@
+#![cfg(feature = "evaluation")]
+
 //! Public component conversion/composition exercised through real NixOS merges.
 use rusix::{
     Config, Expr, IntoConfig,

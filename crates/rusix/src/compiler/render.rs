@@ -43,7 +43,7 @@ pub struct Generated {
     /// Text ranges linked to Rust operations and their enclosing configuration fields.
     pub spans: Vec<SourceSpan>,
     /// Saved authored package dependencies used to recover Rust locations from
-    /// nixpkgs build-recipe validation failures. Older saved artifacts omit this field.
+    /// nixpkgs build-recipe validation failures. Absent when no metadata is needed.
     /// This diagnostic metadata is independent of the generated Nix expression.
     #[doc(hidden)]
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -463,8 +463,8 @@ pub(crate) fn quote(value: &str) -> String {
     out
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "evaluation"))]
 mod tests;
 
-#[cfg(test)]
+#[cfg(all(test, feature = "evaluation"))]
 mod precedence_tests;
