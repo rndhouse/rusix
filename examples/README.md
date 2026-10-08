@@ -78,4 +78,4 @@ describes what the tests check.
 
 - [Example notes](../docs/example-notes.md) explain the models and their Nix behavior.
 - [Typed package authoring](../docs/typed-package-values.md) describes deferred package interfaces.
-- [Development and design](../docs/development.md) covers the compiler and evaluation process.
+- [Developing Rusix](../docs/development.md) covers repository setup and verification.

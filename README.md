@@ -42,4 +42,4 @@ location.
 
 - [Examples](examples/README.md)
 - [Library usage](crates/rusix/README.md)
-- [Development and design](docs/development.md)
+- [Developing Rusix](docs/development.md)

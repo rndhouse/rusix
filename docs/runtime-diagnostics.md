@@ -31,6 +31,44 @@ Literals and function definitions cannot displace a consuming operation.
 Structured JSON trace fields are preferred; the text fallback uses narrower
 heuristics and may need updates for different Nix diagnostic formats.
 
+Generated source is parsed before evaluation. Invalid syntax or static bindings
+are compiler failures and receive no Rust primary location, even when a source
+span is available. A valid expression that fails during evaluation is treated
+separately. Tool startup and staging failures remain tooling errors.
+
+## NixOS module diagnostics
+
+NixOS may reject an option after its value-level runtime context has ended.
+Rusix therefore gives each generated assignment its own inline module with an
+origin ID in `_file` metadata. Definition errors can identify that Rust assignment
+and its option path without forcing the value early. Assertion messages also
+carry origin markers; an evaluator stage marker identifies assertion enforcement.
+
+Independent contributions retain separate module identities. NixOS performs
+merging and priority filtering, so a discarded definition can stay unevaluated.
+Rusix reports the contributing definitions present in NixOS's error message.
+A merge failure may report only the first conflicting pair, while a type failure
+can report several invalid definitions. The artifact's other definitions are
+not additional evidence of blame.
+
+Read `Diagnostic::origins` for the full reported set. Each entry records its role
+and recovery method, with an upstream Nix filename where available. `primary`
+is a single-location convenience; `related` describes enclosing operations
+rather than additional conflicting definitions.
+
+An upstream definition can map to the Rust import that introduced its file.
+That is an import boundary, not an exact upstream assignment or a reconstructed
+dependency graph. Unmatched external filenames remain available without a Rust
+location. Repeated constructor sites can share origin IDs, so source identity
+does not uniquely identify a runtime module instance.
+
+Option classification combines recognized module-system frames with narrow
+patterns in the upstream reason. The structured Nix log has no dedicated list
+of contributing definitions; the adapter reads definition lines from `raw_msg`.
+Changed formatting can defeat that mapping. Multi-definition reports currently
+require the tested structured format; the legacy text fallback has more limited
+coverage. Original Nix diagnostics remain unchanged.
+
 ## Delayed backend validation
 
 A runtime context ends when its wrapped expression evaluates successfully.
