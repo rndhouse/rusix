@@ -13,13 +13,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-24.04, windows-2025]
         rust: [stable, "1.88.0"]
     runs-on: ${{ matrix.os }}
     env:
       RUSTUP_TOOLCHAIN: ${{ matrix.rust }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: rustup toolchain install ${{ matrix.rust }} --profile minimal
       - run: cargo test --workspace --no-default-features --locked
       - name: Documentation without evaluation
@@ -38,7 +38,7 @@ jobs:
         run: |
           apt-get update
           apt-get install -y --no-install-recommends ca-certificates curl git xz-utils build-essential python3
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: true
       - name: Install Rust
@@ -58,6 +58,8 @@ jobs:
           for directory in /nix/store/*-nix-$NIX_VERSION; do
             echo "$directory/bin" >> "$GITHUB_PATH"
           done
+      - name: Cache all locked dependency sources for offline harnesses
+        run: cargo fetch --locked
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
       - run: cargo run --locked -p rusix-derive --features dev-tools --bin check-rust-spacing
