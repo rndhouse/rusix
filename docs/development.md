@@ -2,7 +2,7 @@
 
 This guide covers repository setup and how to verify changes. Read
 [AGENTS.md](../AGENTS.md) for the development rules.
-For library usage, start with the [crate README](../crates/rusix/README.md).
+For library usage, start with the [library guide](library-usage.md).
 
 ## Setup
 

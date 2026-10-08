@@ -12,6 +12,13 @@ import and use the generated definitions.
 - Source mappings help trace Nix evaluation errors back to the Rust code that
   produced them.
 
+Add Rusix to `Cargo.toml`:
+
+```toml
+[dependencies]
+rusix = "0.1"
+```
+
 ```rust
 use rusix::{IntoConfig, compile};
 
@@ -49,12 +56,12 @@ error[nixos-merge]: conflicting definitions for a NixOS option
    = option: services.openssh.authorizedKeysCommandUser
 ```
 
-[Error reporting](docs/error-reporting.md) shows complete diagnostics and their
+[Error reporting](https://github.com/rndhouse/rusix/blob/master/docs/error-reporting.md) shows complete diagnostics and their
 original Nix errors.
 
 Rusix is experimental, and some Nix errors cannot be traced to a Rust source
 location.
 
-- [Examples](examples/README.md)
-- [Library usage](crates/rusix/README.md)
-- [Developing Rusix](docs/development.md)
+- [Examples](https://github.com/rndhouse/rusix/blob/master/examples/README.md)
+- [Library usage](https://github.com/rndhouse/rusix/blob/master/docs/library-usage.md)
+- [Developing Rusix](https://github.com/rndhouse/rusix/blob/master/docs/development.md)
