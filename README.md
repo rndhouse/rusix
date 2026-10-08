@@ -33,9 +33,9 @@ fn main() {
 In this example, the compiler turns `Service` into a Nix attribute set with
 `enable` and `port` fields.
 
-The `rusix` crate includes authoring macros and the compiler for use in your own
-Rust projects. Compilation works without Nix installed. The optional evaluator
-uses a local Nix installation and runs offline in a temporary store.
+Use `rusix` to write package and configuration definitions in your own Rust crates.
+Definitions can be shared through libraries and tested with Cargo. Tests can
+evaluate the generated Nix and check its results.
 
 Rusix is experimental, and some Nix errors cannot be traced to a Rust source
 location.
