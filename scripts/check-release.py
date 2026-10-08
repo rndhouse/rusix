@@ -43,6 +43,8 @@ def main():
             if name == 'rusix-derive':
                 assert not manifest.get('bin'), 'spacing checker leaked into macro archive'
             else:
+                assert (crate / 'README.md').read_text() == (ROOT / 'README.md').read_text(), \
+                    'main crate README differs from the shared repository README'
                 assert (crate / 'LICENSE-NIXPKGS').is_file()
                 assert manifest['dependencies']['rusix-derive']['version'] == f'={version}'
                 assert 'path' not in manifest['dependencies']['rusix-derive']

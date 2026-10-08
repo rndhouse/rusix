@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.1
+
+- Share the repository introduction between GitHub and crates.io.
+- Add a library usage guide for evaluator setup and feature choices.
+- Keep README links usable from both sites.
+
+The Rust API and evaluation behavior are unchanged.
+
 ## 0.1.0
 
 First public release.
