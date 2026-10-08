@@ -5,11 +5,12 @@ Rust, as an alternative to the Nix language. It compiles these definitions into 
 expressions that can use existing Nix packages and modules. Existing Nix code can
 import and use the generated definitions.
 
-- Define configuration with your own Rust types.
-- Nix evaluates the generated expressions when their values are needed.
-  NixOS combines module definitions during evaluation.
-- Rust definitions can use existing nixpkgs packages and Nix modules.
-- Source mappings can connect Nix errors to their Rust source locations.
+- Model configuration with your own Rust types and compose definitions through
+  ordinary Rust functions.
+- Generated expressions preserve Nix's lazy evaluation. NixOS handles option
+  validation and module merging.
+- Source mappings help trace Nix evaluation errors back to the Rust code that
+  produced them.
 
 ```rust
 use rusix::{IntoConfig, compile};
