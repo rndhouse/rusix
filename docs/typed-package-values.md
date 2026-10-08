@@ -1,59 +1,56 @@
-# Typed deferred package authoring
+# Typed package authoring
 
-Rusix preserves useful Rust interfaces until operations lower them into the
-existing semantic IR. These handles describe computations for Nix; constructing
-or binding them does not evaluate Nix, fetch sources, or build packages.
+Rusix package interfaces represent deferred Nix expressions. Constructing a
+package handle describes a computation; Nix evaluates it when its value is needed.
+The Rust interface remains available through calls, bindings and overrides.
 
-- `Package` represents an instantiated package, whether authored in Rust or Nix.
-- `PackageFunction<R>` describes named package arguments and a result interface.
-  The default result remains `NixValue`; families can return `NixAttrs<Package>`.
-- `NixCallable<R, A>` retains both result and parameter interfaces for an external,
-  constructed, or bound callable. Its default `A = NixValue` explicitly permits
-  dynamic inputs; structured `try_call` is available only on that interface.
-  `NixFunction::signature` attaches a known external contract.
-- `NixAttrs<T>` and `NixList<T>` preserve member and element interfaces.
-- `Overridable<T>` explicitly adds the expected argument-override capability to
-  external callables. Plain `NixCallable<R>` does not implement `NixOverridable`.
-  `Package` and `Overridable<T>` implement that trait, retaining their interfaces.
-- `Stdenv` retains the supplied builder and exact build/host comparison.
-- `Platform` and `FinalAttrs` provide shared finite record views.
-- `NixNullable<T>` distinguishes a deferred null-or-value choice from Rust Option.
-- `NixPath` retains actual path expressions until explicit text coercion.
-- `IntoNixExpression` and `ToNixText` preserve interfaces at literal and text boundaries.
-- `Expr<bool>`, `Expr<String>`, and `Expr<i64>` retain scalar expectations.
+Import `rusix::prelude::*` for the common authoring interfaces. Dynamic Nix
+operations require explicit imports from `rusix::interop::raw`.
 
-Core handles implement `ConfigValue` for direct placement and `IntoRusixValue`
-for nesting in user-defined records. `ConfigValue` remains sealed. User-defined
-records use `IntoRusixValue`; `try_call`, `try_call_package`, and
-`try_mk_derivation` return structural conversion errors at the receiving boundary.
-Explicit conversion to `NixValue` is not required before those calls.
+## Interfaces
 
-`NixExpression` describes symbolic interfaces that can survive a lexical binding.
-Its `bind` method provides a parameter with the original Rust interface and
-preserves the callback result interface. It lowers to the existing lazy Nix
-function application, sharing the dependency expression once. `choose`,
-`asserted`, and `require` retain that interface through conditionals and guards.
-There are no new evaluator operations or eager checks.
+| Interface | Represents |
+| --- | --- |
+| `Package` | An instantiated package authored in Rust or Nix |
+| `PackageFunction<R>` | A factory with named arguments and result interface `R` |
+| `NixCallable<R, A>` | A function with result interface `R` and parameter interface `A` |
+| `NixAttrs<T>`, `NixList<T>` | Deferred collections with typed members |
+| `Expr<bool>`, `Expr<String>`, `Expr<i64>` | Deferred scalar values |
+| `NixNullable<T>` | A value that may evaluate to null |
+| `NixPath` | A Nix path, retaining its dependency context |
+| `Stdenv`, `Platform`, `FinalAttrs` | Views of builder, platform and final derivation attributes |
+| `Overridable<T>` | An external interface with argument-override support |
 
-Argument views accept core handles as leaves. A subtree marked `#[rusix(value)]`
-in an argument view also implements `NixExpression`, so finite caller-defined
-record views can survive binding. `try_bind_record` converts a structural Rust
-record at that boundary and reports conversion errors before constructing its
-callback. `as_attrs()` retains the subtree for shallow union without erasing it
-to `NixValue`. Root views still restrict whole-root access.
+These interfaces express expectations about external Nix values. They do not
+prove that a package has a particular output or that a function implements its
+expected contract. Nix checks those properties during evaluation.
 
-External expressions enter typed code through the explicit
-`raw::expect` or `raw::NixRepresentation::from_expression` expectation boundary. This does not prove their
-actual Nix types, package output names, ABI, or override capabilities. Nix checks
-those properties when demanded. Dynamic fields and unusual package behavior
-remain accessible through `as_expression`; original child provenance remains in
-that expression. Arbitrary `NixValue` interop remains supported.
+## Calls and argument records
 
-Typed package overrides call real nixpkgs `override` and `overrideAttrs` methods.
-Output selection does not stringify packages. Text expressions keep Nix string
-context; list and attribute-set operations keep excluded dependencies lazy.
+`Nixpkgs::call_package` describes nixpkgs `callPackage`: the package set supplies
+arguments unless the caller overrides them. `try_call_package` accepts a Rust
+record implementing `IntoRusixValue` and reports structural conversion errors.
+It does not evaluate the package. The same conversion boundary is available
+through `try_call` and `try_mk_derivation`.
 
-For example, a family can share a typed factory through a lexical parameter:
+`PackageFunction<R>` preserves its result interface. `NixCallable<R, A>` also
+preserves the parameter interface; its default `A = NixValue` allows dynamic
+inputs. Structured `try_call` is available on that dynamic input interface.
+For an external `interop::NixFunction`, import `raw::NixFunctionExt` to attach
+an expected contract with `signature`.
+
+`#[rusix::args]` declares a finite view of a Nix argument record. Accessors describe
+later Nix lookups. The argument root supports whole-record access and lazy binding;
+a nested view needs `#[rusix(value)]` for those operations. `as_attrs()` exposes
+the complete record, including undeclared fields, for shallow attribute-set union.
+Option roots restrict whole-root access so dependencies on final NixOS values
+remain explicit.
+
+## Sharing and overrides
+
+`NixExpression::bind` shares an expression through a lazy Nix binding. Both the
+callback parameter and its result keep their Rust interfaces. For example, with
+a `PackageFunction<Package>` factory and two argument sets:
 
 ```rust
 let family = factory.bind(|factory| {
@@ -64,201 +61,62 @@ let family = factory.bind(|factory| {
 });
 ```
 
-The callback's factory retains `PackageFunction<Package>` and the family retains
-`NixAttrs<Package>`. MariaDB's complete release-family implementation also uses
-thin named-argument forwarders so real callPackage override behavior survives.
+The result is `NixAttrs<Package>`. The factory expression appears once, while each
+package remains deferred. `choose`, `asserted` and `require` also preserve the
+interface. `try_bind_record` converts a Rust record before constructing its
+binding callback.
 
-The OpenSSL, curl, Git and MariaDB examples retain package dependencies and source
-results as `Package`, phase text as `Expr<String>`, and main dependency/flag lists
-with their element interfaces. Git/curl argument records and MariaDB release
-arguments stay as Rust structs until `try_call_package`. MariaDB's shared common
-attributes stay a derived Rust record until a finite-view binding. The composed
-graph takes/returns typed packages and shares each rewritten dependency once.
-These migrations add no package-specific core types or builder replacement.
+`Package` supports `NixOverridable::override_arguments` and `override_attrs`.
+These call the package's real nixpkgs methods. External callables need an explicit
+`Overridable<T>` interface for argument overrides; plain `NixCallable` does not
+provide that capability.
 
-`NixList::concat` describes native concatenation; `concat_with` dispatches through
-the supplied library's `concatLists`. `optional` and `when` also use the exact
-supplied library. Keeping this distinction preserves caller overrides and upstream
-recipes. `NixLibrary::get_dev` and `get_lib` retain packages and real nixpkgs output
-fallbacks; `version_at_least`, `version_older`, `all` and `optional_text` retain
-scalar results. Typed overrides and native list concatenation delegate to the
-shared core operations, preserving their behavior and diagnostic boundaries.
+See [composed packages](../examples/composed-packages/README.md) for shared
+dependencies and [MariaDB](../examples/mariadb-nixpkg/README.md) for a release
+family that retains ordinary `callPackage` overrides.
 
-Raw interop remains useful inside dynamic selectors, mixed metadata and test
-scopes, patch/path values, backend platform records and curried helpers whose full
-interfaces are unspecified. Deferred family member names, output availability,
-function schemas and override methods still receive their authoritative checks in
-Nix. The types describe authoring contracts rather than proving external schemas.
+## Collections, text and null
 
-The earlier package-interface migration changed explicit `NixValue` leaves in
-the four `inputs.rs` views as follows:
+Typed collection operations retain their member interfaces. `NixList::concat`
+uses native Nix concatenation; `concat_with` uses the supplied library's
+`concatLists`. Library operations such as `optional` and `when` honor that
+library's implementations. This distinction matters when callers override helpers.
 
-| Example | Before | After |
-| --- | ---: | ---: |
-| OpenSSL | 13 | 4 |
-| curl | 39 | 5 |
-| Git | 57 | 8 |
-| MariaDB | 47 | 2 |
-| Total | 156 | 19 |
-
-These counts include root arguments and nested view fields. Remaining dynamic
-leaves primarily describe mixed metadata, test/package scopes and path-like values.
-
-Verification with these stronger interfaces passed 513 workspace tests and
-23 doctests. The UI harness checks 83 compile-fail fixtures, including nine authoring-surface cases and seven new
-rejections for callable parameters, bypass attempts, library conditions, text
-coercion, nullable fallbacks, paths and external-view contracts. Nineteen typed
-evaluator tests cover bindings, record conversion, overrides, caller library
-dispatch, excluded dependencies, string context, nullable values, paths and child
-diagnostics. NixOS tests also cover reused record views and nullable final options. The existing package suites also pass:
-OpenSSL 8, curl 23, Git 44, MariaDB 8 and composition 16 tests. Those suites include
-many configurations per test and compare exact derivation recipes and identities.
-
-Formatting, structural spacing, Clippy with warnings denied, strict rustdoc, the
-complete fixture workflow and every example passed. Generated graph checks retain
-one definition for each shared rewritten dependency and prohibit broad `deepSeq`
-forcing. All Nix evaluation uses fresh disposable isolated stores against the
-unchanged repository nixpkgs pin; no packages were built or fetched.
-
-Shared library operations retain their contracts throughout calls: boolean
-conditions, string messages and version inputs, typed optional lists and
-concatenation, and string replacement results. `IntoNixExpression` associates
-literals with their natural symbolic interfaces while symbolic values keep their
-existing interfaces. Thus `lib.optional(true, 42_i64)` returns
-`NixList<Expr<i64>>`; `throw_if_not` preserves the guarded interface. External
-values still require explicit expectation boundaries.
-
-`nix_text!` returns `Expr<String>` directly. Named interpolation uses `ToNixText`
-for demonstrated Nix-coercible interfaces, retaining dependency contexts and
-child origins. Packages remain packages until interpolation; attribute sets and
-callables have no implicit text capability. `NixValue` remains an explicit
-dynamic escape hatch. Fragment concatenation accepts string expressions, and
-`Expr<String>::replace_text` retains that interface through native replacement.
+`nix_text!` returns `Expr<String>`. Interpolation uses `ToNixText` and preserves
+Nix string dependency context. Packages remain `Package` values until explicit
+text coercion. Attribute sets and callables have no implicit text conversion.
+`Nixpkgs::source_path` returns `NixPath`, which also retains context when coerced.
 
 `NixNullable<T>` represents a deferred null-or-value choice. Its `map` and
-`unwrap_or` keep excluded branches lazy and retain the contained interface.
-`NixAttrs::has` tests presence even for null values; `get_or` defaults only for
-missing attributes, while `get_optional` produces null for absence. These semantics
-are separate from Rust `Option` and its authoring-time omission policy.
+`unwrap_or` leave excluded branches lazy. Rust `Option` instead controls
+construction and, with `#[rusix(omit_none)]`, omission of record fields.
 
-`Nixpkgs::source_path` returns `NixPath`. OpenSSL and MariaDB retain paths and
-`NixList<NixPath>` through their patch policy; Git's local patch helpers retain
-paths until combination with fetched derivations requires heterogeneous interop.
-OpenSSL's configuration argument is `NixNullable<NixValue>` because upstream
-accepts different text-coercible file representations. No new filesystem operation
-or eager type validation is introduced.
+`NixAttrs::has` tests presence even when a value is null. `get_or` supplies a
+fallback only for missing attributes; `get_optional` returns a nullable interface
+that represents absence as null.
 
-External finite record views and aliases can be declared with
-`#[rusix(expression)]` fields in both argument and option views. The declared
-type must implement `NixExpression`; the macro does not inspect its schema.
-This allows shared views to live in separate modules without duplicating their
-fields or falling back to NixValue.
+## Dynamic interop and custom interfaces
 
-`Platform` and `FinalAttrs` are finite shared views authored with the existing
-argument-view macro. Platform fields are limited to properties used by the four
-real packages. They retain complete platform records, including undeclared
-fields; `build_host_equal` still compares those complete values. Stdenv exposes
-build, host and target views. All four package definitions use the shared platform
-view; OpenSSL, curl and Git use `FinalAttrs` for lazy version/final-package access.
-Ordinary attribute interop remains available for other fields. Nested selections
-may retain parentheses around their lexical source; no renderer optimization is
-needed to preserve sharing, laziness, or derivation recipes.
+Use `interop::raw::NixValue` when an external interface cannot be described by
+the typed handles. `raw::expect` attaches an expected interface to an expression
+without evaluating or validating its Nix type. Import `raw::NixRepresentation`
+for access through `as_expression` or construction through `from_expression`.
+These operations retain the original expression's diagnostic provenance.
 
-The callable result parameter remains first for compatibility with existing
-`NixCallable<R>` external references. Constructed functions infer their parameter
-interface; explicit annotations include it as `NixCallable<R, A>`. Flexible Nix
-argument records retain the dynamic default. Code using a template or path at an
-explicit raw boundary converts there with `.into()` rather than erasing earlier.
+Custom symbolic interfaces implement `NixRepresentation`, `Clone` and
+`IntoRusixValue`; they then receive `NixExpression` automatically. External record
+views can be reused through `#[rusix(expression)]` fields. Their declared types
+must implement `NixExpression`; the macro does not inspect the external schema.
 
-Final checks also passed `cargo fmt --all --check`, structural spacing over 193
-Rust files, all-target Clippy with warnings denied, strict rustdoc, the complete
-fixture workflow and all 16 examples. The PostgreSQL full suite and all 99 Git,
-curl, OpenSSL, MariaDB and composed-graph tests pass. Verification artifacts are
-retained under `target/surfaces-*.log` (and earlier `target/typed-operations-*.log`). The nixpkgs pin remains
-`8b27c1239e5c421a2bbc2c65d52e4a6fbf2ff296`; all Nix evaluations use fresh isolated
-local stores, with no package builds or network fetches.
+Built-in handles support direct configuration placement through the sealed
+`ConfigValue` trait. User-defined records use `IntoRusixValue` for nesting and
+conversion at receiving boundaries. Factories can be passed directly to records
+and `callPackage`.
 
-## Authoring and raw interop
+Compiler extensions use `rusix::ir` and `rusix::compiler::ast`. These APIs and raw
+representation access are excluded from the authoring prelude.
 
-`rusix::prelude` exports typed authoring, configuration macros and conversion
-traits. It excludes `NixValue` and representation access. Import
-`interop::raw::{NixValue, NixRepresentation}` only when an adapter needs dynamic
-Nix operations or an unchecked external interface expectation.
-
-`NixExpression` supplies lazy `bind`, `choose`, `require`, `asserted` and finite
-record binding. Implement `raw::NixRepresentation` for custom symbolic interfaces;
-those implementing `Clone` and `IntoRusixValue` receive `NixExpression` automatically.
-The generated argument views follow the same rule. Their raw `as_value` hooks
-remain available for interoperability but are hidden from normal rustdoc listings.
-
-Factories themselves implement `ConfigValue`; pass them directly into records,
-`Config::set_dynamic` and callPackage. Factory `.as_value()` has been removed. Library
-adapters use `raw::expect::<NixLibrary>` or the raw representation trait rather
-than a public raw constructor. Pass Rust structs directly to `try_call_package`,
-`try_call`, or `try_mk_derivation`; these receiving interfaces perform conversion
-at the boundary. `try_into_nix_value` remains an explicit escape hatch.
-
-This changes import paths and custom trait implementations, while retaining the
-same lazy expressions, Nix evaluation and diagnostic origins.
-
-## Compiler and adapter access
-
-The public surface has three entry points:
-
-| Audience | Module | Examples |
-| --- | --- | --- |
-| Package/configuration authors | `prelude`, `interop`, `nixos` | typed packages, factories, calls, lists, views, macros |
-| Adapters needing dynamic Nix values | `interop::raw` | `NixValue`, `NixRepresentation`, raw lookup/call traits |
-| Compiler/backend implementers | `ir`, `compiler::ast` | nodes, origins, source/reference metadata, lowering/inspection traits |
-
-`raw` names a representation boundary; attaching an interface remains lazy.
-These operations stay supported when the typed surface cannot describe an external
-interface. Raw type names and extension traits are absent from the authoring
-prelude. Import them explicitly when writing dynamic adapters. Raw IR construction is public under `ir`
-for explicit inspection and compiler extensions; implementation-only constructors stay restricted.
-Macro implementation hooks remain public where generated external code requires
-them and use hidden documentation rather than claiming to be private.
-
-The following import and implementation changes are intentional:
-
-| Previous interface | Current interface |
-| --- | --- |
-| `interop::{NixValue, AttrPath}` | `interop::raw::{NixValue, AttrPath}` |
-| Root `Origin`, `Node`, `ValueKind`, `Assignment` | `ir::{Origin, Node, ValueKind, Assignment}` |
-| `interop::{Source, Reference}` | `ir::{Source, Reference}` |
-| Implementing `NixExpression` | Implement `raw::NixRepresentation`, `Clone`, and `IntoRusixValue` |
-| Node lowering through `ConfigValue` | Explicit `ir::IntoNode` import |
-| Handle/option erasure | Explicit `raw::AsNixValue` import |
-| Dynamic Nix function calls and signature expectations | Explicit `raw::NixFunctionExt` import |
-| Dynamic package-set/library lookup | Explicit `raw::NixpkgsExt` import |
-| Dynamic local-input lookup | Explicit `raw::InputRefExt` import |
-| Inspecting external lookup metadata | Explicit `ir::ReferencedExpression` import |
-
-`PackageRef`, `ModuleRef` and related handles still support ordinary typed
-placement/imports; `.as_value()` now requires the raw erasure trait. `OptionRef`
-keeps `.into_expr()`; its raw inherent `.into_value()` was replaced by the same
-`raw::AsNixValue` capability. Generated option/argument views call the explicit
-raw hooks internally while their declared typed accessors retain normal use.
-No old public root/interop aliases are retained: the typed replacements and
-explicit raw/backend imports are available, and all repository callers migrated.
-The compiler retains the same Nix operations and original child provenance.
-
-The authoring-surface checks cover a complete typed prelude workflow, an external
-custom symbolic interface, and compile-time rejection of accidental raw/backend
-operations. Package equivalence and diagnostic suites continue to test the actual
-Nix semantics behind both surfaces. These namespace changes introduce no new
-runtime wrappers, forcing, builders, fetchers, or schema reconstruction.
-
-Some dynamic interfaces still return an inferred `NixValue`. Its inherent
-operations remain callable without importing the type's name. The namespace
-separation makes this boundary visible and removes representation/extension
-methods from normal concrete handles unless their traits are imported. Future
-typed interfaces can continue reducing those dynamic results as their contracts
-become known; custom adapters remain supported.
-
-Rebasing onto the curl overlay work also migrated that adapter to the opt-in raw
-imports. All six overlay tests retain exact curl/downstream recipes, fixed-point
-ordering, lazy unused values and Rust error provenance. The integrated branch
-passed 513 workspace tests and 23 doctests, 83 compile-fail cases, all 16 examples,
-the full fixture workflow, formatting, structural spacing, all-target Clippy and
-strict rustdoc. Rebase verification logs use `target/rebase-*.log`.
+For executable examples, start with [curl](../examples/curl-nixpkg/README.md) or
+[Git](../examples/git-nixpkg/README.md). The
+[development guide](development.md#verification) covers verification, and
+[error reporting](error-reporting.md) explains how Nix failures connect to Rust.
