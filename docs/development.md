@@ -841,7 +841,7 @@ reject invalid configurations before Nix evaluation.
 
 ## Existing Nix ecosystem interoperability
 
-The [interop example](../examples/README.md#nix-interop) authors references to pinned
+The [interop example](example-notes.md#nix-interop) authors references to pinned
 nixpkgs `hello` and `python312Packages.requests`, an opaque upstream OpenSSH
 module alongside typed Rust definitions, `lib.toUpper`, a local
 Nix overlay, and a local external-input-shaped package/module set. No package
@@ -1389,7 +1389,7 @@ finite final-option dependencies and opaque package/build-helper calls.
 The [equivalence suite](../crates/rusix/tests/postgresql.rs) compares full NixOS
 evaluation, generated-file/check derivation recipes and string dependency contexts,
 including ordinary downstream overrides of the same generated artifact. It builds
-and activates nothing. See [the example notes](../examples/README.md#postgresql-compatibility-rewrite)
+and activates nothing. See [the example notes](example-notes.md#postgresql-compatibility-rewrite)
 for coverage and limitations.
 
 Public schemas use structural `OptionDecl` trees with `NixosModule::declare`.
