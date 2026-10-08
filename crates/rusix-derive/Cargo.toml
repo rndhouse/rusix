@@ -13,7 +13,7 @@ include = ["src/*.rs", "README.md", "LICENSE"]
 readme = "README.md"
 
 [features]
-dev-tools = []
+dev-tools = ["proc-macro2/span-locations", "syn/visit"]
 
 [[bin]]
 name = "check-rust-spacing"
@@ -24,7 +24,7 @@ required-features = ["dev-tools"]
 proc-macro = true
 
 [dependencies]
-proc-macro2 = { version = "1", features = ["span-locations"] }
+proc-macro2 = "1"
 quote = "1"
-syn = { version = "3", features = ["full", "visit"] }
+syn = { version = "3", features = ["full"] }
 proc-macro-crate = "3"
