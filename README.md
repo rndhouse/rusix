@@ -30,16 +30,15 @@ fn main() {
 }
 ```
 
-Structs become Nix attribute sets. In this example, `Service` produces
-`enable` and `port` attributes. Edit the Rust source to change the output.
+In this example, the compiler turns `Service` into a Nix attribute set with
+`enable` and `port` fields.
 
-Use `rusix` as a library in your own crate. It includes authoring macros and
-the compiler. It also provides an optional Nix evaluator.
-Generating Nix requires only Rust. Evaluation requires Nix.
-The evaluator runs offline in a temporary store.
+The `rusix` crate includes authoring macros and the compiler for use in your own
+Rust projects. Compilation works without Nix installed. The optional evaluator
+uses a local Nix installation and runs offline in a temporary store.
 
-Rusix is experimental. NixOS checks option values during evaluation.
-Some Nix errors cannot be mapped to a Rust source location.
+Rusix is experimental, and some Nix errors cannot be traced to a Rust source
+location.
 
 - [Examples](examples/README.md)
 - [Library usage](crates/rusix/README.md)
