@@ -75,6 +75,7 @@ pub(crate) fn validate_scoped(node: &Node, scope: &[u64]) -> Result<(), Validati
             arguments,
             defaults,
             body,
+            ..
         } => {
             let mut names = std::collections::BTreeSet::new();
             for name in arguments {

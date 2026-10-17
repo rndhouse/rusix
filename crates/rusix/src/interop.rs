@@ -163,6 +163,37 @@ impl<R: NixExpression> PackageFunction<R> {
         }
     }
 
+    /// Define named dependencies with lazy defaults while accepting extra arguments.
+    /// Use this for NixOS module functions, which request dependencies by name but
+    /// receive additional module-system arguments. The callback sees only the
+    /// declared arguments with their defaults resolved; extra fields are ignored.
+    /// See [`NixValue::function_attrs_open`] for the argument-view semantics.
+    ///
+    /// ```
+    /// use rusix::{nix_record, interop::{PackageFunction, raw::NixValue}};
+    /// let module = PackageFunction::from_function_attrs_open(["pkgs"], |args| {
+    ///     (Vec::<(&str, NixValue)>::new(), nix_record! {
+    ///         "environment": nix_record! {
+    ///             "systemPackages": NixValue::list([args.select("pkgs.hello")]),
+    ///         },
+    ///     })
+    /// });
+    /// // Like { pkgs, ... }: { environment.systemPackages = [ pkgs.hello ]; }
+    /// ```
+    #[track_caller]
+    pub fn from_function_attrs_open<K: Into<String>>(
+        arguments: impl IntoIterator<Item = impl Into<String>>,
+        build: impl FnOnce(NixValue) -> (Vec<(K, NixValue)>, R),
+    ) -> Self {
+        Self {
+            function: NixValue::function_attrs_open(arguments, |args| {
+                let (defaults, result) = build(args);
+                (defaults, result.as_expression())
+            }),
+            result: std::marker::PhantomData,
+        }
+    }
+
     /// Call this definition directly, preserving its declared result interface.
     /// For dependency injection and override support, prefer Nixpkgs::call_package.
     #[track_caller]

@@ -45,7 +45,8 @@ pub(crate) fn contexts(expr: &mut NixExpr, legacy: bool) {
             items.iter_mut().for_each(|v| contexts(v, legacy));
         }
         NixKind::AttrSet(fields) => fields.iter_mut().for_each(|(_, v)| contexts(v, legacy)),
-        NixKind::ArgumentFunction(defaults, body) => {
+        NixKind::ArgumentFunction(defaults, body)
+        | NixKind::OpenArgumentFunction(defaults, body) => {
             for (_, default) in defaults {
                 if let Some(value) = default {
                     contexts(value, legacy);

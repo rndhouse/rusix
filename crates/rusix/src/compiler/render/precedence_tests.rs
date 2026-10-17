@@ -51,7 +51,8 @@ fn fully_grouped(value: &NixExpr) -> NixExpr {
     match &mut value.kind {
         NixKind::List(items) | NixKind::Call(_, items) => items.iter_mut().for_each(child),
         NixKind::AttrSet(fields) => fields.iter_mut().for_each(|(_, value)| child(value)),
-        NixKind::ArgumentFunction(parameters, body) => {
+        NixKind::ArgumentFunction(parameters, body)
+        | NixKind::OpenArgumentFunction(parameters, body) => {
             for (_, default) in parameters {
                 if let Some(default) = default {
                     child(default);

@@ -85,6 +85,8 @@ pub enum ValueKind {
         binding: u64,
         /// Accepted Nix argument names; names without defaults are required.
         arguments: Vec<String>,
+        /// Accept additional caller arguments without exposing them in the finite view.
+        open: bool,
         /// Deferred defaults, which can refer to other resolved arguments.
         defaults: Vec<(String, Node)>,
         /// Deferred result, potentially a derivation from an existing builder.

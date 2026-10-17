@@ -333,10 +333,11 @@ fn lower_scoped(node: &Node, scope: &[ParameterScope<'_>]) -> NixExpr {
         ValueKind::FunctionAttrs {
             binding,
             arguments,
+            open,
             defaults,
             body,
-        } => NixKind::ArgumentFunction(
-            arguments
+        } => {
+            let parameters = arguments
                 .iter()
                 .map(|argument| {
                     (
@@ -349,9 +350,15 @@ fn lower_scoped(node: &Node, scope: &[ParameterScope<'_>]) -> NixExpr {
                             }),
                     )
                 })
-                .collect(),
-            Box::new(lower_argument_region(body, *binding, arguments, scope)),
-        ),
+                .collect();
+            let body = Box::new(lower_argument_region(body, *binding, arguments, scope));
+
+            if *open {
+                NixKind::OpenArgumentFunction(parameters, body)
+            } else {
+                NixKind::ArgumentFunction(parameters, body)
+            }
+        }
         ValueKind::Parameter(binding) => {
             let index = scope
                 .iter()

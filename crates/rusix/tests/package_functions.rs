@@ -20,6 +20,89 @@ fn evaluate(value: NixValue) -> serde_json::Value {
 }
 
 #[test]
+fn open_arguments_ignore_extra_fields_and_preserve_defaults_and_introspection() {
+    let function = NixValue::function_attrs_open(["required", "derived"], |args| {
+        (vec![("derived", args.clone().select("required"))], args)
+    });
+    assert_eq!(
+        evaluate(
+            Nixpkgs::new()
+                .function("functionArgs")
+                .call(function.clone())
+        ),
+        serde_json::json!({"required": false, "derived": true})
+    );
+    assert_eq!(
+        evaluate(function.clone().call(nix_record! {
+            "required": 42_i64,
+            "extra": Expr::int(1).divide(Expr::int(0)),
+        })),
+        serde_json::json!({"required": 42, "derived": 42})
+    );
+
+    let call_line = line!() + 1;
+    let missing = function.call(nix_record! {});
+    let error = NixSession::new()
+        .unwrap()
+        .evaluate_interop(&compile(Config::new().set_dynamic("result", missing)).unwrap())
+        .unwrap_err();
+    assert_eq!(error.primary.unwrap().line, call_line);
+    assert!(error.reason.contains("required"));
+}
+
+#[test]
+fn open_arguments_preserve_shadowed_captures_and_accept_empty_interfaces() {
+    let function = NixValue::function_attrs_open(["name"], |outer| {
+        let inner = NixValue::function_attrs_open(["name", "derived"], |inner| {
+            (
+                vec![("derived", inner.clone().select("name"))],
+                NixValue::list([outer.select("name"), inner]),
+            )
+        });
+        (
+            Vec::<(&str, NixValue)>::new(),
+            inner.call(nix_record! { "name": "inner", "ignored": true }),
+        )
+    });
+    assert_eq!(
+        evaluate(function.call(nix_record! { "name": "outer" })),
+        serde_json::json!(["outer", {"name": "inner", "derived": "inner"}])
+    );
+
+    let empty = NixValue::function_attrs_open([] as [&str; 0], |args| {
+        (Vec::<(&str, NixValue)>::new(), args)
+    });
+    assert_eq!(
+        evaluate(empty.call(nix_record! { "ignored": true })),
+        serde_json::json!({})
+    );
+}
+
+#[test]
+fn open_module_arguments_receive_module_system_dependencies() {
+    let module = PackageFunction::from_function_attrs_open(["pkgs"], |args| {
+        (
+            Vec::<(&str, NixValue)>::new(),
+            nix_record! {
+                "config": nix_record! { "answer": args.select("pkgs.number") },
+            },
+        )
+    });
+    let declaration = nix_record! {
+        "options": nix_record! {
+            "answer": Nixpkgs::new().function("mkOption").call(nix_record! { "default": 0_i64 }),
+        },
+        "config": nix_record! {
+            "_module": nix_record! { "args": nix_record! { "pkgs": nix_record! { "number": 42_i64 } } },
+        },
+    };
+    let evaluated = Nixpkgs::new().function("evalModules").call(nix_record! {
+        "modules": NixValue::list([declaration, module.as_expression()]),
+    });
+    assert_eq!(evaluate(evaluated.select("config.answer")), 42);
+}
+
+#[test]
 fn native_argument_defaults_remain_lazy_and_support_introspection() {
     let function = NixValue::function_attrs(["required", "derived", "unused"], |args| {
         (

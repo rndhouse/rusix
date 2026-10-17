@@ -87,7 +87,8 @@ pub(super) fn kind(kind: &NixKind) -> Precedence {
         | NixKind::Let(..)
         | NixKind::Lambda(..)
         | NixKind::Function(..)
-        | NixKind::ArgumentFunction(..) => Precedence::Expression,
+        | NixKind::ArgumentFunction(..)
+        | NixKind::OpenArgumentFunction(..) => Precedence::Expression,
         NixKind::Binary(op, ..) => operator_rule(*op).1,
         NixKind::Apply(..) => Precedence::Application,
         NixKind::Call(_, args) if !args.is_empty() => Precedence::Application,

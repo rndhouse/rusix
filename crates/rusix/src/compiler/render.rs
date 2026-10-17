@@ -321,8 +321,9 @@ fn syntax(kind: &NixKind, options: RenderOptions) -> Doc<'_> {
             parameters.push(text("..."));
             function(parameters, child(body))
         }
-        NixKind::ArgumentFunction(arguments, body) => {
-            let parameters = arguments
+        NixKind::ArgumentFunction(arguments, body)
+        | NixKind::OpenArgumentFunction(arguments, body) => {
+            let mut parameters: Vec<_> = arguments
                 .iter()
                 .map(|(name, default)| match default {
                     None => text(name.clone()),
@@ -332,6 +333,10 @@ fn syntax(kind: &NixKind, options: RenderOptions) -> Doc<'_> {
                     ])),
                 })
                 .collect();
+            if matches!(kind, NixKind::OpenArgumentFunction(..)) {
+                parameters.push(text("..."));
+            }
+
             function(parameters, child(body))
         }
         NixKind::Group(value) => parens(child(value)),

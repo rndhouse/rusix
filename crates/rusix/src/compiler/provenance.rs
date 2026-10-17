@@ -217,6 +217,7 @@ fn head<'a>(term: Term<'a>, fuel: usize) -> Term<'a> {
                         arguments,
                         defaults,
                         body,
+                        ..
                     } => {
                         let env = extend(
                             &f.env,
@@ -243,6 +244,7 @@ fn head<'a>(term: Term<'a>, fuel: usize) -> Term<'a> {
                     arguments,
                     defaults,
                     body,
+                    ..
                 } = &f.node.kind
             {
                 let env = extend(

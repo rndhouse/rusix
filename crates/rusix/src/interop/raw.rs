@@ -245,6 +245,7 @@ impl NixValue {
             kind: ValueKind::FunctionAttrs {
                 binding,
                 arguments: arguments.into_iter().map(Into::into).collect(),
+                open: false,
                 defaults: defaults
                     .into_iter()
                     .map(|(name, value)| (name.into(), value.0))
@@ -252,6 +253,28 @@ impl NixValue {
                 body: Box::new(body.0),
             },
         })
+    }
+
+    /// Describe `{ name, optional ? default, ... }: body`, accepting extra arguments.
+    /// NixOS supplies arguments such as `pkgs` by inspecting the named parameters,
+    /// and also passes module-system arguments that a module need not consume.
+    /// This form supports both behaviors while retaining native lazy defaults.
+    ///
+    /// As with [`Self::function_attrs`], `build` runs once in Rust. Its symbolic
+    /// record contains only declared names, with defaults resolved; extra caller
+    /// fields are ignored and never forced. This is not Nix's raw `args@{ ... }`
+    /// binding, whose record omits defaults and includes arbitrary extra fields.
+    #[track_caller]
+    pub fn function_attrs_open<K: Into<String>>(
+        arguments: impl IntoIterator<Item = impl Into<String>>,
+        build: impl FnOnce(Self) -> (Vec<(K, Self)>, Self),
+    ) -> Self {
+        let mut function = Self::function_attrs(arguments, build);
+        if let ValueKind::FunctionAttrs { open, .. } = &mut function.0.kind {
+            *open = true;
+        }
+
+        function
     }
 
     /// Choose between two values when Nix evaluates a boolean condition.

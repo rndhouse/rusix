@@ -72,6 +72,9 @@ pub enum NixKind {
     Lambda(String, Box<NixExpr>),
     /// Native named arguments, including lazy default expressions; extra names are rejected.
     ArgumentFunction(Vec<(String, Option<NixExpr>)>, Box<NixExpr>),
+
+    /// Named arguments with lazy defaults and `...` accepting unlisted caller fields.
+    OpenArgumentFunction(Vec<(String, Option<NixExpr>)>, Box<NixExpr>),
 }
 
 /// Functions provided by the Nix language itself that this backend can emit.
