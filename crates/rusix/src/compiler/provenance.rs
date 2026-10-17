@@ -376,7 +376,10 @@ fn text(term: Term<'_>, fuel: usize) -> Option<String> {
                     Some(String::new())
                 };
             }
-            if library(&callee, "concatStringsSep") && args.len() == 2 {
+            if (library(&callee, "concatStringsSep")
+                || namespace(&callee, Space::Builtins, &["concatStringsSep"]))
+                && args.len() == 2
+            {
                 let sep = text(args[0].clone(), fuel - 1)?;
                 let Term::Expr(parts) = head(args[1].clone(), fuel - 1) else {
                     return None;
@@ -441,7 +444,10 @@ fn names(term: Term<'_>, fuel: usize) -> Option<Vec<String>> {
                 }
                 return (values.len() <= 8).then_some(values);
             }
-            if library(&callee, "concatStringsSep") && args.len() == 2 {
+            if (library(&callee, "concatStringsSep")
+                || namespace(&callee, Space::Builtins, &["concatStringsSep"]))
+                && args.len() == 2
+            {
                 let sep = text(args[0].clone(), fuel - 1)?;
                 let Term::Expr(parts) = head(args[1].clone(), fuel - 1) else {
                     return None;
@@ -858,6 +864,7 @@ impl Collector {
             ValueKind::Select(base, _)
             | ValueKind::ToText(base)
             | ValueKind::StringPrefix { value: base, .. }
+            | ValueKind::PathAppend { value: base, .. }
             | ValueKind::InRange { value: base, .. } => visit(base),
             ValueKind::If(_, b, c) => {
                 visit(b);
@@ -894,6 +901,7 @@ fn guard_operations(node: &Node, out: &mut BTreeSet<String>, remaining: &mut usi
         ValueKind::Select(value, _)
         | ValueKind::ToText(value)
         | ValueKind::StringPrefix { value, .. }
+        | ValueKind::PathAppend { value, .. }
         | ValueKind::InRange { value, .. } => visit(value),
         ValueKind::Function { body, .. } => visit(body),
         ValueKind::FunctionAttrs { defaults, body, .. } => {

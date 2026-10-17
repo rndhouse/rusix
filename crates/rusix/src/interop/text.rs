@@ -39,7 +39,15 @@ text_value!(i64);
 
 text_value!(i32);
 
+text_value!(u8);
+
 text_value!(u16);
+
+text_value!(u32);
+
+text_value!(i8);
+
+text_value!(i16);
 
 text_value!(f64);
 

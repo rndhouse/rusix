@@ -417,9 +417,7 @@ impl NixValue {
     /// to each string are retained.
     #[track_caller]
     pub fn join_text(separator: &str, parts: Self) -> Self {
-        Nixpkgs::new()
-            .function("concatStringsSep")
-            .apply([separator.into(), parts])
+        Self::builtin("concatStringsSep").apply([separator.into(), parts])
     }
 
     /// Join the supplied expressions as text with no separator.
@@ -578,7 +576,11 @@ literal_conversion!(
     bool,
     i32,
     i64,
+    u8,
     u16,
+    u32,
+    i8,
+    i16,
     f64,
     String,
     &str,

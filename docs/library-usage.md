@@ -56,6 +56,20 @@ Rusix verifies the checkout without fetching anything. Keep it unchanged for the
 lifetime of the session. Repository development uses the pinned `vendor/nixpkgs`
 submodule automatically; registry consumers supply their own checkout.
 
+## Evaluation by an existing Nix project
+
+A project can save `compile_module`'s `NixosArtifact` alongside its generated
+module and import that module into its own NixOS configuration. It keeps control
+of nixpkgs, overlays and evaluation. Supply module packages through
+`Nixpkgs::from_module()` so they resolve from that configuration's `pkgs`.
+
+After an external evaluation fails, call `artifact.diagnose` with the failure
+kind, raw stderr, saved module filename and the project's nixpkgs source path.
+This recovers Rust locations without launching Nix or selecting a package pin;
+it is available with default features disabled. Preserve the exact artifact and
+source together. Unknown diagnostic formats retain the original Nix error and
+available source locations rather than claiming complete attribution.
+
 ## Public APIs
 
 Start with `rusix::prelude` for authoring, `rusix::interop` for existing Nix values,

@@ -308,7 +308,11 @@ leaf!(
     bool,
     i32,
     i64,
+    u8,
     u16,
+    u32,
+    i8,
+    i16,
     f64,
     String,
     &str,
@@ -371,3 +375,17 @@ macro_rules! option_ref {
 }
 
 option_ref!(i64, bool, String);
+
+/// Ordered Rust maps become structural records with literal, unmodified keys.
+/// Child values retain their conversion locations and deferred expressions.
+impl<K: Into<String>, V: IntoRusixValue> IntoRusixValue for std::collections::BTreeMap<K, V> {
+    #[track_caller]
+    fn into_value(self) -> RusixValue {
+        let mut fields = Vec::with_capacity(self.len());
+        for (key, value) in self {
+            fields.push((key.into(), value.into_value()));
+        }
+
+        RusixValue::record(fields)
+    }
+}

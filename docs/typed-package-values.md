@@ -82,10 +82,19 @@ uses native Nix concatenation; `concat_with` uses the supplied library's
 `concatLists`. Library operations such as `optional` and `when` honor that
 library's implementations. This distinction matters when callers override helpers.
 
+Rust `BTreeMap<K, V>` values convert to structural records when keys convert to
+strings and values implement `IntoRusixValue`. Keys retain their literal spelling,
+including dots and hyphens; ordered iteration keeps generated output deterministic.
+Use `#[rusix(rename_all = "preserve")]` on derived records to retain Rust field
+names, including underscores. Explicit field renames still take precedence.
+
 `nix_text!` returns `Expr<String>`. Interpolation uses `ToNixText` and preserves
-Nix string dependency context. Packages remain `Package` values until explicit
+Nix string dependency context. Text joining uses `builtins.concatStringsSep` and
+requires no nixpkgs input. Packages remain `Package` values until explicit
 text coercion. Attribute sets and callables have no implicit text conversion.
 `Nixpkgs::source_path` returns `NixPath`, which also retains context when coerced.
+`NixPath::join_relative` appends validated relative components using native Nix
+path addition, without inspecting the filesystem during Rust construction.
 
 `NixNullable<T>` represents a deferred null-or-value choice. Its `map` and
 `unwrap_or` leave excluded branches lazy. Rust `Option` instead controls

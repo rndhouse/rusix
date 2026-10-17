@@ -857,7 +857,6 @@ fn render_location(out: &mut String, origin: &Origin, source_root: &Path) {
 
 /// NixOS exposes definition lists only inside raw_msg, not as JSON fields.
 /// Keep the pinned showDefs/mergeEqualOption message adapter at the wire boundary.
-#[cfg(any(test, feature = "evaluation"))]
 pub(crate) struct ModuleFailure {
     /// Whether NixOS rejected an unknown option, a value type or conflicting definitions.
     pub(crate) kind: DiagnosticKind,
@@ -867,7 +866,6 @@ pub(crate) struct ModuleFailure {
     pub(crate) files: Vec<String>,
 }
 
-#[cfg(any(test, feature = "evaluation"))]
 pub(crate) fn module_failure(reason: &str) -> Option<ModuleFailure> {
     let (kind, rest) = if let Some(rest) = reason.strip_prefix("A definition for option `") {
         if !rest.split_once("' ")?.1.starts_with("is not of type") {
@@ -916,7 +914,6 @@ fn structured_error(raw: &str) -> Option<serde_json::Value> {
 }
 
 /// External frame evidence; callers do not depend on Nix's JSON schema.
-#[cfg(feature = "evaluation")]
 pub(crate) fn nix_evidence(raw: &str) -> Vec<(Option<String>, String)> {
     if let Some(event) = structured_error(raw) {
         event["trace"]

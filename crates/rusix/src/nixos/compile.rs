@@ -14,8 +14,10 @@ use crate::compiler::{
 use crate::ir::ReferencedExpression;
 use crate::{Diagnostic, Generated, RenderOptions, compiler::render::quote};
 
+use crate::{DiagnosticKind, DiagnosticOrigin, OriginRole, Provenance};
+
 #[cfg(feature = "evaluation")]
-use crate::{DiagnosticKind, DiagnosticOrigin, Evaluation, NixSession, OriginRole, Provenance};
+use crate::{Evaluation, NixSession};
 
 use crate::{
     ir::{IntoNode, Origin},
@@ -94,6 +96,32 @@ pub struct NixosArtifact {
     pub assertions: Vec<Boundary>,
     /// Rust import locations used when errors originate in external NixOS files.
     pub imports: Vec<Boundary>,
+}
+
+impl NixosArtifact {
+    /// Map an external evaluator's stderr back to this module's Rust definitions.
+    /// `module_file` must identify the exact saved `module.source`; `nixpkgs`
+    /// identifies the caller's source tree containing `lib/modules.nix`.
+    /// This reads diagnostic evidence without launching Nix or choosing its inputs.
+    /// Preserve the source and this artifact together when evaluating elsewhere.
+    ///
+    /// Pass the actual failure kind: syntax and tooling failures retain their
+    /// original classification without blaming a Rust definition. Unknown NixOS
+    /// message formats retain the original diagnostic and available source spans.
+    pub fn diagnose(
+        &self,
+        kind: DiagnosticKind,
+        stderr: &str,
+        module_file: &Path,
+        nixpkgs: &Path,
+    ) -> Diagnostic {
+        let diagnostic = Diagnostic::from_nix(kind, stderr, &self.module, module_file);
+        if diagnostic.kind == DiagnosticKind::NixEval {
+            translate(diagnostic, self, nixpkgs)
+        } else {
+            diagnostic
+        }
+    }
 }
 
 fn string(value: impl Into<String>) -> NixExpr {
@@ -596,26 +624,23 @@ impl NixSession {
                 if error.kind != DiagnosticKind::NixEval {
                     return error;
                 }
-                let diagnostic = Diagnostic::from_nix(
+                Box::new(artifact.diagnose(
                     DiagnosticKind::NixEval,
                     &error.raw_nix,
-                    &artifact.module,
                     &self.root().join("module.nix"),
-                );
-                Box::new(translate(diagnostic, artifact, pin_root))
+                    pin_root,
+                ))
             })
     }
 }
 
-#[cfg(feature = "evaluation")]
 fn boundary_file(boundary: &Boundary, pin_root: &Path) -> std::path::PathBuf {
     match &boundary.file {
-        Some(file) => pin_root.parent().unwrap().join(file),
+        Some(file) => pin_root.parent().unwrap_or(pin_root).join(file),
         None => pin_root.join(&boundary.path),
     }
 }
 
-#[cfg(feature = "evaluation")]
 fn matches_file(reported: &str, path: &Path) -> bool {
     [
         path.to_owned(),
@@ -628,14 +653,13 @@ fn matches_file(reported: &str, path: &Path) -> bool {
     })
 }
 
-#[cfg(feature = "evaluation")]
 fn translate(mut diagnostic: Diagnostic, artifact: &NixosArtifact, pin_root: &Path) -> Diagnostic {
     let evidence = crate::diagnostic::nix_evidence(&diagnostic.raw_nix);
     let in_module_system = evidence.iter().any(|(file, _)| {
         file.as_deref().is_some_and(|file| {
             [
                 pin_root.to_owned(),
-                pin_root.parent().unwrap().join("nixpkgs-full"),
+                pin_root.parent().unwrap_or(pin_root).join("nixpkgs-full"),
             ]
             .iter()
             .any(|root| matches_file(file, &root.join("lib/modules.nix")))

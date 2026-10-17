@@ -878,6 +878,41 @@ pub struct NixPath {
 
 expression_handle!(NixPath);
 
+impl NixPath {
+    /// Append a nonempty relative path without reading the filesystem in Rust.
+    /// Slash-separated components must exclude empty, `.` and `..` segments.
+    /// The result remains a Nix path; text is escaped as data and string dependency
+    /// context is retained. Nix resolves the path only when it is demanded.
+    ///
+    /// # Errors
+    /// Returns a structural validation error for an absolute path, traversal,
+    /// an empty component or NUL. This does not check whether the file exists.
+    #[track_caller]
+    pub fn join_relative(&self, relative: &str) -> Result<Self, ValidationError> {
+        if relative.contains('\0')
+            || relative
+                .split('/')
+                .any(|part| part.is_empty() || part == "." || part == "..")
+        {
+            return Err(ValidationError {
+                origin: crate::ir::Origin::caller("relative Nix path"),
+                message: "expected a nonempty relative path without empty, . or .. components"
+                    .into(),
+            });
+        }
+
+        Ok(Self::from_expression(NixValue::from_node(
+            crate::ir::Node {
+                origin: crate::ir::Origin::caller("append relative Nix path"),
+                kind: crate::ir::ValueKind::PathAppend {
+                    value: Box::new(self.value.clone().0),
+                    suffix: format!("/{relative}"),
+                },
+            },
+        )))
+    }
+}
+
 impl super::ToNixText for NixPath {
     #[track_caller]
     fn to_nix_text(self) -> Expr<String> {

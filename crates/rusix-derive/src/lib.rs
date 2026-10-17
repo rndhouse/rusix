@@ -106,7 +106,7 @@ pub fn args(args: TokenStream, input: TokenStream) -> TokenStream {
 /// It does not evaluate Nix or declare which NixOS options exist.
 ///
 /// Fields must implement `IntoRusixValue`. Names default to lowerCamelCase;
-/// `rename_all` accepts `lowerCamelCase` or `PascalCase`, and field `rename`
+/// `rename_all` accepts `lowerCamelCase`, `PascalCase`, or `preserve`, and field `rename`
 /// overrides that convention. `skip` omits a field; `flatten` inserts a nested
 /// record’s fields at the parent level.
 ///
@@ -150,6 +150,7 @@ enum Naming {
     #[default]
     LowerCamel,
     Pascal,
+    Preserve,
 }
 
 impl Naming {
@@ -157,9 +158,10 @@ impl Naming {
         match name.value().as_str() {
             "lowerCamelCase" => Ok(Self::LowerCamel),
             "PascalCase" => Ok(Self::Pascal),
+            "preserve" => Ok(Self::Preserve),
             _ => Err(syn::Error::new_spanned(
                 name,
-                "rename_all must be \"lowerCamelCase\" or \"PascalCase\"",
+                "rename_all must be \"lowerCamelCase\", \"PascalCase\", or \"preserve\"",
             )),
         }
     }
@@ -179,6 +181,10 @@ impl Naming {
 
     fn variant(self, name: &str) -> String {
         let name = name.strip_prefix("r#").unwrap_or(name);
+        if matches!(self, Self::Preserve) {
+            return name.to_owned();
+        }
+
         let chars: Vec<_> = name.chars().collect();
         let mut snake = String::new();
 
@@ -200,6 +206,10 @@ impl Naming {
 
     fn field(self, name: &str) -> String {
         let name = name.strip_prefix("r#").unwrap_or(name);
+        if matches!(self, Self::Preserve) {
+            return name.to_owned();
+        }
+
         let mut output = String::new();
 
         for (index, word) in name.split('_').filter(|word| !word.is_empty()).enumerate() {

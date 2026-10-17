@@ -127,6 +127,20 @@ pub(crate) fn validate_scoped(node: &Node, scope: &[u64]) -> Result<(), Validati
         }
         ValueKind::OptionReference(path) => path.validate(&node.origin)?,
         ValueKind::ToText(value) => validate_value(value)?,
+        ValueKind::PathAppend { value, suffix } => {
+            reject_nul(suffix, &node.origin)?;
+            if !suffix.starts_with('/')
+                || suffix[1..]
+                    .split('/')
+                    .any(|part| part.is_empty() || part == "." || part == "..")
+            {
+                return Err(ValidationError {
+                    origin: node.origin.clone(),
+                    message: "invalid relative path suffix".into(),
+                });
+            }
+            validate_value(value)?;
+        }
         ValueKind::StringPrefix { prefix, value } => {
             reject_nul(prefix, &node.origin)?;
             validate_value(value)?;

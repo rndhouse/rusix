@@ -182,7 +182,15 @@ primitive!(i32, Int);
 
 primitive!(i64, Int);
 
+primitive!(u8, Int);
+
 primitive!(u16, Int);
+
+primitive!(u32, Int);
+
+primitive!(i8, Int);
+
+primitive!(i16, Int);
 
 primitive!(f64, Float);
 

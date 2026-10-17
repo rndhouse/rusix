@@ -93,6 +93,7 @@ mod value;
 /// roots are allowed. Only inline modules are supported; no external files or
 /// type definitions are inspected.
 ///
+/// `rename_all = "preserve"` retains Rust field names, including underscores.
 /// Fields use lowerCamelCase by default. `rename_all = "PascalCase"` changes the
 /// convention for a struct; `rename` handles a field exception. `skip` omits a
 /// field, and `flatten` inserts a nested record’s fields at its parent’s level.

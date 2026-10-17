@@ -107,6 +107,13 @@ pub enum ValueKind {
         /// String expression whose dependency context survives concatenation.
         value: Box<Node>,
     },
+    /// Append a validated relative suffix to a deferred Nix filesystem path.
+    PathAppend {
+        /// Path supplied by the caller, kept as a path rather than coerced text.
+        value: Box<Node>,
+        /// Slash-prefixed, literal relative suffix; the backend escapes it as text.
+        suffix: String,
+    },
     /// Signed integer division, including evaluator-side division-by-zero failures.
     Divide(Box<Node>, Box<Node>),
     /// An inclusive range constraint checked when the expression is evaluated.
