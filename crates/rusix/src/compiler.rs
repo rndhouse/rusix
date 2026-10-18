@@ -123,6 +123,39 @@ pub fn compile_with_options(
     options: RenderOptions,
 ) -> Result<Generated, Box<Diagnostic>> {
     let config = config.into_config();
+    validate_standalone(&config)?;
+
+    let mut generated = render_with_options(&lower(&config), options);
+    generated.backend_metadata = provenance::collect(&config);
+    Ok(generated)
+}
+
+/// Generate a standalone Nix expression, retaining validation and diagnostic source mappings.
+///
+/// Use this for a function, scalar, inspection query or flake attribute set that must
+/// be the file's root value. Unlike [`compile`], this does not place the value inside
+/// a configuration record. Rust validates the description; Nix evaluation remains
+/// a separate operation. NixOS option and module package references still require
+/// [`crate::nixos::compile_module`].
+///
+/// ```
+/// use rusix::{compile_value, interop::raw::NixValue};
+/// let identity = NixValue::function(|value| value);
+/// let generated = compile_value(identity).expect("valid standalone function");
+/// // The emitted file evaluates to a function, ready for a caller to apply.
+/// ```
+#[track_caller]
+pub fn compile_value(value: impl crate::ConfigValue) -> Result<Generated, Box<Diagnostic>> {
+    let config = Config::new().set_dynamic("value", value);
+    validate_standalone(&config)?;
+
+    let mut generated = render(&lower_value(&config.assignments[0].value));
+    generated.backend_metadata = provenance::collect(&config);
+    Ok(generated)
+}
+
+/// Apply the same scope and value checks to record roots and standalone expressions.
+fn validate_standalone(config: &Config) -> Result<(), Box<Diagnostic>> {
     config
         .validate()
         .map_err(|error| Box::new(Diagnostic::validation(error.origin, error.message)))?;
@@ -137,9 +170,7 @@ pub fn compile_with_options(
         }
     }
 
-    let mut generated = render_with_options(&lower(&config), options);
-    generated.backend_metadata = provenance::collect(&config);
-    Ok(generated)
+    Ok(())
 }
 
 /// Find scoped dependencies without evaluating any values.

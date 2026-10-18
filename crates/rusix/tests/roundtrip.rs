@@ -584,3 +584,36 @@ fn valid_range_constraints_preserve_values_including_bounds() {
         serde_json::json!({ "ports": [1, 22, 65535] })
     );
 }
+
+/// Standalone values share evaluation, scope validation and provenance with configuration roots.
+#[test]
+fn standalone_expression_preserves_root_values_and_validation() {
+    use rusix::interop::raw::NixValue;
+
+    let session = rusix::NixSession::new().unwrap();
+    let generated = rusix::compile_value(NixValue::function(|value| value).call(42_i64)).unwrap();
+    assert_eq!(
+        session.evaluate(&generated).unwrap().value,
+        serde_json::json!(42)
+    );
+    assert!(!generated.spans.is_empty());
+
+    let flake = NixValue::record([(
+        "outputs",
+        NixValue::function(|_| NixValue::record(Vec::<(&str, NixValue)>::new())),
+    )]);
+    let generated = rusix::compile_value(flake).unwrap();
+    let root = generated
+        .source
+        .lines()
+        .find(|line| !line.trim_start().starts_with('#'))
+        .unwrap();
+    assert!(root.trim_start().starts_with('{'));
+
+    let mut escaped = None;
+    let _ = NixValue::function(|argument| {
+        escaped = Some(argument.clone());
+        argument
+    });
+    assert!(rusix::compile_value(escaped.unwrap()).is_err());
+}
