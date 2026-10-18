@@ -68,6 +68,7 @@ pub fn evaluation_source(selection: &[&str], check_assertions: bool) -> String {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Boundary {
     /// The affected setting, assertion name or imported module path shown in diagnostics.
+    /// Empty for intact configuration records whose option paths are reported by NixOS.
     pub path: String,
     /// Rust operation that introduced the definition or crossed into imported code.
     pub origin: Origin,
@@ -213,6 +214,12 @@ fn lower_module(module: &NixosModule) -> Result<(NixExpr, NixosArtifact), Box<Di
         .generated_imports
         .iter()
         .map(|(value, origin)| (value.clone().into_node(origin.clone()), origin))
+        .chain(module.contextual_modules.iter().map(|context| {
+            (
+                context.function.clone().into_node(context.origin.clone()),
+                &context.origin,
+            )
+        }))
         .collect();
 
     for (value, origin) in &generated_imports {
@@ -401,6 +408,10 @@ fn lower_module(module: &NixosModule) -> Result<(NixExpr, NixosArtifact), Box<Di
             origin: origin.clone(),
         });
     }
+    for context in &module.contextual_modules {
+        artifact.definitions.extend(context.definitions.clone());
+    }
+
     for child in children {
         artifact.definitions.extend(child.definitions);
         artifact.declarations.extend(child.declarations);
@@ -684,8 +695,9 @@ fn translate(mut diagnostic: Diagnostic, artifact: &NixosArtifact, pin_root: &Pa
                     .map(|boundary| {
                         // Keep precise NixOS paths within opaque records. Only
                         // synthetic list-definition suffixes need the IR path.
-                        if !failure.option.starts_with(&format!("{}.", boundary.path))
-                            || failure.option.contains("[definition ")
+                        if !boundary.path.is_empty()
+                            && (!failure.option.starts_with(&format!("{}.", boundary.path))
+                                || failure.option.contains("[definition "))
                         {
                             diagnostic.option_path = Some(boundary.path.clone());
                         }

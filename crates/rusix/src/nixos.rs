@@ -16,7 +16,11 @@ use crate::ir::{IntoNode, ReferencedExpression};
 use crate::{Config, Expr, IntoConfig, Node, Origin, ValueKind};
 use std::marker::PhantomData;
 
+mod context;
+
 mod schema;
+
+pub use context::{ContextualModule, ModuleBody, ModuleContext};
 
 pub use schema::{OptionDecl, OptionType};
 
@@ -217,6 +221,8 @@ pub struct NixosModule {
     pub options: Config,
     /// Expressions for modules produced by Nix helpers, such as renamed-option adapters.
     pub generated_imports: Vec<(NixValue, Origin)>,
+    /// Bound module functions with source metadata for their Rust-authored contributions.
+    pub contextual_modules: Vec<ContextualModule>,
     /// Pinned-tree imports, each retaining its introducing Rust operation.
     pub imports: Vec<Import>,
     /// Assertion contributions, merged into NixOS's ordinary assertion list.
@@ -272,6 +278,7 @@ impl NixosModule {
             config,
             options: Config::new(),
             generated_imports: vec![],
+            contextual_modules: vec![],
             imports: vec![],
             assertions: vec![],
             modules: vec![],
