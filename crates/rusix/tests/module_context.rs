@@ -6,7 +6,7 @@ use rusix::{
     Config, DiagnosticKind, Expr, Generated, NixSession, Provenance,
     interop::{NixPath, raw::NixValue},
     nix_record,
-    nixos::{ModuleBody, NixosArtifact, NixosModule, compile_module},
+    nixos::{ContextualModule, ModuleBody, NixosArtifact, NixosModule, compile_module},
 };
 
 /// Runs native module evaluation with a narrow schema and caller-supplied dependencies.
@@ -54,18 +54,24 @@ fn imported_module(session: &NixSession) {
 
 #[test]
 fn arguments_keep_caller_packages_final_config_and_early_import_paths() {
-    let module = NixosModule::with_arguments(["projectSource", "extra", "unused"], |context| {
-        let source: NixPath = context.argument("projectSource");
-        let extra: NixValue = context.argument("extra");
-        let config = nix_record! {
-            "answer": NixValue::concat_text([
-                context.pkgs.select("label"), ":".into(),
-                context.config.select("imported"), ":".into(), extra,
-            ]),
-        };
+    let constructor = NixValue::function(|prefix| {
+        ContextualModule::with_arguments(["projectSource", "extra", "unused"], |context| {
+            let source: NixPath = context.argument("projectSource");
+            let extra: NixValue = context.argument("extra");
+            let config = nix_record! {
+                "answer": NixValue::concat_text([
+                    prefix, ":".into(),
+                    context.pkgs.select("label"), ":".into(),
+                    context.config.select("imported"), ":".into(), extra,
+                ]),
+            };
 
-        ModuleBody::new(config).import_value(source.join_relative("imported module.nix").unwrap())
+            ModuleBody::new(config)
+                .import_value(source.join_relative("imported module.nix").unwrap())
+        })
+        .into_expression()
     });
+    let module = NixosModule::empty().import_value(constructor.call("captured"));
     let artifact = compile_module(&module).unwrap();
     let session = NixSession::new().unwrap();
     imported_module(&session);
@@ -75,7 +81,7 @@ fn arguments_keep_caller_packages_final_config_and_early_import_paths() {
             .evaluate_nixos_with_driver(&artifact, &driver("answer"))
             .unwrap()
             .value,
-        "caller-package-set:imported:late-argument",
+        "captured:caller-package-set:imported:late-argument",
     );
     assert!(!artifact.module.source.contains("deepSeq"));
 }

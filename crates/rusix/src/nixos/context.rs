@@ -133,6 +133,58 @@ pub struct ContextualModule {
     pub(super) definitions: Vec<Boundary>,
 }
 
+impl ContextualModule {
+    /// Describes a module that can capture expressions from an enclosing build function.
+    /// The callback runs in Rust; NixOS later supplies the final configuration and
+    /// package set. Captured expressions must remain inside their lexical scope.
+    /// Use this when a machine or package constructor owns the module's dependencies.
+    #[track_caller]
+    pub fn new(build: impl FnOnce(ModuleContext) -> ModuleBody) -> Self {
+        Self::with_arguments([] as [&str; 0], build)
+    }
+
+    /// Describes a module with additional inputs supplied by the NixOS caller.
+    /// Prefer captured Rust values for dependencies already owned by an enclosing
+    /// constructor; extra names are for the module system's argument interface.
+    #[track_caller]
+    pub fn with_arguments(
+        extra: impl IntoIterator<Item = impl Into<String>>,
+        build: impl FnOnce(ModuleContext) -> ModuleBody,
+    ) -> Self {
+        let arguments = ["config", "lib", "pkgs"]
+            .into_iter()
+            .map(String::from)
+            .chain(extra.into_iter().map(Into::into));
+        let mut definitions = Vec::new();
+        let function = NixValue::function_attrs_open(arguments, |arguments| {
+            let context = ModuleContext {
+                config: arguments.clone().select("config"),
+                lib: arguments.clone().select("lib"),
+                pkgs: arguments.clone().select("pkgs"),
+                arguments,
+            };
+            let (body, boundaries) = build(context).into_parts();
+            definitions = boundaries;
+
+            (Vec::<(&str, NixValue)>::new(), body)
+        });
+
+        Self {
+            function,
+            origin: Origin::caller("NixOS module context"),
+            definitions,
+        }
+    }
+
+    /// Embeds this module in a larger deferred expression without compiling it separately.
+    /// NixOS definition labels and expression origins remain in the expression.
+    /// A standalone `NixosArtifact` additionally retains structured boundary metadata;
+    /// compile through `NixosModule` when that diagnostic sidecar is needed.
+    pub fn into_expression(self) -> NixValue {
+        self.function
+    }
+}
+
 impl NixosModule {
     /// Authors a module using the configuration, library and packages supplied by NixOS.
     /// The callback runs once in Rust with symbolic values; NixOS evaluates them later.
@@ -174,30 +226,10 @@ impl NixosModule {
         extra: impl IntoIterator<Item = impl Into<String>>,
         build: impl FnOnce(ModuleContext) -> ModuleBody,
     ) -> Self {
-        let arguments = ["config", "lib", "pkgs"]
-            .into_iter()
-            .map(String::from)
-            .chain(extra.into_iter().map(Into::into));
-        let mut definitions = Vec::new();
-        let function = NixValue::function_attrs_open(arguments, |arguments| {
-            let context = ModuleContext {
-                config: arguments.clone().select("config"),
-                lib: arguments.clone().select("lib"),
-                pkgs: arguments.clone().select("pkgs"),
-                arguments,
-            };
-            let (body, boundaries) = build(context).into_parts();
-            definitions = boundaries;
-
-            (Vec::<(&str, NixValue)>::new(), body)
-        });
-
         let mut module = Self::empty();
-        module.contextual_modules.push(ContextualModule {
-            function,
-            origin: Origin::caller("NixOS module context"),
-            definitions,
-        });
+        module
+            .contextual_modules
+            .push(ContextualModule::with_arguments(extra, build));
         module
     }
 }
