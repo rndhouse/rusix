@@ -623,6 +623,21 @@ fn separately_declared_record_views_retain_lazy_fields_and_complete_platform_val
 fn source_snapshots_depend_on_the_selected_file() {
     let root = Nixpkgs::new().source_path("pkgs/applications/version-management/git");
     let stored = NixPath::from_expression(NixValue::concat_text([root.as_expression()]));
+    let filesystem =
+        NixPath::from_source_text(stored.as_expression().to_text().into_expr::<String>());
+    assert_eq!(
+        evaluate(NixValue::builtin("typeOf").call(filesystem.clone())),
+        "path"
+    );
+    assert_eq!(
+        evaluate(
+            filesystem
+                .as_expression()
+                .to_text()
+                .equals(stored.as_expression().to_text())
+        ),
+        true
+    );
     let selected = stored.join_relative("ssh-path.patch").unwrap().snapshot();
     let expected = NixValue::concat_text([root
         .join_relative("ssh-path.patch")

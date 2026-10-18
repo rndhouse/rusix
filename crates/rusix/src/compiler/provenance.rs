@@ -867,6 +867,7 @@ impl Collector {
             | ValueKind::ToText(base)
             | ValueKind::StringPrefix { value: base, .. }
             | ValueKind::PathAppend { value: base, .. }
+            | ValueKind::FilesystemPath(base)
             | ValueKind::InRange { value: base, .. } => visit(base),
             ValueKind::If(_, b, c) => {
                 visit(b);
@@ -904,6 +905,7 @@ fn guard_operations(node: &Node, out: &mut BTreeSet<String>, remaining: &mut usi
         | ValueKind::ToText(value)
         | ValueKind::StringPrefix { value, .. }
         | ValueKind::PathAppend { value, .. }
+        | ValueKind::FilesystemPath(value)
         | ValueKind::InRange { value, .. } => visit(value),
         ValueKind::Function { body, .. } => visit(body),
         ValueKind::FunctionAttrs { defaults, body, .. } => {

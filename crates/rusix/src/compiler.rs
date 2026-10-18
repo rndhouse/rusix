@@ -174,6 +174,7 @@ fn scoped_reference(node: &Node, packages_only: bool) -> Option<&Node> {
         }
         ValueKind::Select(value, _)
         | ValueKind::ToText(value)
+        | ValueKind::FilesystemPath(value)
         | ValueKind::StringPrefix { value, .. }
         | ValueKind::PathAppend { value, .. }
         | ValueKind::InRange { value, .. } => option_reference(value),
@@ -252,9 +253,9 @@ fn runtime_boundary(kind: &ValueKind) -> Option<DiagnosticBoundary> {
         ValueKind::Apply(..) => Some(DiagnosticBoundary::OpaqueCall),
         ValueKind::AttrMerge(..) => Some(DiagnosticBoundary::RecordUnion),
         ValueKind::InRange { .. } => Some(DiagnosticBoundary::Validation),
-        ValueKind::StringPrefix { .. } | ValueKind::PathAppend { .. } => {
-            Some(DiagnosticBoundary::Coercion)
-        }
+        ValueKind::StringPrefix { .. }
+        | ValueKind::PathAppend { .. }
+        | ValueKind::FilesystemPath(_) => Some(DiagnosticBoundary::Coercion),
         ValueKind::OptionReference(_) => Some(DiagnosticBoundary::FinalOption),
         _ => None,
     }
@@ -407,6 +408,14 @@ fn lower_scoped(node: &Node, scope: &[ParameterScope<'_>]) -> NixExpr {
             NixKind::Select(Box::new(variable("config")), path.parts().to_vec())
         }
         ValueKind::ToText(value) => NixKind::Call(Builtin::ToString, vec![lower_value(value)]),
+        ValueKind::FilesystemPath(value) => NixKind::Binary(
+            BinaryOp::Add,
+            Box::new(NixExpr::plain(NixKind::Path("/.".into()))),
+            Box::new(NixExpr::plain(NixKind::Call(
+                Builtin::ToPath,
+                vec![lower_value(value)],
+            ))),
+        ),
         ValueKind::PathAppend { value, suffix } => NixKind::Binary(
             BinaryOp::Add,
             Box::new(lower_value(value)),

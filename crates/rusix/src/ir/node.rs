@@ -109,6 +109,11 @@ pub enum ValueKind {
         /// String expression whose dependency context survives concatenation.
         value: Box<Node>,
     },
+    /// Convert absolute text into a filesystem path without snapshotting its contents.
+    FilesystemPath(
+        /// Absolute path text checked by Nix when demanded.
+        Box<Node>,
+    ),
     /// Append a validated relative suffix to a deferred Nix filesystem path.
     PathAppend {
         /// Path supplied by the caller, kept as a path rather than coerced text.

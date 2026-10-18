@@ -127,7 +127,7 @@ pub(crate) fn validate_scoped(node: &Node, scope: &[u64]) -> Result<(), Validati
             validate_value(no)?;
         }
         ValueKind::OptionReference(path) => path.validate(&node.origin)?,
-        ValueKind::ToText(value) => validate_value(value)?,
+        ValueKind::ToText(value) | ValueKind::FilesystemPath(value) => validate_value(value)?,
         ValueKind::PathAppend { value, suffix } => {
             reject_nul(suffix, &node.origin)?;
             if !suffix.starts_with('/')

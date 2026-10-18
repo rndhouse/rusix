@@ -879,6 +879,22 @@ pub struct NixPath {
 expression_handle!(NixPath);
 
 impl NixPath {
+    /// Convert absolute path text into a Nix filesystem path for source-selection helpers.
+    /// Unlike Nix's `builtins.toPath`, the result has type `path`, not `string`.
+    /// The input must identify an existing source, not an unbuilt derivation output.
+    /// Its string dependency context is discarded so selected files can become
+    /// independent build inputs through file sets or [`Self::snapshot`]. No file
+    /// is read or copied by this conversion; Nix rejects relative or invalid text
+    /// only when it demands the value.
+    #[track_caller]
+    pub fn from_source_text(path: impl Into<Expr<String>>) -> Self {
+        let value = NixValue::builtin("unsafeDiscardStringContext").call(path.into());
+        Self::from_expression(NixValue::from_node(Node {
+            origin: Origin::caller("absolute filesystem path"),
+            kind: crate::ir::ValueKind::FilesystemPath(Box::new(value.0)),
+        }))
+    }
+
     /// Copies this existing file or directory into the store when Nix demands the value.
     /// The result is a store-backed string with dependency context for that snapshot.
     /// Use this after selecting a file from a source tree to depend on that file's
