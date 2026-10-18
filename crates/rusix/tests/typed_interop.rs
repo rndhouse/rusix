@@ -617,3 +617,53 @@ fn separately_declared_record_views_retain_lazy_fields_and_complete_platform_val
     assert_eq!(evaluate(stdenv.host_platform().system()), "same");
     assert_eq!(evaluate(stdenv.target_platform().config()), "target");
 }
+
+/// A selected file's snapshot must not retain the containing source tree's string dependency.
+#[test]
+fn source_snapshots_depend_on_the_selected_file() {
+    let root = Nixpkgs::new().source_path("pkgs/applications/version-management/git");
+    let stored = NixPath::from_expression(NixValue::concat_text([root.as_expression()]));
+    let selected = stored.join_relative("ssh-path.patch").unwrap().snapshot();
+    let expected = NixValue::concat_text([root
+        .join_relative("ssh-path.patch")
+        .unwrap()
+        .as_expression()]);
+
+    assert_eq!(
+        evaluate(selected.as_expression().equals(expected.clone())),
+        true
+    );
+    assert_eq!(
+        evaluate(
+            NixValue::builtin("getContext")
+                .call(selected)
+                .equals(NixValue::builtin("getContext").call(expected))
+        ),
+        true,
+    );
+}
+
+/// Snapshotting stays lazy and reports inaccessible sources at the authoring call site.
+#[test]
+fn missing_source_snapshots_are_lazy_and_attributed() {
+    let missing = Nixpkgs::new().source_path("rusix-no-such-source-file");
+    let line = line!() + 1;
+    let snapshot = missing.snapshot();
+    let generated = compile(
+        Config::new()
+            .set_dynamic("good", 42_i64)
+            .set_dynamic("bad", snapshot),
+    )
+    .unwrap();
+    let session = NixSession::new().unwrap();
+    assert_eq!(
+        session
+            .evaluate_attribute(&generated, "good")
+            .unwrap()
+            .value,
+        42
+    );
+    let error = session.evaluate_interop(&generated).unwrap_err();
+    assert_eq!(error.primary.as_ref().unwrap().line, line);
+    assert!(!error.raw_nix.is_empty());
+}

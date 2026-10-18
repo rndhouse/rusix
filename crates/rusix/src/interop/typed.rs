@@ -879,6 +879,19 @@ pub struct NixPath {
 expression_handle!(NixPath);
 
 impl NixPath {
+    /// Copies this existing file or directory into the store when Nix demands the value.
+    /// The result is a store-backed string with dependency context for that snapshot.
+    /// Use this after selecting a file from a source tree to depend on that file's
+    /// contents, rather than retaining a string reference to the entire source tree.
+    /// Rust does not read the source. Nix reports missing or inaccessible paths during
+    /// evaluation; this operation does not build derivations or fetch sources.
+    #[track_caller]
+    pub fn snapshot(&self) -> Expr<String> {
+        NixValue::builtin("path")
+            .call(NixValue::record([("path", self.as_expression())]))
+            .into_expr()
+    }
+
     /// Append a nonempty relative path without reading the filesystem in Rust.
     /// Slash-separated components must exclude empty, `.` and `..` segments.
     /// The result remains a Nix path; text is escaped as data and string dependency

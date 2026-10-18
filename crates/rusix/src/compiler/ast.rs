@@ -90,7 +90,7 @@ pub enum Builtin {
     Import,
     /// Select an attribute by a string key, including literal punctuation.
     GetAttr,
-    /// Convert a string into a Nix path value.
+    /// Canonicalize absolute path text; Nix returns a string, not a path value.
     ToPath,
     /// Coerce to a string while retaining Nix dependency context.
     ToString,
