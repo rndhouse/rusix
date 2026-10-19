@@ -71,6 +71,7 @@ fn backend_metadata_has_zero_generated_cost() {
         for comments in [false, true] {
             let options = RenderOptions {
                 origin_comments: comments,
+                ..Default::default()
             };
             let before = render_with_options(&lower(&config), options);
             let after = compile_with_options(&config, options).unwrap();

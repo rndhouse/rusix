@@ -107,6 +107,7 @@ fn normal_and_inspection_git_factories_have_identical_complete_projections() {
         RenderOptions::default(),
         RenderOptions {
             origin_comments: true,
+            ..Default::default()
         },
     ]
     .map(|options| artifact_with_options([], options));

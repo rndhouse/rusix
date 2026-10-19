@@ -100,6 +100,7 @@ fn inspection_comments_and_persisted_source_spans_use_the_same_origin_ids() {
         fixtures::config("good").unwrap(),
         rusix::RenderOptions {
             origin_comments: true,
+            ..Default::default()
         },
     )
     .unwrap();

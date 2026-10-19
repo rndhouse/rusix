@@ -103,6 +103,35 @@ fn nested_groups_indent_by_two_spaces_and_fit_independently() {
 }
 
 #[test]
+fn deep_expression_layout_bounds_indentation_and_compact_output_keeps_tokens() {
+    let mut expression = fields();
+    for _ in 0..100 {
+        expression = plain(NixKind::List(vec![expression]));
+    }
+
+    let readable = render(&expression);
+    assert!(
+        readable
+            .source
+            .lines()
+            .all(|line| line.len() - line.trim_start().len() <= 24)
+    );
+    let compact = render_with_options(
+        &expression,
+        RenderOptions {
+            layout: RenderLayout::Compact,
+            ..Default::default()
+        },
+    );
+    assert!(compact.source.len() < readable.source.len());
+    assert_eq!(compact.source.lines().count(), 2);
+    assert_eq!(
+        readable.source.split_whitespace().collect::<String>(),
+        compact.source.split_whitespace().collect::<String>(),
+    );
+}
+
+#[test]
 fn complex_conditionals_break_branches_without_root_parentheses() {
     let expression = plain(NixKind::If(
         Box::new(plain(NixKind::Bool(true))),
@@ -182,6 +211,7 @@ fn layout_and_spans_are_deterministic_in_both_modes() {
         RenderOptions::default(),
         RenderOptions {
             origin_comments: true,
+            ..Default::default()
         },
     ] {
         let first = render_with_options(&ast, options);
@@ -303,11 +333,13 @@ fn every_syntax_variant_keeps_tokens_and_parentheses_across_layouts() {
     let flat = layout::render(
         &super::expression(&expression, RenderOptions::default()),
         usize::MAX,
+        RenderLayout::Readable,
     );
     for options in [
         RenderOptions::default(),
         RenderOptions {
             origin_comments: true,
+            ..Default::default()
         },
     ] {
         let formatted = render_with_options(&expression, options);
@@ -326,6 +358,7 @@ fn byte_columns_map_failures_after_inline_unicode_in_both_modes() {
         &config,
         RenderOptions {
             origin_comments: true,
+            ..Default::default()
         },
     )
     .unwrap();

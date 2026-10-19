@@ -255,6 +255,7 @@ fn diagnostic_matrix_preserves_operations_paths_and_raw_errors() {
             &ast,
             RenderOptions {
                 origin_comments: true,
+                ..Default::default()
             },
         );
         let mut legacy = lower(&config);

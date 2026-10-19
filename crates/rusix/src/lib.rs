@@ -234,7 +234,8 @@ pub use value::{IntoRusixValue, RusixValue};
 pub(crate) use authoring::sealed;
 pub use authoring::{Config, ConfigValue, Expr, IntoConfig, ValidationError};
 pub use compiler::{
-    Generated, RenderOptions, SourceSpan, compile, compile_value, compile_with_options,
+    Generated, RenderLayout, RenderOptions, SourceSpan, compile, compile_value,
+    compile_with_options,
 };
 pub use diagnostic::{Diagnostic, DiagnosticKind, DiagnosticOrigin, OriginRole, Provenance};
 

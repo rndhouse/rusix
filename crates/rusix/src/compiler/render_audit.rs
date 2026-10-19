@@ -11,7 +11,55 @@ use crate::{
 
 const INSPECT: RenderOptions = RenderOptions {
     origin_comments: true,
+    layout: RenderLayout::Readable,
 };
+
+#[test]
+fn compact_output_preserves_literal_bytes_laziness_and_failure_origins() {
+    let literal = "line one\n  λ with \"quotes\" and \\slashes\n";
+    let config = Config::new()
+        .set_dynamic("literal", literal)
+        .set_dynamic("bad", Expr::int(44).divide(Expr::int(0)));
+    let readable = compile(&config).unwrap();
+    let compact = compile_with_options(
+        &config,
+        RenderOptions {
+            layout: RenderLayout::Compact,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let session = NixSession::new().unwrap();
+
+    for generated in [&readable, &compact] {
+        assert_eq!(
+            session
+                .evaluate_attribute(generated, "literal")
+                .unwrap()
+                .value,
+            literal
+        );
+        for span in &generated.spans {
+            assert!(
+                generated
+                    .source
+                    .get(span.start..span.end)
+                    .is_some_and(|text| !text.is_empty())
+            );
+        }
+    }
+
+    assert_eq!(readable.spans.len(), compact.spans.len());
+    for (before, after) in readable.spans.iter().zip(&compact.spans) {
+        assert_eq!(before.origin, after.origin);
+        assert_eq!(before.enclosing, after.enclosing);
+    }
+
+    equivalent_diagnostics(
+        &session.evaluate_attribute(&readable, "bad").unwrap_err(),
+        &session.evaluate_attribute(&compact, "bad").unwrap_err(),
+    );
+}
 
 fn module_pair(module: &NixosModule) -> [nixos::NixosArtifact; 2] {
     [

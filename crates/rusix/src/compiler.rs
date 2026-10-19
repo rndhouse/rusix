@@ -82,7 +82,7 @@ use crate::{Config, IntoConfig, ir::Node, ir::ValueKind};
 use crate::{DiagnosticKind, Provenance};
 
 use ast::{BinaryOp, Builtin, NixExpr, NixKind};
-pub use render::{Generated, RenderOptions, SourceSpan, render, render_with_options};
+pub use render::{Generated, RenderLayout, RenderOptions, SourceSpan, render, render_with_options};
 use std::{cell::Cell, rc::Rc};
 
 /// Generate Nix source directly from a typed root implementing [`IntoConfig`].
@@ -113,7 +113,7 @@ pub fn compile(config: impl IntoConfig) -> Result<Generated, Box<Diagnostic>> {
 ///
 /// let annotated = compile_with_options(
 ///     Output { enabled: true },
-///     RenderOptions { origin_comments: true },
+///     RenderOptions { origin_comments: true, ..Default::default() },
 /// ).unwrap();
 /// assert!(annotated.source.contains("# rn-"));
 /// ```

@@ -251,7 +251,12 @@ fn supported_grammar_categories_parse_in_every_parent_context_in_both_modes() {
     for options in [
         RenderOptions::default(),
         RenderOptions {
+            layout: RenderLayout::Compact,
+            ..Default::default()
+        },
+        RenderOptions {
             origin_comments: true,
+            ..Default::default()
         },
     ] {
         let generated = render_with_options(&ast, options);
@@ -454,7 +459,12 @@ fn grouped_oracle_and_minimal_rendering_evaluate_identically_in_both_modes() {
     for options in [
         RenderOptions::default(),
         RenderOptions {
+            layout: RenderLayout::Compact,
+            ..Default::default()
+        },
+        RenderOptions {
             origin_comments: true,
+            ..Default::default()
         },
     ] {
         let evaluated = session
@@ -521,7 +531,12 @@ fn attributed_application_prefixes_keep_all_occurrence_spans() {
     for options in [
         RenderOptions::default(),
         RenderOptions {
+            layout: RenderLayout::Compact,
+            ..Default::default()
+        },
+        RenderOptions {
             origin_comments: true,
+            ..Default::default()
         },
     ] {
         let generated = render_with_options(&outer, options);
@@ -564,7 +579,12 @@ fn source_map_selection_failures_choose_the_consumer_without_parenthesis_markers
         for options in [
             RenderOptions::default(),
             RenderOptions {
+                layout: RenderLayout::Compact,
+                ..Default::default()
+            },
+            RenderOptions {
                 origin_comments: true,
+                ..Default::default()
             },
         ] {
             let generated = render_with_options(&root, options);
@@ -600,7 +620,12 @@ fn independently_attributed_selection_steps_keep_the_failing_step() {
         for options in [
             RenderOptions::default(),
             RenderOptions {
+                layout: RenderLayout::Compact,
+                ..Default::default()
+            },
+            RenderOptions {
                 origin_comments: true,
+                ..Default::default()
             },
         ] {
             let generated = render_with_options(&outer, options);

@@ -117,7 +117,7 @@ struct Output {
 
 let annotated = compile_with_options(
     Output { enabled: true },
-    RenderOptions { origin_comments: true },
+    RenderOptions { origin_comments: true, ..Default::default() },
 ).unwrap();
 ```
 

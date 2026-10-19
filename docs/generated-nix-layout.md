@@ -4,7 +4,10 @@ Generated Nix is compiler output. Rusix formats it for inspection while recordin
 source spans that connect evaluator errors to Rust origins. Edit the Rust model
 and compile again to change the output.
 
-The renderer targets 100 characters per line and uses two-space indentation.
+The readable renderer targets 100 characters per line and uses two-space indentation,
+capped at 24 spaces so deeply nested expressions still have room to fit.
+`RenderOptions { layout: RenderLayout::Compact, ..Default::default() }`
+omits optional line breaks and indentation for smaller build artifacts.
 Indivisible literals, including escaped shell text, may exceed that width.
 Literal contents, runtime diagnostic contexts and NixOS metadata are preserved.
 
@@ -39,7 +42,7 @@ each attributed expression's byte range and enclosing origins during emission.
 Width counts characters; source-map offsets count UTF-8 bytes.
 
 Normal output omits fine-grained origin comments. Explicit inspection rendering
-adds those comments through `RenderOptions { origin_comments: true }`; see
+adds those comments through `RenderOptions { origin_comments: true, ..Default::default() }`; see
 [runtime diagnostics](runtime-diagnostics.md#inspection-rendering).
 Both modes retain the same mapped origins, with offsets calculated for their own
 text. Save each source map with its corresponding output. Editing generated text

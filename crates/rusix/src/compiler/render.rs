@@ -50,11 +50,25 @@ pub struct Generated {
     pub backend_metadata: Option<serde_json::Value>,
 }
 
-/// Control optional aids for manually inspecting generated Nix.
+/// Choose readable compiler output or smaller text for build artifacts.
+/// Both layouts preserve expression tokens, literal contents and diagnostic mappings.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum RenderLayout {
+    /// Wrap at 100 characters with two-space nesting, capped at 24 spaces.
+    #[default]
+    Readable,
+    /// Replace optional line breaks with spaces and omit layout indentation.
+    /// Inspection comments still end with a newline.
+    Compact,
+}
+
+/// Control layout and optional aids for manually inspecting generated Nix.
 /// Source maps and runtime diagnostic boundaries are preserved regardless of
 /// these options. Each rendering produces spans for its own source text.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct RenderOptions {
+    /// Layout used for generated source; defaults to readable, bounded indentation.
+    pub layout: RenderLayout,
     /// Show `# rn-...` before each attributed expression for human inspection.
     /// Defaults to false. Diagnostics use source maps and selected runtime
     /// contexts, not these comments.
@@ -147,7 +161,7 @@ impl Generated {
 /// or [`crate::nixos::compile_module`] to validate semantic IR first.
 /// Parentheses follow Nix precedence and preserve explicit AST groups and distinct
 /// attributed lookup boundaries. Layout uses a 100-character target and two-space
-/// indentation. Indivisible literals can exceed that target; string contents are
+/// indentation capped at 24 spaces. Indivisible literals can exceed that target; string contents are
 /// never reformatted.
 pub fn render(ast: &NixExpr) -> Generated {
     render_with_options(ast, RenderOptions::default())
@@ -158,7 +172,7 @@ pub fn render(ast: &NixExpr) -> Generated {
 /// recomputed for this output rather than reused from another rendering.
 pub fn render_with_options(ast: &NixExpr, options: RenderOptions) -> Generated {
     let document = expression(ast, options);
-    layout::render(&document, 100)
+    layout::render(&document, 100, options.layout)
 }
 
 /// Preserve an expression's attribution until the final layout writes its bytes.
