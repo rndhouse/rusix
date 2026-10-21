@@ -1,4 +1,9 @@
-# Rusix
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/rndhouse/rusix/master/docs/assets/rusix-wordmark-dark.svg">
+    <img alt="Rusix" src="https://raw.githubusercontent.com/rndhouse/rusix/master/docs/assets/rusix-wordmark-light.svg" height="64">
+  </picture>
+</p>
 
 Rusix is a Rust library for defining packages and NixOS configuration in ordinary
 Rust, as an alternative to the Nix language. It compiles these definitions into Nix
