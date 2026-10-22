@@ -82,4 +82,5 @@ Nix definitions retain their own source locations.
 
 - [Examples](https://github.com/rndhouse/rusix/blob/main/examples/README.md)
 - [Library usage](https://github.com/rndhouse/rusix/blob/main/docs/library-usage.md)
+- [Application and system integration](https://github.com/rndhouse/rusix/blob/main/docs/application-system-integration.md)
 - [Developing Rusix](https://github.com/rndhouse/rusix/blob/main/docs/development.md)
