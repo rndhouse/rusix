@@ -69,6 +69,109 @@ fn function_invariants_are_memoized_across_calls() {
     assert_eq!(after.raw_nix.matches("rusix-sharing-evaluated").count(), 1);
 }
 
+/// Sibling closures can share the same captured computation despite having separate arguments.
+#[test]
+fn sibling_functions_share_captured_computations() {
+    let values = [1_i64, 2_i64].map(|argument| {
+        let expensive = traced("payload".into());
+        NixValue::function(|input| NixValue::list([input, expensive])).call(argument)
+    });
+    let ast = lower(&Config::new().set_dynamic("values", NixValue::list(values)));
+    let session = NixSession::new().unwrap();
+    let before = session.evaluate(&render_without_sharing(&ast)).unwrap();
+    let after = session.evaluate(&render(&ast)).unwrap();
+
+    assert_eq!(before.value, after.value);
+    assert_eq!(after.value["values"][0][0], 1);
+    assert_eq!(after.value["values"][1][0], 2);
+    assert_eq!(before.raw_nix.matches("rusix-sharing-evaluated").count(), 2);
+    assert_eq!(after.raw_nix.matches("rusix-sharing-evaluated").count(), 1);
+}
+
+/// Existing recursive lets may share outer captures without moving work outside its declaration.
+#[test]
+fn sibling_lets_share_work_inside_the_required_outer_binding() {
+    let expensive = lower(&Config::new().set_dynamic("value", traced("payload".into())));
+    let siblings = [1_i64, 2_i64].map(|value| {
+        NixExpr::plain(NixKind::Let(
+            "inner".into(),
+            Box::new(NixExpr::plain(NixKind::Int(value))),
+            Box::new(NixExpr::plain(NixKind::List(vec![
+                NixExpr::plain(NixKind::Variable("inner".into())),
+                arithmetic("outer"),
+                expensive.clone(),
+            ]))),
+        ))
+    });
+    let ast = NixExpr::plain(NixKind::Let(
+        "outer".into(),
+        Box::new(NixExpr::plain(NixKind::Int(10))),
+        Box::new(NixExpr::plain(NixKind::List(siblings.into()))),
+    ));
+    let session = NixSession::new().unwrap();
+    let before = session.evaluate(&render_without_sharing(&ast)).unwrap();
+    let after = session.evaluate(&render(&ast)).unwrap();
+
+    assert_eq!(before.value, after.value);
+    assert_eq!(after.value[0][1], 18);
+    assert_eq!(after.value[1][1], 18);
+    assert_eq!(before.raw_nix.matches("rusix-sharing-evaluated").count(), 2);
+    assert_eq!(after.raw_nix.matches("rusix-sharing-evaluated").count(), 1);
+}
+
+/// Literal arguments expose equivalent work in separate calls without forcing unused arguments.
+#[test]
+fn known_lambda_arguments_expose_shared_work_and_remain_lazy() {
+    let values = [0_i64, 1_i64].map(|tag| {
+        NixValue::function(|input| NixValue::list([tag.into(), traced(input)])).call("payload")
+    });
+    let unused = NixValue::function(|_| NixValue::from(42_i64))
+        .call(NixValue::builtin("throw").call("unused lambda argument"));
+    let ast = lower(
+        &Config::new()
+            .set_dynamic("values", NixValue::list(values))
+            .set_dynamic("unused", unused),
+    );
+    let session = NixSession::new().unwrap();
+    let before = session.evaluate(&render_without_sharing(&ast)).unwrap();
+    let after = session.evaluate(&render(&ast)).unwrap();
+
+    assert_eq!(before.value, after.value);
+    assert_eq!(after.value["unused"], 42);
+    assert_eq!(before.raw_nix.matches("rusix-sharing-evaluated").count(), 2);
+    assert_eq!(after.raw_nix.matches("rusix-sharing-evaluated").count(), 1);
+}
+
+/// Moving a shared failure above sibling functions must preserve selective evaluation and blame.
+#[test]
+fn failures_shared_across_scopes_stay_lazy_and_keep_diagnostics() {
+    let calls = [1_i64, 2_i64].map(|argument| {
+        let bad = traced(NixValue::builtin("throw").call("cross-scope failure"));
+        NixValue::function(|input| NixValue::record([("argument", input), ("bad", bad)]))
+            .call(argument)
+    });
+    let good = NixValue::list(calls.iter().map(|call| call.clone().select("argument")));
+    let ast = lower(
+        &Config::new()
+            .set_dynamic("good", good)
+            .set_dynamic("bad", NixValue::list(calls)),
+    );
+    let session = NixSession::new().unwrap();
+    let original = render_without_sharing(&ast);
+    let optimized = render(&ast);
+
+    assert_eq!(
+        session
+            .evaluate_attribute(&optimized, "good")
+            .unwrap()
+            .value,
+        serde_json::json!([1, 2]),
+    );
+    let before = session.evaluate_attribute(&original, "bad").unwrap_err();
+    let after = session.evaluate_attribute(&optimized, "bad").unwrap_err();
+    equivalent_diagnostics(&before, &after);
+}
+
 /// Some attribute consumers inspect a function before forcing thunks, as Nix's flake loader does.
 #[test]
 fn exported_functions_keep_their_direct_function_shape() {
@@ -182,7 +285,7 @@ fn arithmetic(name: &str) -> NixExpr {
 
 /// Existing generated-looking names and nested shadowed parameters must remain correctly bound.
 #[test]
-fn sharing_is_local_and_cannot_capture_parameters() {
+fn sharing_resolves_shadowed_parameters_without_capture() {
     let repeated = arithmetic("__rusix_shared_0");
     let inner = NixExpr::plain(NixKind::Apply(
         Box::new(NixExpr::plain(NixKind::Lambda(
@@ -211,6 +314,26 @@ fn sharing_is_local_and_cannot_capture_parameters() {
 
     assert_eq!(original.value, serde_json::json!([18, [108, 108], 18]));
     assert_eq!(optimized.value, original.value);
+}
+
+/// A recursive initializer must not inherit a same-named outer constant during propagation.
+#[test]
+fn recursive_let_initializers_keep_their_own_binding() {
+    let recursive = NixExpr::plain(NixKind::Let(
+        "value".into(),
+        Box::new(arithmetic("value")),
+        Box::new(NixExpr::plain(NixKind::Variable("value".into()))),
+    ));
+    let ast = NixExpr::plain(NixKind::Let(
+        "value".into(),
+        Box::new(NixExpr::plain(NixKind::Int(100))),
+        Box::new(recursive),
+    ));
+    let session = NixSession::new().unwrap();
+    for generated in [render_without_sharing(&ast), render(&ast)] {
+        let error = session.evaluate(&generated).unwrap_err();
+        assert!(error.reason.contains("infinite recursion"));
+    }
 }
 
 /// Compiler-generated bindings must not accidentally resolve an authored undefined variable.
