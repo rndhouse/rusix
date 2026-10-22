@@ -336,6 +336,93 @@ fn recursive_let_initializers_keep_their_own_binding() {
     }
 }
 
+/// Native operations and diagnostic wrappers resolve the same shadowable namespace as Nix source.
+#[test]
+fn implicit_builtins_remain_lexical_dependencies() {
+    /// Make a native operation substantial enough to qualify for sharing and lifting.
+    fn payload() -> NixExpr {
+        (0..8).fold(
+            NixExpr::plain(NixKind::Call(
+                Builtin::Div,
+                vec![
+                    NixExpr::plain(NixKind::Int(8)),
+                    NixExpr::plain(NixKind::Int(2)),
+                ],
+            )),
+            |value, _| {
+                NixExpr::plain(NixKind::Binary(
+                    BinaryOp::Add,
+                    Box::new(value),
+                    Box::new(NixExpr::plain(NixKind::Int(1))),
+                ))
+            },
+        )
+    }
+
+    /// Override two ordinary Nix namespace members with a value observable by evaluation.
+    fn namespace() -> NixExpr {
+        let function = NixExpr::plain(NixKind::Lambda(
+            "left".into(),
+            Box::new(NixExpr::plain(NixKind::Lambda(
+                "right".into(),
+                Box::new(NixExpr::plain(NixKind::Int(77))),
+            ))),
+        ));
+        NixExpr::plain(NixKind::AttrSet(vec![
+            (vec!["div".into()], function.clone()),
+            (vec!["addErrorContext".into()], function),
+        ]))
+    }
+
+    let local = NixExpr::plain(NixKind::Let(
+        "builtins".into(),
+        Box::new(namespace()),
+        Box::new(payload()),
+    ));
+    let named = NixExpr::plain(NixKind::Apply(
+        Box::new(NixExpr::plain(NixKind::Function(
+            vec!["builtins".into()],
+            Box::new(payload()),
+        ))),
+        Box::new(NixExpr::plain(NixKind::AttrSet(vec![(
+            vec!["builtins".into()],
+            namespace(),
+        )]))),
+    ));
+    let positional = NixExpr::plain(NixKind::Apply(
+        Box::new(NixExpr::plain(NixKind::Lambda(
+            "builtins".into(),
+            Box::new(payload()),
+        ))),
+        Box::new(namespace()),
+    ));
+    let contextual = NixExpr::plain(NixKind::Let(
+        "builtins".into(),
+        Box::new(namespace()),
+        Box::new(NixExpr::plain(NixKind::Let(
+            "value".into(),
+            Box::new(NixExpr::contextual(
+                NixKind::Int(1),
+                Origin::new("namespace.rs", 1, 1, "contextual value"),
+            )),
+            Box::new(NixExpr::plain(NixKind::Variable("value".into()))),
+        ))),
+    ));
+    let ast = NixExpr::plain(NixKind::List(vec![
+        payload(),
+        local,
+        named,
+        positional,
+        contextual,
+    ]));
+    let session = NixSession::new().unwrap();
+    let before = session.evaluate(&render_without_sharing(&ast)).unwrap();
+    let after = session.evaluate(&render(&ast)).unwrap();
+
+    assert_eq!(before.value, serde_json::json!([12, 85, 85, 85, 77]));
+    assert_eq!(after.value, before.value);
+}
+
 /// Compiler-generated bindings must not accidentally resolve an authored undefined variable.
 #[test]
 fn sharing_cannot_hide_undefined_variables() {

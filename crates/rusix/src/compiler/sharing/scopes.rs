@@ -29,6 +29,8 @@ struct Signature<'a> {
     shape: Shape<'a>,
     /// Declaration resolved by a variable reference; absent for global identifiers.
     binding: Option<usize>,
+    /// Declaration of `builtins` used by native calls or emitted diagnostic wrappers.
+    namespace: Option<usize>,
     /// Structurally interned descendants in source order.
     children: Vec<usize>,
 }
@@ -173,12 +175,24 @@ impl<'a> Index<'a> {
                 .copied(),
             _ => None,
         };
+        let namespace = if matches!(expr.kind, NixKind::Call(..))
+            || expr.error_context && expr.origin.is_some()
+        {
+            self.bindings
+                .get("builtins")
+                .and_then(|stack| stack.last())
+                .copied()
+        } else {
+            None
+        };
         // A shareable subtree cannot contain a binder: those nodes have unique
         // identities. Its referenced declarations lie on one enclosing chain.
         // Resolved identities keep that chain equal across uses, so its deepest
         // member determines placement without a dependency set at every node.
         let required_depth = descendants.iter().fold(
-            binding.map_or(0, |binding| binding.depth),
+            binding
+                .map_or(0, |binding| binding.depth)
+                .max(namespace.map_or(0, |binding| binding.depth)),
             |depth, child| depth.max(self.uses[*child].required_depth),
         );
         let weight = if boundary(expr) {
@@ -224,6 +238,7 @@ impl<'a> Index<'a> {
             error_context: expr.error_context,
             shape,
             binding: binding.map(|binding| binding.identity),
+            namespace: namespace.map(|binding| binding.identity),
             children: if boundary(expr) {
                 Vec::new()
             } else {

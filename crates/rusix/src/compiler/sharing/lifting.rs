@@ -28,6 +28,10 @@ fn analyze(expr: &NixExpr, summaries: &mut HashMap<*const NixExpr, Dependencies>
         result.free.extend(child.free);
         result.computes |= child.computes;
     }
+    if expr.error_context && expr.origin.is_some() {
+        result.free.insert("builtins".into());
+        result.computes = true;
+    }
     match &expr.kind {
         NixKind::Variable(name) => {
             result.free.insert(name.clone());
@@ -45,8 +49,11 @@ fn analyze(expr: &NixExpr, summaries: &mut HashMap<*const NixExpr, Dependencies>
                 result.free.remove(name);
             }
         }
+        NixKind::Call(..) => {
+            result.free.insert("builtins".into());
+            result.computes = true;
+        }
         NixKind::Apply(..)
-        | NixKind::Call(..)
         | NixKind::Binary(..)
         | NixKind::If(..)
         | NixKind::Assert(..)

@@ -13,7 +13,9 @@ fn lambda(expr: &NixExpr) -> bool {
         return false;
     }
     match &expr.kind {
-        NixKind::Lambda(..) => true,
+        // Native builtin calls and diagnostic wrappers contain implicit
+        // references to this name, which ordinary variable renaming cannot see.
+        NixKind::Lambda(name, _) => name != "builtins",
         NixKind::Group(value) => lambda(value),
         _ => false,
     }
@@ -74,6 +76,9 @@ fn bind_application(expr: &mut NixExpr, names: &mut Names) {
 
 /// Copy only small values that neither evaluate an operation nor capture another lexical binding.
 fn literal(expr: &NixExpr) -> Option<NixKind> {
+    if expr.error_context && expr.origin.is_some() {
+        return None;
+    }
     match &expr.kind {
         NixKind::Group(value) => literal(value),
         NixKind::Bool(..) | NixKind::Int(..) | NixKind::Float(..) | NixKind::Null => {
