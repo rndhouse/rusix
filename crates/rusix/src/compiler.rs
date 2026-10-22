@@ -495,7 +495,7 @@ fn lower_scoped(node: &Node, scope: &[ParameterScope<'_>]) -> NixExpr {
                     NixKind::ArgumentSelect(Box::new(lower_value(value)), path.parts().to_vec())
                 }
             } else {
-                interop::select(lower_value(value), path).kind
+                interop::select_opaque(lower_value(value), path).kind
             };
             return NixExpr::attributed(kind, node.origin.clone());
         }
