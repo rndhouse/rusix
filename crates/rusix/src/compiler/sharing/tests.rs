@@ -423,6 +423,115 @@ fn implicit_builtins_remain_lexical_dependencies() {
     assert_eq!(after.value, before.value);
 }
 
+/// Parser-introduced calls and scalar prelude tokens must keep their original lexical lookup.
+#[test]
+fn implicit_scalar_and_comparison_names_remain_lexical() {
+    /// Build a two-argument replacement for one of Nix's parser helpers.
+    fn returning(value: NixExpr) -> NixExpr {
+        NixExpr::plain(NixKind::Lambda(
+            "left".into(),
+            Box::new(NixExpr::plain(NixKind::Lambda(
+                "right".into(),
+                Box::new(value),
+            ))),
+        ))
+    }
+
+    /// Introduce a native recursive declaration around the supplied expression.
+    fn local(name: &str, value: NixExpr, body: NixExpr) -> NixExpr {
+        NixExpr::plain(NixKind::Let(name.into(), Box::new(value), Box::new(body)))
+    }
+
+    let scalars = NixExpr::plain(NixKind::List(
+        (0..3)
+            .flat_map(|_| {
+                [
+                    NixExpr::plain(NixKind::Bool(true)),
+                    NixExpr::plain(NixKind::Bool(false)),
+                    NixExpr::plain(NixKind::Null),
+                ]
+            })
+            .collect(),
+    ));
+    let negatives = NixExpr::plain(NixKind::List(vec![
+        NixExpr::plain(NixKind::Int(-5)),
+        NixExpr::plain(NixKind::Float(-0.5)),
+        NixExpr::plain(NixKind::Int(i64::MIN)),
+        NixExpr::plain(NixKind::Int(1)),
+        NixExpr::plain(NixKind::Int(2)),
+        NixExpr::plain(NixKind::Int(3)),
+        NixExpr::plain(NixKind::Int(4)),
+    ]));
+    let comparison = NixExpr::plain(NixKind::Binary(
+        BinaryOp::GreaterEqual,
+        Box::new(NixExpr::plain(NixKind::Int(4))),
+        Box::new(NixExpr::plain(NixKind::Int(2))),
+    ));
+    let comparison_call = NixExpr::plain(NixKind::Apply(
+        Box::new(NixExpr::plain(NixKind::Lambda(
+            "__lessThan".into(),
+            Box::new(NixExpr::plain(NixKind::List(vec![comparison; 8]))),
+        ))),
+        Box::new(returning(NixExpr::plain(NixKind::Bool(true)))),
+    ));
+    let cached = local(
+        "cached",
+        NixExpr::plain(NixKind::Bool(true)),
+        local(
+            "true",
+            NixExpr::plain(NixKind::Int(77)),
+            NixExpr::plain(NixKind::Variable("cached".into())),
+        ),
+    );
+    let ast = NixExpr::plain(NixKind::List(vec![
+        scalars.clone(),
+        local("true", NixExpr::plain(NixKind::Int(77)), scalars.clone()),
+        local("false", NixExpr::plain(NixKind::Int(88)), scalars.clone()),
+        local("null", NixExpr::plain(NixKind::Int(99)), scalars),
+        negatives.clone(),
+        local(
+            "__sub",
+            returning(NixExpr::plain(NixKind::Int(77))),
+            negatives,
+        ),
+        comparison_call,
+        cached,
+    ]));
+    let session = NixSession::new().unwrap();
+    let before = session.evaluate(&render_without_sharing(&ast)).unwrap();
+    let after = session.evaluate(&render(&ast)).unwrap();
+
+    assert_eq!(before.value[1][0], 77);
+    assert_eq!(before.value[2][1], 88);
+    assert_eq!(before.value[3][2], 99);
+    assert_eq!(before.value[5][0], 77);
+    assert_eq!(before.value[6], serde_json::json!(vec![false; 8]));
+    assert_eq!(before.value[7], true);
+    assert_eq!(after.value, before.value);
+}
+
+/// Observing generated source positions makes unrelated syntax movement observable too.
+#[test]
+fn source_position_observation_preserves_line_and_column() {
+    let repeated = arithmetic("value");
+    let ast = NixExpr::plain(NixKind::Let(
+        "value".into(),
+        Box::new(NixExpr::plain(NixKind::Int(10))),
+        Box::new(NixExpr::plain(NixKind::List(vec![
+            NixExpr::plain(NixKind::List(vec![repeated.clone(), repeated])),
+            NixExpr::plain(NixKind::Variable("__curPos".into())),
+        ]))),
+    ));
+    let session = NixSession::new().unwrap();
+    let before = session.evaluate(&render_without_sharing(&ast)).unwrap();
+    let after = session.evaluate(&render(&ast)).unwrap();
+
+    assert_eq!(before.value[0], after.value[0]);
+    for coordinate in ["line", "column"] {
+        assert_eq!(before.value[1][coordinate], after.value[1][coordinate]);
+    }
+}
+
 /// Compiler-generated bindings must not accidentally resolve an authored undefined variable.
 #[test]
 fn sharing_cannot_hide_undefined_variables() {

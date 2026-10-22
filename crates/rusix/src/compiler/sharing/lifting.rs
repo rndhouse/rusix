@@ -5,7 +5,10 @@
 //! variables exclude its arguments. Existing lets remain barriers, so recursive
 //! bindings and resolved argument records cannot escape their original scope.
 
-use super::{Names, NixExpr, NixKind, Origin, Region, boundary, children, children_mut, rewrite};
+use super::{
+    Names, NixExpr, NixKind, Origin, Region, boundary, children, children_mut, implicit_operation,
+    rewrite,
+};
 use std::collections::{HashMap, HashSet};
 
 /// Lexical dependencies and whether evaluation allocates or computes beyond a literal.
@@ -28,10 +31,6 @@ fn analyze(expr: &NixExpr, summaries: &mut HashMap<*const NixExpr, Dependencies>
         result.free.extend(child.free);
         result.computes |= child.computes;
     }
-    if expr.error_context && expr.origin.is_some() {
-        result.free.insert("builtins".into());
-        result.computes = true;
-    }
     match &expr.kind {
         NixKind::Variable(name) => {
             result.free.insert(name.clone());
@@ -49,11 +48,8 @@ fn analyze(expr: &NixExpr, summaries: &mut HashMap<*const NixExpr, Dependencies>
                 result.free.remove(name);
             }
         }
-        NixKind::Call(..) => {
-            result.free.insert("builtins".into());
-            result.computes = true;
-        }
         NixKind::Apply(..)
+        | NixKind::Call(..)
         | NixKind::Binary(..)
         | NixKind::If(..)
         | NixKind::Assert(..)
@@ -62,6 +58,15 @@ fn analyze(expr: &NixExpr, summaries: &mut HashMap<*const NixExpr, Dependencies>
         | NixKind::Select(..)
         | NixKind::ArgumentSelect(..) => result.computes = true,
         _ => {}
+    }
+    // Wrappers surround binders, so their dependencies belong to the outer
+    // environment and must be added after removing the binder's own names.
+    if expr.error_context && expr.origin.is_some() {
+        result.free.insert("builtins".into());
+        result.computes = true;
+    }
+    if let Some(name) = implicit_operation(expr) {
+        result.free.insert(name.into());
     }
     summaries.insert(expr, result.clone());
     result

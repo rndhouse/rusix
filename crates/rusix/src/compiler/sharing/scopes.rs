@@ -4,7 +4,9 @@
 //! lets sibling functions reuse captured work without merging their arguments.
 //! Attribution remains part of identity, including the complete authored path.
 
-use super::{Names, NixExpr, NixKind, Origin, Shape, boundary, children, children_mut};
+use super::{
+    Names, NixExpr, NixKind, Origin, Shape, boundary, children, children_mut, implicit_operation,
+};
 use std::collections::HashMap;
 
 /// One lexical binder, which may have the same spelling as an unrelated binder.
@@ -29,18 +31,24 @@ struct Signature<'a> {
     shape: Shape<'a>,
     /// Declaration resolved by a variable reference; absent for global identifiers.
     binding: Option<usize>,
-    /// Declaration of `builtins` used by native calls or emitted diagnostic wrappers.
+    /// Declaration of `builtins` used by an emitted diagnostic wrapper.
     namespace: Option<usize>,
+    /// Declaration of the prelude name read by this operation's rendered syntax.
+    operation: Option<usize>,
     /// Structurally interned descendants in source order.
     children: Vec<usize>,
 }
 
-/// A lexical region where a lazy binding may be inserted without changing its inputs.
+/// An expression region where a lazy binding may be inserted without changing its inputs.
 struct Scope {
-    /// Immediately enclosing lexical region, absent at the expression root.
+    /// Immediately enclosing expression, absent at the root.
     parent: Option<usize>,
-    /// Number of lexical boundaries between this region and the root.
+    /// Syntax depth used to find the smallest common enclosing expression.
     depth: usize,
+    /// Number of enclosing lexical binders; ordinary syntax nodes do not increase it.
+    binding_depth: usize,
+    /// Authored ancestry already enclosing a definition placed at this expression.
+    ancestry: usize,
     /// Original expression at which bindings for this region are installed.
     root: *const NixExpr,
     /// Whether wrapping this region would obscure a directly exported function.
@@ -79,7 +87,7 @@ struct Index<'a> {
     uses: Vec<Uses>,
     /// Original node addresses used only until the rewrite consumes those nodes.
     occurrences: HashMap<*const NixExpr, Occurrence>,
-    /// Lexical regions linked to their parents.
+    /// Nested expression regions, with lexical depth tracked separately.
     scopes: Vec<Scope>,
     /// Visible declarations, stacked to account for shadowing and recursive lets.
     bindings: HashMap<&'a str, Vec<Binding>>,
@@ -95,11 +103,19 @@ struct Index<'a> {
 
 impl<'a> Index<'a> {
     /// Add a region without changing the environment of its original expression.
-    fn scope(&mut self, expr: &NixExpr, parent: Option<usize>) -> usize {
+    fn scope(
+        &mut self,
+        expr: &NixExpr,
+        parent: Option<usize>,
+        binding_depth: usize,
+        ancestry: usize,
+    ) -> usize {
         let identity = self.scopes.len();
         self.scopes.push(Scope {
             parent,
             depth: parent.map_or(0, |parent| self.scopes[parent].depth + 1),
+            binding_depth,
+            ancestry,
             root: expr,
             function_root: function_root(expr),
         });
@@ -115,7 +131,7 @@ impl<'a> Index<'a> {
         })
     }
 
-    /// Find the closest common lexical region for two uses.
+    /// Find the smallest common expression, keeping bindings close to their actual uses.
     fn common_scope(&self, mut left: usize, mut right: usize) -> usize {
         while left != right {
             if self.scopes[left].depth >= self.scopes[right].depth {
@@ -145,7 +161,7 @@ impl<'a> Index<'a> {
         for name in &declarations {
             let binding = Binding {
                 identity: self.next_binding,
-                depth: self.scopes[scope].depth + 1,
+                depth: self.scopes[scope].binding_depth + 1,
             };
             self.next_binding += 1;
             self.bindings.entry(name).or_default().push(binding);
@@ -153,11 +169,8 @@ impl<'a> Index<'a> {
 
         let mut descendants = Vec::new();
         for child in children(expr) {
-            let child_scope = if boundary(expr) {
-                self.scope(child, Some(scope))
-            } else {
-                scope
-            };
+            let binding_depth = self.scopes[scope].binding_depth + usize::from(boundary(expr));
+            let child_scope = self.scope(child, Some(scope), binding_depth, descendant_path);
             descendants.push(self.visit(child, child_scope, descendant_path));
         }
         for name in &declarations {
@@ -175,9 +188,7 @@ impl<'a> Index<'a> {
                 .copied(),
             _ => None,
         };
-        let namespace = if matches!(expr.kind, NixKind::Call(..))
-            || expr.error_context && expr.origin.is_some()
-        {
+        let namespace = if expr.error_context && expr.origin.is_some() {
             self.bindings
                 .get("builtins")
                 .and_then(|stack| stack.last())
@@ -185,6 +196,12 @@ impl<'a> Index<'a> {
         } else {
             None
         };
+        let operation = implicit_operation(expr).and_then(|name| {
+            self.bindings
+                .get(name)
+                .and_then(|stack| stack.last())
+                .copied()
+        });
         // A shareable subtree cannot contain a binder: those nodes have unique
         // identities. Its referenced declarations lie on one enclosing chain.
         // Resolved identities keep that chain equal across uses, so its deepest
@@ -192,7 +209,8 @@ impl<'a> Index<'a> {
         let required_depth = descendants.iter().fold(
             binding
                 .map_or(0, |binding| binding.depth)
-                .max(namespace.map_or(0, |binding| binding.depth)),
+                .max(namespace.map_or(0, |binding| binding.depth))
+                .max(operation.map_or(0, |binding| binding.depth)),
             |depth, child| depth.max(self.uses[*child].required_depth),
         );
         let weight = if boundary(expr) {
@@ -239,6 +257,7 @@ impl<'a> Index<'a> {
             shape,
             binding: binding.map(|binding| binding.identity),
             namespace: namespace.map(|binding| binding.identity),
+            operation: operation.map(|binding| binding.identity),
             children: if boundary(expr) {
                 Vec::new()
             } else {
@@ -256,8 +275,10 @@ impl<'a> Index<'a> {
             });
             next
         });
-        let common = self.common_scope(self.uses[identity].scope, scope);
-        self.uses[identity].scope = common;
+        if self.uses[identity].weight >= 8 {
+            let common = self.common_scope(self.uses[identity].scope, scope);
+            self.uses[identity].scope = common;
+        }
         self.uses[identity].count += 1;
         self.occurrences
             .insert(expr, Occurrence { identity, scope });
@@ -358,7 +379,7 @@ impl Rewrite {
 /// Share substantial repeated expressions without moving dependencies out of their declaring scopes.
 pub(super) fn share(expr: &mut NixExpr, names: &mut Names) {
     let mut index = Index::default();
-    let root = index.scope(expr, None);
+    let root = index.scope(expr, None, 0, 0);
     index.visit(expr, root, 0);
     let mut selected: Vec<_> = index
         .uses
@@ -367,7 +388,7 @@ pub(super) fn share(expr: &mut NixExpr, names: &mut Names) {
             let scope = &index.scopes[uses.scope];
             uses.count > 1
                 && uses.weight >= 8
-                && uses.required_depth <= scope.depth
+                && uses.required_depth <= scope.binding_depth
                 && !scope.function_root
         })
         .collect();
@@ -385,7 +406,12 @@ pub(super) fn share(expr: &mut NixExpr, names: &mut Names) {
             let mut result = Vec::new();
             if selected[identity] {
                 let mut path = uses.ancestry;
-                while path != 0 {
+                let enclosing = index.scopes[uses.scope].ancestry;
+                while path != enclosing {
+                    assert_ne!(
+                        path, 0,
+                        "placement must retain a prefix of the use ancestry"
+                    );
                     let (parent, origin) = index.paths[path - 1];
                     result.push(origin.clone());
                     path = parent;

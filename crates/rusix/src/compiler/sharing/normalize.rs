@@ -4,7 +4,7 @@
 //! as a fresh `let`, preserving sharing while making its scope visible to the
 //! optimizer. Only literal values are propagated; opaque calls remain deferred.
 
-use super::{Names, NixExpr, NixKind, children_mut};
+use super::{IMPLICIT_NAMES, Names, NixExpr, NixKind, children_mut};
 use std::collections::HashMap;
 
 /// Report whether a callee is a known lambda with no demanding wrapper to preserve.
@@ -15,7 +15,7 @@ fn lambda(expr: &NixExpr) -> bool {
     match &expr.kind {
         // Native builtin calls and diagnostic wrappers contain implicit
         // references to this name, which ordinary variable renaming cannot see.
-        NixKind::Lambda(name, _) => name != "builtins",
+        NixKind::Lambda(name, _) => !IMPLICIT_NAMES.contains(&name.as_str()),
         NixKind::Group(value) => lambda(value),
         _ => false,
     }
@@ -81,9 +81,10 @@ fn literal(expr: &NixExpr) -> Option<NixKind> {
     }
     match &expr.kind {
         NixKind::Group(value) => literal(value),
-        NixKind::Bool(..) | NixKind::Int(..) | NixKind::Float(..) | NixKind::Null => {
-            Some(expr.kind.clone())
-        }
+        // Boolean/null tokens and negative numerals resolve prelude names in
+        // Nix. Copying them into a shadowing scope could change their values.
+        NixKind::Int(value) if *value >= 0 => Some(expr.kind.clone()),
+        NixKind::Float(value) if !value.is_sign_negative() => Some(expr.kind.clone()),
         // Platform names benefit from propagation. Large embedded documents
         // should retain their original lazy binding rather than grow per use.
         NixKind::String(value) if value.len() <= 64 => Some(expr.kind.clone()),

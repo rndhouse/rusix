@@ -15,6 +15,32 @@ mod normalize;
 
 mod scopes;
 
+/// Lexical names read by rendered syntax without explicit variable nodes in the AST.
+const IMPLICIT_NAMES: &[&str] = &[
+    "builtins",
+    "__lessThan",
+    "__sub",
+    "true",
+    "false",
+    "null",
+    "__curPos",
+];
+
+/// Describe prelude lookups performed by Nix's parser or by a native operation.
+fn implicit_operation(expr: &NixExpr) -> Option<&'static str> {
+    match &expr.kind {
+        NixKind::Call(..) => Some("builtins"),
+        NixKind::Bool(true) => Some("true"),
+        NixKind::Bool(false) => Some("false"),
+        NixKind::Null => Some("null"),
+        // Nix parses comparisons and unary minus as calls to lexical helpers.
+        NixKind::Binary(BinaryOp::GreaterEqual | BinaryOp::LessEqual, ..) => Some("__lessThan"),
+        NixKind::Int(value) if *value < 0 => Some("__sub"),
+        NixKind::Float(value) if value.is_sign_negative() => Some("__sub"),
+        _ => None,
+    }
+}
+
 /// Scalar syntax and binding boundaries, with descendants represented separately.
 #[derive(PartialEq, Eq, Hash)]
 enum Shape<'a> {
@@ -186,6 +212,11 @@ impl Names {
 pub(crate) fn optimize(mut ast: NixExpr) -> NixExpr {
     let mut names = Names::default();
     names.collect(&ast);
+    // This intrinsic observes the generated text itself. Moving even unrelated
+    // syntax could change its line or column, so retain the complete tree.
+    if names.used.contains("__curPos") {
+        return ast;
+    }
     normalize::normalize(&mut ast, &mut names);
     // Lifting introduces let boundaries. Preserve repeated-expression sharing
     // first, before moving individual invariants into their enclosing scopes.
