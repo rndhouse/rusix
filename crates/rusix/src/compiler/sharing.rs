@@ -1,12 +1,15 @@
-//! Share repeated computations without crossing lexical or diagnostic boundaries.
+//! Share repeated and function-invariant computations while preserving lexical dependencies.
 //!
 //! Nix memoizes a lazy binding, not arbitrary identical source expressions. Keep
-//! sufficiently large repeated trees in local `let` bindings. Attribution is part
-//! of expression identity: equal values authored at different sites stay distinct.
+//! sufficiently large repeated trees in local `let` bindings and keep invariant
+//! work outside function calls. Attribution is part of expression identity:
+//! equal values authored at different sites stay distinct.
 
 use super::ast::{BinaryOp, Builtin, NixExpr, NixKind};
 use crate::ir::Origin;
 use std::collections::{HashMap, HashSet};
+
+mod lifting;
 
 /// Scalar syntax and binding boundaries, with descendants represented separately.
 #[derive(PartialEq, Eq, Hash)]
@@ -179,6 +182,7 @@ impl Names {
 pub(crate) fn optimize(mut ast: NixExpr) -> NixExpr {
     let mut names = Names::default();
     names.collect(&ast);
+    lifting::lift(&mut ast, &mut names);
     scope(&mut ast, &mut names);
     ast
 }
