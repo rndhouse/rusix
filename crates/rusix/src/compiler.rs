@@ -95,7 +95,7 @@ use std::{cell::Cell, rc::Rc};
 /// References to final NixOS options or the system’s supplied package set require
 /// [`crate::nixos::compile_module`] and are rejected by this standalone compiler.
 /// Repeated substantial expressions with identical attribution share lazy local
-/// bindings. Shared bindings preserve lexical dependencies and authored error paths.
+/// bindings. Sharing stays within lexical scopes and preserves authored error paths.
 #[track_caller]
 pub fn compile(config: impl IntoConfig) -> Result<Generated, Box<Diagnostic>> {
     compile_with_options(config, RenderOptions::default())
