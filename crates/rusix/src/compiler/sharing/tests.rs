@@ -532,6 +532,74 @@ fn source_position_observation_preserves_line_and_column() {
     }
 }
 
+/// An unavailable common placement must not discard sharing inside each valid child region.
+#[test]
+fn blocked_cross_scope_sharing_preserves_local_memoization() {
+    /// Build a substantial traced computation depending on the surrounding `base` declaration.
+    fn payload() -> NixExpr {
+        let builtin = |name: &str| {
+            NixExpr::plain(NixKind::Select(
+                Box::new(NixExpr::plain(NixKind::Variable("builtins".into()))),
+                vec![name.into()],
+            ))
+        };
+        let value = NixExpr::plain(NixKind::Apply(
+            Box::new(NixExpr::plain(NixKind::Apply(
+                Box::new(builtin("concatStringsSep")),
+                Box::new(NixExpr::plain(NixKind::String(String::new()))),
+            ))),
+            Box::new(NixExpr::plain(NixKind::List(vec![
+                NixExpr::plain(NixKind::String("one".into())),
+                NixExpr::plain(NixKind::String("two".into())),
+                NixExpr::plain(NixKind::String("three".into())),
+                NixExpr::plain(NixKind::String("four".into())),
+                NixExpr::plain(NixKind::Variable("base".into())),
+            ]))),
+        ));
+        NixExpr::plain(NixKind::Apply(
+            Box::new(NixExpr::plain(NixKind::Apply(
+                Box::new(builtin("trace")),
+                Box::new(NixExpr::plain(NixKind::String(
+                    "rusix-sharing-evaluated".into(),
+                ))),
+            ))),
+            Box::new(value),
+        ))
+    }
+
+    let body = NixExpr::plain(NixKind::List(vec![payload(), payload()]));
+    let defaults = NixExpr::plain(NixKind::Apply(
+        Box::new(NixExpr::plain(NixKind::ArgumentFunction(
+            vec![
+                (
+                    "base".into(),
+                    Some(NixExpr::plain(NixKind::String("payload".into()))),
+                ),
+                ("unused".into(), Some(payload())),
+            ],
+            Box::new(body.clone()),
+        ))),
+        Box::new(NixExpr::plain(NixKind::AttrSet(vec![]))),
+    ));
+    let recursive = NixExpr::plain(NixKind::Let(
+        "base".into(),
+        Box::new(NixExpr::plain(NixKind::If(
+            Box::new(NixExpr::plain(NixKind::Bool(false))),
+            Box::new(payload()),
+            Box::new(NixExpr::plain(NixKind::String("payload".into()))),
+        ))),
+        Box::new(body),
+    ));
+    let ast = NixExpr::plain(NixKind::List(vec![defaults, recursive]));
+    let session = NixSession::new().unwrap();
+    let before = session.evaluate(&render_without_sharing(&ast)).unwrap();
+    let after = session.evaluate(&render(&ast)).unwrap();
+
+    assert_eq!(before.value, after.value);
+    assert_eq!(before.raw_nix.matches("rusix-sharing-evaluated").count(), 4);
+    assert_eq!(after.raw_nix.matches("rusix-sharing-evaluated").count(), 2);
+}
+
 /// Compiler-generated bindings must not accidentally resolve an authored undefined variable.
 #[test]
 fn sharing_cannot_hide_undefined_variables() {

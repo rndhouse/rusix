@@ -56,6 +56,7 @@ struct Scope {
 }
 
 /// Uses of one exact expression, summarized before any syntax is rewritten.
+#[derive(Clone)]
 struct Uses {
     /// Approximate syntax size, excluding descendants inside binding boundaries.
     weight: usize,
@@ -72,7 +73,7 @@ struct Uses {
 /// Expression identity and lexical region recorded while original addresses are stable.
 #[derive(Clone, Copy)]
 struct Occurrence {
-    /// Structurally interned expression.
+    /// Memoization group, initially the expression's structural identity.
     identity: usize,
     /// Lexical region containing this original node.
     scope: usize,
@@ -141,6 +142,65 @@ impl<'a> Index<'a> {
             }
         }
         left
+    }
+
+    /// Check whether one binding can serve this group without changing scope or function shape.
+    fn allowed(&self, uses: &Uses) -> bool {
+        let scope = &self.scopes[uses.scope];
+        uses.required_depth <= scope.binding_depth && !scope.function_root
+    }
+
+    /// Retain sharing inside each child when a binder prevents sharing the complete group.
+    fn partition(&mut self) {
+        loop {
+            let blocked: Vec<_> = self
+                .uses
+                .iter()
+                .map(|uses| uses.count > 1 && uses.weight >= 8 && !self.allowed(uses))
+                .collect();
+            if !blocked.iter().any(|blocked| *blocked) {
+                return;
+            }
+
+            let mut groups = HashMap::new();
+            // Syntax order makes grouping deterministic. The signature index
+            // remains structural; only memoization identities are partitioned.
+            for node in 0..self.scopes.len() {
+                let address = self.scopes[node].root;
+                let occurrence = self.occurrences[&address];
+                if !blocked[occurrence.identity] {
+                    continue;
+                }
+                let original = occurrence.identity;
+                let split = self.uses[original].scope;
+                let mut branch = node;
+                while self.scopes[branch].parent != Some(split) {
+                    branch = self.scopes[branch]
+                        .parent
+                        .expect("blocked placement encloses its uses");
+                }
+                let identity = *groups.entry((original, branch)).or_insert_with(|| {
+                    let identity = self.uses.len();
+                    let mut uses = self.uses[original].clone();
+                    uses.scope = node;
+                    uses.count = 0;
+                    self.uses.push(uses);
+                    identity
+                });
+                let common = self.common_scope(self.uses[identity].scope, node);
+                self.uses[identity].scope = common;
+                self.uses[identity].count += 1;
+                self.occurrences
+                    .get_mut(&address)
+                    .expect("indexed node")
+                    .identity = identity;
+            }
+            for (identity, blocked) in blocked.into_iter().enumerate() {
+                if blocked {
+                    self.uses[identity].count = 0;
+                }
+            }
+        }
     }
 
     /// Index descendants with their resolved variables, including native argument defaults.
@@ -381,16 +441,11 @@ pub(super) fn share(expr: &mut NixExpr, names: &mut Names) {
     let mut index = Index::default();
     let root = index.scope(expr, None, 0, 0);
     index.visit(expr, root, 0);
+    index.partition();
     let mut selected: Vec<_> = index
         .uses
         .iter()
-        .map(|uses| {
-            let scope = &index.scopes[uses.scope];
-            uses.count > 1
-                && uses.weight >= 8
-                && uses.required_depth <= scope.binding_depth
-                && !scope.function_root
-        })
+        .map(|uses| uses.count > 1 && uses.weight >= 8 && index.allowed(uses))
         .collect();
     let mut counts = vec![0; selected.len()];
     effective_counts(expr, &index.occurrences, &selected, &mut counts);
