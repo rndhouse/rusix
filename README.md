@@ -58,6 +58,10 @@ supplies users and authorized keys. NixOS validates and merges all contributions
 which can affect the final settings. Compilation itself does not run Nix or
 change the system.
 
+[Sharing application types with system configuration](https://github.com/rndhouse/rusix/blob/main/docs/application-system-integration.md)
+shows how AirlockOS reuses Rust definitions across its running applications,
+desktop integration and permissions between virtual machines.
+
 Rusix can identify both Rust definitions in a NixOS merge conflict. An excerpt
 from the `merge-two` fixture:
 
