@@ -1,12 +1,13 @@
 # Sharing application types with system configuration
 
-## TL;DR
+## Overview
 
-An application and its NixOS installation code can import the same Rust types.
-Installation code uses them to generate startup commands and configuration files;
-the running application parses those inputs back into the same types. Traits and
-conversion functions provide that translation, while Rusix generates the NixOS
-definitions that install them.
+- The application and its installation code share Rust types for commands and
+  configuration.
+- Installation code converts values of those types into startup commands and
+  configuration files; the running application parses them back into those types.
+- Traits and conversion functions handle the translation. Rusix generates the
+  NixOS definitions that install the commands and files.
 
 ## Airlock screen-capture integration
 
