@@ -57,10 +57,10 @@ modules and the caller's package set. NixOS evaluates and merges the definitions
 deployment installs the result, and Qubes enforces the communication permissions.
 
 Source links are pinned to Airlock revision
-`f15b61d7afec96c60cd320d810c0181c7dd0e7c1`.
+`5ef2f0010e964a68beeb2f884a8b0c171ed40495`.
 
-[commands]: https://github.com/airlock-org/airlock/blob/f15b61d7afec96c60cd320d810c0181c7dd0e7c1/crates/airlock-sys-gui/service/src/command.rs
-[capture-authoring]: https://github.com/airlock-org/airlock/blob/f15b61d7afec96c60cd320d810c0181c7dd0e7c1/crates/airlock-sys-gui/service/src/authoring/capture.rs
-[machine]: https://github.com/airlock-org/airlock/blob/f15b61d7afec96c60cd320d810c0181c7dd0e7c1/crates/airlock-config/src/profiles/usb_lab.rs
-[connection]: https://github.com/airlock-org/airlock/blob/f15b61d7afec96c60cd320d810c0181c7dd0e7c1/crates/airlock-config/src/components/screen-capture.rs
-[contracts]: https://github.com/airlock-org/airlock/blob/f15b61d7afec96c60cd320d810c0181c7dd0e7c1/crates/airlock-common/machine/src/services.rs
+[commands]: https://github.com/airlock-org/airlock/blob/5ef2f0010e964a68beeb2f884a8b0c171ed40495/crates/airlock-sys-gui/service/src/command.rs
+[capture-authoring]: https://github.com/airlock-org/airlock/blob/5ef2f0010e964a68beeb2f884a8b0c171ed40495/crates/airlock-sys-gui/service/src/authoring/capture.rs
+[machine]: https://github.com/airlock-org/airlock/blob/5ef2f0010e964a68beeb2f884a8b0c171ed40495/crates/airlock-config/src/profiles/usb_lab.rs
+[connection]: https://github.com/airlock-org/airlock/blob/5ef2f0010e964a68beeb2f884a8b0c171ed40495/crates/airlock-config/src/components/screen-capture.rs
+[contracts]: https://github.com/airlock-org/airlock/blob/5ef2f0010e964a68beeb2f884a8b0c171ed40495/crates/airlock-common/machine/src/services.rs
