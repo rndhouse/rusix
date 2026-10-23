@@ -66,10 +66,10 @@ machine chooses where and how to use it. Rust constructs the definitions; NixOS
 evaluates and merges them, and deployment installs the result.
 
 The snippets omit surrounding code. Source links are pinned to Airlock revision
-`5ef2f0010e964a68beeb2f884a8b0c171ed40495`.
+`c4098c09dd1d14a945edabc90404d756fcf5a9ed`.
 
-[authoring]: https://github.com/airlock-org/airlock/blob/5ef2f0010e964a68beeb2f884a8b0c171ed40495/crates/airlock-sys-gui/service/src/authoring.rs
-[capture-authoring]: https://github.com/airlock-org/airlock/blob/5ef2f0010e964a68beeb2f884a8b0c171ed40495/crates/airlock-sys-gui/service/src/authoring/capture.rs
-[composition]: https://github.com/airlock-org/airlock/blob/5ef2f0010e964a68beeb2f884a8b0c171ed40495/crates/airlock-config/src/components/screen-capture.rs
-[commands]: https://github.com/airlock-org/airlock/blob/5ef2f0010e964a68beeb2f884a8b0c171ed40495/crates/airlock-sys-gui/service/src/command.rs
-[contracts]: https://github.com/airlock-org/airlock/blob/5ef2f0010e964a68beeb2f884a8b0c171ed40495/crates/airlock-common/machine/src/services.rs
+[authoring]: https://github.com/airlock-org/airlock/blob/c4098c09dd1d14a945edabc90404d756fcf5a9ed/crates/airlock-sys-gui/service/src/authoring.rs
+[capture-authoring]: https://github.com/airlock-org/airlock/blob/c4098c09dd1d14a945edabc90404d756fcf5a9ed/crates/airlock-sys-gui/service/src/authoring/capture.rs
+[composition]: https://github.com/airlock-org/airlock/blob/c4098c09dd1d14a945edabc90404d756fcf5a9ed/crates/airlock-config/src/components/screen-capture.rs
+[commands]: https://github.com/airlock-org/airlock/blob/c4098c09dd1d14a945edabc90404d756fcf5a9ed/crates/airlock-sys-gui/service/src/command.rs
+[contracts]: https://github.com/airlock-org/airlock/blob/c4098c09dd1d14a945edabc90404d756fcf5a9ed/crates/airlock-common/machine/src/services.rs
