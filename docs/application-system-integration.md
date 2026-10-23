@@ -1,8 +1,14 @@
 # Sharing application types with system configuration
 
-An application's Rust codebase can define both its behavior and how it integrates
-with the system. Rusix lets installation code reuse the application's types and
-functions to generate NixOS configuration.
+## TL;DR
+
+An application and its NixOS installation code can import the same Rust types.
+Installation code uses them to generate startup commands and configuration files;
+the running application parses those inputs back into the same types. Traits and
+conversion functions provide that translation, while Rusix generates the NixOS
+definitions that install them.
+
+## Airlock screen-capture integration
 
 [AirlockOS](https://github.com/airlock-org/airlock) uses this approach to deliver
 screenshots from a desktop virtual machine (VM) to a personal VM. The application
