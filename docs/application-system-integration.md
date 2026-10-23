@@ -46,15 +46,15 @@ let service = airlock_sys_gui_service::authoring::deployment(
 );
 ```
 
-The machine then passes the application's declarations to Rusix:
+The machine then passes the application's declarations to Rusix. This shortened
+snippet uses `?` in a function returning `Result`:
 
 ```rust
 let behavior = installation::compose(
     &scope,
     installation::CollisionChecks::Enabled,
     [service.capture_sender(&config)],
-)
-.unwrap_or_else(|error| panic!("{error}"));
+)?;
 ```
 
 Here, `installation` is Rusix's installation API. It checks the declared resources
