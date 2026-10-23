@@ -13,11 +13,8 @@
 [AirlockOS](https://github.com/airlock-org/airlock) has a desktop service that
 sends screenshots to another virtual machine (VM). The `airlock-sys-gui-service`
 crate contains both the running service and its [installation API][authoring].
-A caller requests capture support through:
-
-```rust
-let application = service.capture_sender(&config);
-```
+A caller requests screen-capture support through
+`service.capture_sender(&config)`.
 
 This is an Airlock function that returns a Rusix `Application`. Its
 [implementation][capture-authoring] declares:
@@ -44,6 +41,8 @@ let service = airlock_sys_gui_service::authoring::deployment(
     &inputs.pkgs,
     &machine_source::service_sources(&inputs),
 );
+
+let application = service.capture_sender(&config);
 ```
 
 The machine then passes the application's declarations to Rusix. This shortened
@@ -53,7 +52,7 @@ snippet uses `?` in a function returning `Result`:
 let behavior = installation::compose(
     &scope,
     installation::CollisionChecks::Enabled,
-    [service.capture_sender(&config)],
+    [application],
 )?;
 ```
 
