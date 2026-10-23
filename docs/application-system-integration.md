@@ -1,69 +1,76 @@
-# Sharing application types with system configuration
+# Defining system integration in an application crate
 
 ## Overview
 
-- The application and its installation code use the same Rust types.
-- Rusix turns installation declarations into NixOS settings for packages, startup
-  commands and configuration files.
-- NixOS installs those settings as part of the system. The application reads its
-  configuration using the same types that were used to create it.
+- An application crate can provide Rust functions that describe how to install
+  and start the application, and how it connects to other software.
+- Machine configuration calls those functions with its own packages and settings.
+- Rusix turns the returned declarations into NixOS settings that combine with
+  existing Nix modules.
 
-## Installing application configuration
+## The application's installation API
 
-[AirlockOS](https://github.com/airlock-org/airlock) sends screenshots from a
-desktop virtual machine (VM) to a personal VM. Its Rust type
-[`CaptureSenderConfig`][contracts] identifies the destination. The type derives
-Serde's `Serialize` and `Deserialize` traits, so installation code can write it
-as JSON and the application can read it back.
-
-The [service's installation code][capture-authoring] uses Rusix to declare where
-that JSON belongs. This simplified example shows just the configuration file;
-Airlock also declares the application package and its startup entry:
+[AirlockOS](https://github.com/airlock-org/airlock) has a desktop service that
+sends screenshots to another virtual machine (VM). The `airlock-sys-gui-service`
+crate contains both the running service and its [installation API][authoring].
+A caller requests capture support through:
 
 ```rust
-let config = CaptureSenderConfig {
-    target: "usr-home".parse()?,
-};
-
-let application = rusix::installation::Application::new("airlock-sys-gui-service")
-    .etc_text(
-        "airlock/capture-sender.json",
-        serde_json::to_string(&config)?,
-    );
+let application = service.capture_sender(&config);
 ```
 
-Here, `.etc_text()` declares a file under `/etc`. When this application is
-[composed into a module][composition], Rusix generates the NixOS settings for
-that file. NixOS combines them with the rest of the machine configuration, and
-deployment makes `/etc/airlock/capture-sender.json` available to the application.
-Constructing the Rust value alone does not write the file.
+This is an Airlock function that returns a Rusix `Application`. Its
+[implementation][capture-authoring] declares:
 
-## Reading the installed configuration
+- The service package and its executable.
+- The configuration file naming the destination VM.
+- A login command that retries pending deliveries.
+- Changes to GNOME that call the service when a screenshot or recording is ready.
 
-The [running service][runtime] reads the installed file into the same type.
-With error handling shortened, that looks like:
+The installation code uses the application's own `DesktopCommand` enum to
+construct the login command and its `CaptureSenderConfig` type for the settings.
+These are the [same commands][commands] and [configuration types][contracts] used
+by the running service. The crate therefore keeps the application and its
+installation definitions together, with Rust checking their use of shared types.
+
+## Using the API in machine configuration
+
+The machine supplies its package set and source paths when creating the service
+object. In the [machine's NixOS module][composition], `inputs.pkgs` is the package
+set supplied by NixOS:
 
 ```rust
-let bytes = std::fs::read("/etc/airlock/capture-sender.json")?;
-let config: CaptureSenderConfig = serde_json::from_slice(&bytes)?;
+let service = airlock_sys_gui_service::authoring::deployment(
+    &inputs.pkgs,
+    &machine_source::service_sources(&inputs),
+);
 ```
 
-The service uses `config.target` as its destination. Serde handles the JSON
-conversion; Rusix supplies the NixOS installation definitions that put the file
-where the service expects it.
+The machine then passes the application's declarations to Rusix:
 
-Airlock shares its [command enum][commands] in the same way: installation code
-uses `DesktopCommand::ScreenCapture` to construct a login command, and the
-application parses that command using the same enum. The application crate can
-therefore define both its behavior and its installation. The machine author
-chooses where to run it and supplies the surrounding NixOS configuration and
-communication permissions.
+```rust
+let behavior = installation::compose(
+    &scope,
+    installation::CollisionChecks::Enabled,
+    [service.capture_sender(&config)],
+)
+.unwrap_or_else(|error| panic!("{error}"));
+```
 
-The snippets omit imports and surrounding functions. Source links are pinned to
-Airlock revision `5ef2f0010e964a68beeb2f884a8b0c171ed40495`.
+Here, `installation` is Rusix's installation API. It checks the declared resources
+for conflicts and produces settings to include in the NixOS module. The machine
+combines those settings with its other modules and supplies the permissions for
+communication between VMs.
 
-[contracts]: https://github.com/airlock-org/airlock/blob/5ef2f0010e964a68beeb2f884a8b0c171ed40495/crates/airlock-common/machine/src/services.rs
+The application defines its installation through a reusable Rust API. The
+machine chooses where and how to use it. Rust constructs the definitions; NixOS
+evaluates and merges them, and deployment installs the result.
+
+The snippets omit surrounding code. Source links are pinned to Airlock revision
+`5ef2f0010e964a68beeb2f884a8b0c171ed40495`.
+
+[authoring]: https://github.com/airlock-org/airlock/blob/5ef2f0010e964a68beeb2f884a8b0c171ed40495/crates/airlock-sys-gui/service/src/authoring.rs
 [capture-authoring]: https://github.com/airlock-org/airlock/blob/5ef2f0010e964a68beeb2f884a8b0c171ed40495/crates/airlock-sys-gui/service/src/authoring/capture.rs
 [composition]: https://github.com/airlock-org/airlock/blob/5ef2f0010e964a68beeb2f884a8b0c171ed40495/crates/airlock-config/src/components/screen-capture.rs
-[runtime]: https://github.com/airlock-org/airlock/blob/5ef2f0010e964a68beeb2f884a8b0c171ed40495/crates/airlock-sys-gui/service/src/captures.rs
 [commands]: https://github.com/airlock-org/airlock/blob/5ef2f0010e964a68beeb2f884a8b0c171ed40495/crates/airlock-sys-gui/service/src/command.rs
+[contracts]: https://github.com/airlock-org/airlock/blob/5ef2f0010e964a68beeb2f884a8b0c171ed40495/crates/airlock-common/machine/src/services.rs
