@@ -83,5 +83,6 @@ READMEs link their compatibility tests.
 
 ## Further reading
 
+- [Application and system integration](../docs/application-system-integration.md) shows how AirlockOS shares Rust types between application code and NixOS configuration.
 - [Typed package authoring](../docs/typed-package-values.md) describes deferred package interfaces.
 - [Developing Rusix](../docs/development.md) covers repository setup and verification.
